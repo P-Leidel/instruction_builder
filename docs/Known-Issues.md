@@ -32,6 +32,23 @@ noted and deliberately left alone.
   rather than as an isolated upgrade.
 - **First noted:** 2026-09-13.
 
+## JSON export always downloads as "untitled-instructions.json"
+
+- **What it is:** `InstructionDocument.meta.title` exists in the model and is
+  what task 18's export filename is derived from (slugified), but no UI
+  anywhere lets the user set it - it's created once, at document creation,
+  as the literal string `"Untitled instructions"`, and nothing ever writes
+  to it afterward. Every export from every document a user ever makes
+  downloads as the same `untitled-instructions.json`, colliding in a
+  Downloads folder the moment someone exports a second document.
+- **Why it's not fixed:** raised during task 18/19 implementation and
+  deliberately deferred rather than bolting on a document-title input as an
+  ad hoc addition - a proper place for it (a document-settings area, likely
+  alongside `meta.domain` once Phase 3's content packs make that field
+  meaningful too) is a small, separate, intentional piece of UI, not a
+  side effect of the export task.
+- **First noted:** 2026-09-13.
+
 ## Persistence: an edit within ~200ms of closing/reloading the tab can be lost
 
 - **What it is:** `state/persistence.ts` (task 12) debounces saves to

@@ -41,6 +41,103 @@ export const selectedStepId = signal<string | null>(
  */
 export const selectedTokenId = signal<string | null>(null);
 
+/**
+ * Task 13 (Undo/Redo): `past`/`future` hold whole prior/subsequent document
+ * snapshots rather than individual diffs - the document is small enough
+ * (a handful of steps/tokens) that snapshotting is simpler and safer than a
+ * command/diff log, and every mutator below already produces a fresh
+ * immutable `InstructionDocument` via `setSteps`, so a snapshot is just
+ * "the value `document` held right before this change."
+ */
+const MAX_HISTORY = 100;
+export const past = signal<InstructionDocument[]>([]);
+export const future = signal<InstructionDocument[]>([]);
+export const canUndo = computed(() => past.value.length > 0);
+export const canRedo = computed(() => future.value.length > 0);
+
+/**
+ * Free-text fields (step/token title and notes) call their mutator on every
+ * keystroke (see StepDetails/TokenDetails - no local draft state, unlike
+ * DurationField/QuantityForm), so recording history on every call would
+ * make undo revert one character at a time. Mutators for those fields pass
+ * `coalesce: true` to `setSteps`, which merges a run of calls arriving
+ * within `COALESCE_WINDOW_MS` of each other into the single history entry
+ * already pushed for the first one - so a whole burst of typing (even
+ * across a mid-burst field/token switch, a deliberate simplification) undoes
+ * in one step, and only a pause longer than the window starts a new one.
+ * Every other mutator (add/remove/move/attach/etc.) always pushes its own
+ * entry, since each already represents one discrete user action.
+ */
+const COALESCE_WINDOW_MS = 700;
+let lastPushWasCoalesce = false;
+let lastPushAt = 0;
+
+function recordHistory(coalesce: boolean): void {
+  const now = Date.now();
+  const withinCoalesceWindow = coalesce && lastPushWasCoalesce && now - lastPushAt < COALESCE_WINDOW_MS;
+  if (!withinCoalesceWindow) {
+    const next = [...past.value, document.value];
+    past.value = next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next;
+    future.value = [];
+  }
+  lastPushWasCoalesce = coalesce;
+  lastPushAt = now;
+}
+
+/**
+ * Restores a history snapshot as the live document, re-resolving selection
+ * against it rather than assigning `selectedStepId`/`selectedTokenId`
+ * directly via `selectStep`/`selectToken` (see the note on those above) -
+ * this is the one place that deliberately deviates, because undo/redo
+ * should keep the current selection alive across a change that didn't
+ * touch it (e.g. undoing an edit to a *different* step) instead of always
+ * resetting to "no token selected" the way every other mutation does.
+ */
+function restoreDocument(doc: InstructionDocument): void {
+  document.value = { ...doc, meta: { ...doc.meta, updatedAt: new Date().toISOString() } };
+  const stepId = doc.steps.some((s) => s.id === selectedStepId.value)
+    ? selectedStepId.value
+    : doc.steps[0]?.id ?? null;
+  selectedStepId.value = stepId;
+  const step = doc.steps.find((s) => s.id === stepId);
+  selectedTokenId.value = step?.tokens.some((t) => t.id === selectedTokenId.value)
+    ? selectedTokenId.value
+    : null;
+}
+
+/** Reverts the most recent change (or coalesced run of changes) - a no-op if there's nothing to undo. */
+export function undo(): void {
+  if (past.value.length === 0) return;
+  const previous = past.value[past.value.length - 1];
+  past.value = past.value.slice(0, -1);
+  future.value = [document.value, ...future.value];
+  lastPushWasCoalesce = false;
+  restoreDocument(previous);
+}
+
+/** Reapplies the most recently undone change - a no-op if there's nothing to redo. */
+export function redo(): void {
+  if (future.value.length === 0) return;
+  const next = future.value[0];
+  future.value = future.value.slice(1);
+  past.value = [...past.value, document.value];
+  lastPushWasCoalesce = false;
+  restoreDocument(next);
+}
+
+/**
+ * Replaces the entire document - the Import flow (task 19). Unlike
+ * `setSteps` (which only ever replaces `steps` on the existing document),
+ * this swaps `meta`/`schemaVersion` too, since an imported file brings its
+ * own. Still goes through `recordHistory` like every other mutation, so an
+ * accidental import is one `undo()` away from being reverted.
+ */
+export function replaceDocument(doc: InstructionDocument): void {
+  recordHistory(false);
+  document.value = { ...doc, meta: { ...doc.meta, updatedAt: new Date().toISOString() } };
+  selectStep(doc.steps[0]?.id ?? null);
+}
+
 export const selectedStep = computed(
   () => document.value.steps.find((s) => s.id === selectedStepId.value) ?? null,
 );
@@ -62,9 +159,14 @@ export function selectToken(stepId: string, tokenId: string): void {
 /**
  * Applies a steps update to the document and refreshes `meta.updatedAt`.
  * Every mutator below goes through this so "last edited" stays accurate
- * once Phase 2 persistence/export starts reading it.
+ * once Phase 2 persistence/export starts reading it, and so undo/redo
+ * history (see `recordHistory` above) only needs one funnel point to watch.
+ * `coalesce: true` marks the change as part of a continuous edit (free-text
+ * typing) that should merge into the last history entry instead of pushing
+ * its own - see the comment on `COALESCE_WINDOW_MS`.
  */
-function setSteps(steps: InstructionDocument["steps"]): void {
+function setSteps(steps: InstructionDocument["steps"], options?: { coalesce?: boolean }): void {
+  recordHistory(options?.coalesce ?? false);
   document.value = {
     ...document.value,
     steps,
@@ -181,6 +283,7 @@ export function removeTokenFromStep(stepId: string, tokenId: string): void {
 export function updateStepTitle(stepId: string, title: string): void {
   setSteps(
     document.value.steps.map((step) => (step.id === stepId ? { ...step, title } : step)),
+    { coalesce: true },
   );
 }
 
@@ -189,6 +292,7 @@ export function updateStepDescription(stepId: string, description: string): void
     document.value.steps.map((step) =>
       step.id === stepId ? { ...step, description } : step,
     ),
+    { coalesce: true },
   );
 }
 
@@ -199,6 +303,7 @@ export function updateTokenLabel(stepId: string, tokenId: string, label: string)
         ? { ...step, tokens: step.tokens.map((t) => (t.id === tokenId ? { ...t, label } : t)) }
         : step,
     ),
+    { coalesce: true },
   );
 }
 
@@ -209,6 +314,7 @@ export function updateTokenNote(stepId: string, tokenId: string, note: string): 
         ? { ...step, tokens: step.tokens.map((t) => (t.id === tokenId ? { ...t, note } : t)) }
         : step,
     ),
+    { coalesce: true },
   );
 }
 

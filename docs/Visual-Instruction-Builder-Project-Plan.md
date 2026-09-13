@@ -5,8 +5,9 @@
 > [Milestones.md](./Milestones.md#documentation-status-conventions).
 
 > **Status (2026-09-13): Phase 2 (MVP) is in progress.** Phase 1 (Concept
-> Validation) is complete; Phase 2 tasks 5–12 are done and task 13
-> (Undo/Redo) is next. This is well past the "planning" stage - see
+> Validation) is complete; Phase 2 tasks 5–14, 18, and 19 are done (18/19,
+> JSON Export/Import, were deliberately pulled ahead of 15–17 on request) and
+> task 15 (SVG Export) is next. This is well past the "planning" stage - see
 > [Milestones.md](./Milestones.md) for the current task-by-task breakdown
 > and [phase-2/Progress-Log.md](./phase-2/Progress-Log.md) for what's
 > actually been built. Historical, phase-specific docs live under

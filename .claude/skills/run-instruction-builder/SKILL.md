@@ -1,6 +1,6 @@
 ---
 name: run-instruction-builder
-description: Build, start, and drive the Visual Instruction Builder Preact/Vite dev app in a real browser to check a UI change - screenshots the canvas/step-list/token-picker, exercises step/token select, category tabs in "Add to step"/"Add to token", attaching a Quantity or Warning to a token and removing it, setting an independent duration on a token and a step via DurationField (and the step/token-switch-while-editing regression it once had), drag-and-drop (adding, moving, and reordering, including the live insertion-point marker), the token connector lines, the read-only preview toggle, and IndexedDB persistence across a reload, and checks the console for errors. Use for "run the app," "screenshot the instruction builder," "check this UI change works," "does drag-and-drop work," "does token attachment work," "does step/token time work," or "does the canvas render correctly."
+description: Build, start, and drive the Visual Instruction Builder Preact/Vite dev app in a real browser to check a UI change - screenshots the canvas/step-list/token-picker, exercises step/token select, category tabs in "Add to step"/"Add to token", attaching a Quantity or Warning to a token and removing it, setting an independent duration on a token and a step via DurationField (and the step/token-switch-while-editing regression it once had), drag-and-drop (adding, moving, and reordering, including the live insertion-point marker), undo/redo (buttons and keyboard shortcuts, including that continuous typing coalesces into one undo step), JSON export/import (including the incomplete-steps warning, the confirm-before-replace dialog, invalid-file rejection, and that import goes through undo/redo too), the token connector lines, the read-only preview toggle, and IndexedDB persistence across a reload, and checks the console for errors. Use for "run the app," "screenshot the instruction builder," "check this UI change works," "does drag-and-drop work," "does token attachment work," "does step/token time work," "does undo/redo work," "does export/import work," or "does the canvas render correctly."
 ---
 
 Paths below are relative to the project root (`instruction_builder/`).
@@ -82,7 +82,11 @@ checks that exist today.
    is not offered here, see below) to the selected token, confirms the
    canvas chip grows two corner badges and Token details lists two
    attachments, removes one via Token details, and confirms both drop
-   to one. It then exercises Time - set independently on a token *and*
+   to one. It also reproduces a real bug found in code review (see
+   docs/Fixed-Issues.md): typing a draft amount/unit into the Quantity form
+   and switching to a *different* token without attaching must not leave
+   the new token's form showing the old token's unsaved draft. It then
+   exercises Time - set independently on a token *and*
    a step via the `DurationField` control inline in Token/Step
    details (day/hour/minute/second boxes) - confirming the canvas's
    centered duration header above the step shows the token's time
@@ -102,14 +106,41 @@ checks that exist today.
    include a forward-direction regression check (see docs/Fixed-Issues.md):
    dropping into a slot strictly between two other items used to overshoot
    by one position when dragging forward, a bug the driver's own
-   backward-only reorder tests had never caught. It toggles the read-only
-   Preview mode and
+   backward-only reorder tests had never caught. It also exercises task 13
+   (Undo/Redo): confirms the toolbar's Undo/Redo buttons start disabled on
+   a fresh document, that a discrete action (adding a step) undoes and
+   redoes as one step, that typing a whole title across several keystrokes
+   coalesces into a *single* undo (not one character at a time - see
+   `COALESCE_WINDOW_MS` in `state/document.ts`), and that the `Ctrl+Z`/
+   `Ctrl+Shift+Z` keyboard shortcuts work - then undoes its own test edits
+   so the step count/order stay what the later persistence check expects.
+   It toggles the read-only Preview mode and
    checks editing controls disappear, reloads the page (after a short
    pause past the persistence debounce) and confirms the document
    survived via IndexedDB, then reduces the viewport to 390px wide
-   (mobile) and screenshots that too. It prints `SCREENSHOTS_DIR=...`,
+   (mobile) and screenshots that too. Finally it exercises tasks 18/19
+   (JSON Export/Import): adds a temporary empty step, clicks Export, and
+   confirms the downloaded file (captured via `page.waitForEvent("download")`)
+   is the current document under a filename derived from `meta.title`, and
+   that a non-blocking warning toast names the number of incomplete steps
+   (task 14's link into export) without the download itself being blocked;
+   removes the temporary step again afterward. It then imports a small valid
+   document via the hidden file input (`setInputFiles`, which fires the same
+   `change` event a real file picker would), confirms the confirm-before-
+   replace dialog names the right step count, clicking Replace swaps the
+   document, and that undo/redo covers the import exactly like any other
+   edit (`Ctrl+Z` restores the pre-import document, `Ctrl+Shift+Z` reapplies
+   it) - then undoes it again to leave the baseline document in place. It
+   also feeds one unparseable-JSON file and one wrong-shaped-but-valid-JSON
+   file (a step with a garbage token, specifically chosen so it wouldn't
+   also crash `validateDocument` and mask a regression in `migrate`'s own
+   validation - see Gotchas) through the same input, confirming both show an
+   error toast with no confirm dialog and leave the document untouched, and
+   a final valid import that gets Canceled instead of Replaced, confirming
+   the dialog closes with nothing changed. It prints `SCREENSHOTS_DIR=...`,
    `TABS_FILTER_TOKENS=...`, `TOKEN_SELECTED_AFTER_FIRST_CLICK=...`,
    `TOKEN_LABEL_UPDATED=...`, `ATTACHMENTS_WORKED_END_TO_END=...`,
+   `QUANTITY_FORM_RESETS_PER_TOKEN=...`,
    `TIME_WORKED_END_TO_END=...`, `DURATION_FIELD_RESETS_PER_TOKEN=...`,
    `DURATION_FIELD_RESETS_PER_STEP=...`, `CONNECTOR_COUNT=...`,
    `DRAG_ADDED_TOKEN_VIA_PICKER=...`,
@@ -118,10 +149,17 @@ checks that exist today.
    `FORWARD_TOKEN_DRAG_LANDS_AT_DROP_POINT=...`,
    `STEPS_REORDERED_VIA_DRAG=...`,
    `FORWARD_STEP_DRAG_LANDS_AT_DROP_POINT=...`,
+   `HISTORY_BUTTONS_DISABLED_INITIALLY=...`,
+   `UNDO_REDO_WORKED_END_TO_END=...`,
    `PREVIEW_HIDES_EDITING_CONTROLS=...`,
-   `PERSISTED_ACROSS_RELOAD=...`, `CANVAS_KEYBOARD_FOCUSABLE=...`, and
-   any console errors it captured. **Read the screenshots** (e.g. with
-   the Read tool) - don't just check the exit code.
+   `PERSISTED_ACROSS_RELOAD=...`, `CANVAS_KEYBOARD_FOCUSABLE=...`,
+   `JSON_EXPORT_DOWNLOADS_CURRENT_DOCUMENT=...`,
+   `JSON_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=...`, `TOAST_DISMISSIBLE=...`,
+   `IMPORT_DIALOG_MENTIONS_STEP_COUNT=...`, `IMPORT_UNDO_REDO_WORKED=...`,
+   `IMPORT_REJECTS_INVALID_FILE=...`,
+   `IMPORT_CANCEL_LEAVES_DOCUMENT_UNCHANGED=...`, and any console errors it
+   captured. **Read the screenshots** (e.g. with the Read tool) - don't just
+   check the exit code.
 
 3. Stop the server when done (find the PID by port - see Gotchas for
    why `lsof` doesn't work here):
@@ -204,6 +242,33 @@ taken - watch the terminal output for the actual URL).
   same-tab `reload()` in Chromium either (see
   `docs/Known-Issues.md`). `page.waitForTimeout(300)` before reload is
   enough, matching how a real user actually closes tabs.
+- **`locator.count()` doesn't auto-wait - `setInputFiles` on the Import
+  file input does, but the app's reaction to it doesn't.** `setInputFiles`
+  resolves once the file is attached and the `change` event dispatched, but
+  `App`'s handler is `async` (`await file.text()` before anything else
+  happens), so a `.count()` check immediately after `setInputFiles` reads
+  the DOM *before* the toast or confirm dialog has had a chance to appear -
+  a false negative that looks exactly like the feature being broken, not
+  like a timing issue. `.textContent()`/`.click()` auto-wait for their
+  target and so didn't hit this, only the plain `.count()` checks did.
+  Fixed by `await page.locator(".app__toast").waitFor()` (or an equivalent
+  wait for whatever should appear) before any `.count()` check that follows
+  an async-triggering action. Caught by deliberately breaking `migrate`'s
+  validation to confirm the regression check actually failed - it didn't,
+  even against genuinely broken code, until this wait was added.
+- **A "wrong-shaped file" import test payload must be chosen so it
+  couldn't *also* fail for an unrelated reason.** An early version of the
+  driver's wrong-shape test omitted `steps` entirely - `migrate` correctly
+  rejected it, but so would have `validateDocument` (called right after,
+  to compute the confirm dialog's incomplete-step count) crashing on
+  `undefined.map`, landing in the same `catch` block either way. That
+  masked whether `migrate`'s own check mattered at all. The fix was a
+  payload `migrate` should reject but `validateStep`'s own logic
+  (`tokens.length`, `.some(t => t.category === "action")`) tolerates
+  without throwing - a step with a real `tokens` array containing one
+  garbage-shaped token - so only `migrate`'s `isValidToken` check stands
+  between it and the confirm dialog. Confirmed by breaking exactly that
+  check (and no other) and watching the test fail.
 
 ## Troubleshooting
 

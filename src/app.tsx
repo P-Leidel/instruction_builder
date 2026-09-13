@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "preact/hooks";
 import { StepList } from "./components/StepList/StepList";
 import { StepDetails } from "./components/StepDetails/StepDetails";
 import { TokenDetails } from "./components/TokenDetails/TokenDetails";
@@ -5,8 +6,85 @@ import { InstructionCanvas } from "./components/InstructionCanvas/InstructionCan
 import { TokenPicker } from "./components/TokenPicker/TokenPicker";
 import { TokenAttachmentPicker } from "./components/TokenAttachmentPicker/TokenAttachmentPicker";
 import { DragGhost } from "./components/DragGhost/DragGhost";
-import { previewMode } from "./state/ui";
+import { ImportConfirmDialog } from "./components/ImportConfirmDialog/ImportConfirmDialog";
+import { previewMode, toast, pendingImport } from "./state/ui";
 import { persistenceStatus } from "./state/persistence";
+import { document, undo, redo, canUndo, canRedo } from "./state/document";
+import { validateDocument } from "./model/validate";
+import { exportDocumentAsJson, parseImportedDocument } from "./lib/document-file";
+
+/**
+ * Task 18 (JSON Export): downloads the current document, then - task 14's
+ * link into export - shows a non-blocking warning toast if any step is
+ * incomplete. The file downloads either way; this only informs, it never
+ * gates the export.
+ */
+function handleExport(): void {
+  const issues = validateDocument(document.value).filter((result) => !result.isComplete);
+  exportDocumentAsJson(document.value);
+  if (issues.length > 0) {
+    toast.value = {
+      text: `Exported with ${issues.length} incomplete step${issues.length === 1 ? "" : "s"} (missing an action, or empty).`,
+      tone: "warning",
+    };
+  }
+}
+
+/**
+ * Task 19 (Import): reads the chosen file, parses+shape-validates it (see
+ * `parseImportedDocument`), and - on success - hands it to `ImportConfirmDialog`
+ * rather than replacing the document immediately, so the user gets an
+ * explicit go/no-go before anything is overwritten. A parse/shape failure
+ * (bad JSON, missing fields, unsupported schema version) surfaces as an
+ * error toast instead, and the current document is left untouched either way.
+ */
+async function handleImportFileChange(event: Event): Promise<void> {
+  const input = event.currentTarget as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = ""; // allow re-selecting the same filename later
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const imported = parseImportedDocument(text);
+    const incompleteCount = validateDocument(imported).filter((result) => !result.isComplete).length;
+    pendingImport.value = { document: imported, incompleteCount };
+  } catch (err) {
+    toast.value = {
+      text: err instanceof Error ? err.message : "Could not read that file.",
+      tone: "error",
+    };
+  }
+}
+
+/**
+ * Task 13 (Undo/Redo): Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z are the standard
+ * bindings; Ctrl/Cmd+Y is also wired to redo since that's the common
+ * Windows convention. `preventDefault` stops the browser's own per-field
+ * undo from also firing on whatever `<input>`/`<textarea>` has focus,
+ * which would otherwise race the app's own history restore.
+ */
+function useHistoryKeyboardShortcuts(): void {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent): void {
+      const meta = event.ctrlKey || event.metaKey;
+      if (!meta) return;
+      const key = event.key.toLowerCase();
+      if (key === "z" && event.shiftKey) {
+        event.preventDefault();
+        redo();
+      } else if (key === "z") {
+        event.preventDefault();
+        undo();
+      } else if (key === "y") {
+        event.preventDefault();
+        redo();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+}
 
 /**
  * Phase 2 task 5: the toolbar/canvas/panel regions from
@@ -29,12 +107,52 @@ import { persistenceStatus } from "./state/persistence";
  * closing the tab rather than losing work silently.
  */
 export function App() {
+  useHistoryKeyboardShortcuts();
+  const importInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <div class="app">
       <header class="app__toolbar">
         <div class="app__titles">
           <h1>Visual Instruction Builder</h1>
           <p class="app__tagline">Phase 2 — instruction canvas</p>
+        </div>
+        <div class="app__history-controls">
+          <button
+            type="button"
+            class="app__history-button"
+            onClick={undo}
+            disabled={!canUndo.value}
+            aria-label="Undo"
+            title="Undo (Ctrl+Z)"
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            class="app__history-button"
+            onClick={redo}
+            disabled={!canRedo.value}
+            aria-label="Redo"
+            title="Redo (Ctrl+Shift+Z)"
+          >
+            Redo
+          </button>
+        </div>
+        <div class="app__file-controls">
+          <button type="button" class="app__file-button" onClick={handleExport}>
+            Export
+          </button>
+          <button type="button" class="app__file-button" onClick={() => importInputRef.current?.click()}>
+            Import
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            class="visually-hidden"
+            onChange={handleImportFileChange}
+          />
         </div>
         <button
           type="button"
@@ -49,6 +167,22 @@ export function App() {
           Your browser blocked local saving (this is common in private
           browsing). Changes will be lost when you close this tab.
         </p>
+      )}
+      {toast.value && (
+        <div
+          class={`app__toast app__toast--${toast.value.tone}`}
+          role={toast.value.tone === "error" ? "alert" : "status"}
+        >
+          <span>{toast.value.text}</span>
+          <button
+            type="button"
+            class="app__toast-dismiss"
+            aria-label="Dismiss"
+            onClick={() => (toast.value = null)}
+          >
+            ×
+          </button>
+        </div>
       )}
       <main class={`app__main${previewMode.value ? " app__main--preview" : ""}`}>
         {previewMode.value ? (
@@ -65,6 +199,7 @@ export function App() {
         )}
       </main>
       <DragGhost />
+      <ImportConfirmDialog />
     </div>
   );
 }

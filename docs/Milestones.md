@@ -6,8 +6,11 @@
 > this doc relates to every other doc in `docs/`.
 
 **Current status (2026-09-13): Phase 2 (MVP) is in progress.** Phase 1
-(Concept Validation) is complete. Of Phase 2's 20 tasks, 5–12 are done;
-task 13 (Undo/Redo) is next.
+(Concept Validation) is complete. Of Phase 2's 20 tasks, 5–14, 18, and 19
+are done - tasks 18/19 (JSON Export, Import) were deliberately pulled ahead
+of 15–17 (SVG/PNG/Print export) on request, since a working JSON round-trip
+makes both automated and manual testing of everything else easier. Task 15
+(SVG Export) is next, picking the original order back up.
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
@@ -27,7 +30,7 @@ this file existed).
 Exit criterion met: an in-memory clickable prototype validated the
 interaction model. See [phase-1/Status-Report.md](./phase-1/Status-Report.md).
 
-## Phase 2: MVP — 🔶 In progress (8 of 20 tasks complete)
+## Phase 2: MVP — 🔶 In progress (12 of 20 tasks complete)
 
 | # | Task | Status |
 |---|---|---|
@@ -39,13 +42,13 @@ interaction model. See [phase-1/Status-Report.md](./phase-1/Status-Report.md).
 | 10 | Implement Touch Support | ✅ |
 | 11 | Add Tap-to-Insert System | ✅ (carried over from Phase 1's `TokenPicker`, never needed rework) |
 | 12 | Build Data Persistence | ✅ |
-| 13 | Implement Undo/Redo | ▶️ Next |
-| 14 | Implement Visual Validation | 🔶 Partial — a Phase 1 stub (`src/model/validate.ts`) checks only "has an action token"; the full rule set from this task is still open |
-| 15 | Develop SVG Export | Not started |
+| 13 | Implement Undo/Redo | ✅ |
+| 14 | Implement Visual Validation | ✅ (the two rules already covered by the Phase 1 stub turned out to be the full applicable rule set - see below) |
+| 15 | Develop SVG Export | ▶️ Next |
 | 16 | Develop PNG Export | Not started |
 | 17 | Implement Print/PDF Export | Not started |
-| 18 | Implement JSON Export | Not started |
-| 19 | Create Import System | Not started |
+| 18 | Implement JSON Export | ✅ (built ahead of 15–17, on request) |
+| 19 | Create Import System | ✅ (built ahead of 15–17, on request) |
 | 20 | Add Automated Testing | Not started |
 | 21 | Build Responsive Layouts | Not started |
 | 22 | Add Accessibility Features | Not started |
@@ -53,14 +56,17 @@ interaction model. See [phase-1/Status-Report.md](./phase-1/Status-Report.md).
 | 24 | Optimize Performance | Not started |
 
 See [phase-2/Progress-Log.md](./phase-2/Progress-Log.md) for what actually
-shipped in tasks 5–12, plus product additions beyond the original task
-list (step titles/details, per-token descriptions, two-stage step/token
-selection, connector lines, the live drag insertion marker, a CSS
-design-token visual refresh, and token/step attachments - a validated
+shipped in tasks 5–14, 18, and 19, plus product additions beyond the
+original task list (step titles/details, per-token descriptions, two-stage
+step/token selection, connector lines, the live drag insertion marker, a
+CSS design-token visual refresh, and token/step attachments - a validated
 Quantity amount+unit, a Warning, and an independent Step/Token duration
 shown centered above each step). See [Fixed-Issues.md](./Fixed-Issues.md)
 for bugs found and fixed along the way (none currently open against this
-work - see [Known-Issues.md](./Known-Issues.md) for what *is* still open).
+work) and [Known-Issues.md](./Known-Issues.md) for what's deliberately
+deferred - including a new one from task 18: every JSON export downloads
+as "untitled-instructions.json" because no UI lets the user set
+`meta.title` yet.
 
 ## Phase 3: Generic Instruction Framework — Not started
 

@@ -26,6 +26,13 @@ await page.goto(URL, { waitUntil: "networkidle" });
 await page.waitForSelector(".instruction-canvas__svg");
 await page.screenshot({ path: path.join(OUT, "01-desktop-initial.png"), fullPage: true });
 
+// Task 13 (Undo/Redo): both buttons start disabled - a fresh document has
+// nothing to undo and nothing has been undone yet to redo. Check this here,
+// before the rest of the flow below makes any edits.
+const undoButton = page.getByRole("button", { name: "Undo", exact: true });
+const redoButton = page.getByRole("button", { name: "Redo", exact: true });
+const historyButtonsDisabledInitially = (await undoButton.isDisabled()) && (await redoButton.isDisabled());
+
 // Representative flow: name the first step, add tokens via the picker,
 // select a step from the canvas badge, remove a token from the canvas.
 await page.locator(".step-list__item").first().click();
@@ -105,6 +112,26 @@ const attachmentsWorkedEndToEnd =
   attachmentListCountAfterAttach === 2 &&
   badgeCountAfterRemove === 1 &&
   attachmentListCountAfterRemove === 1;
+
+// Regression test for a review finding: QuantityForm is the same component
+// instance across a token switch (same position in the tree), so without a
+// `key={token.id}` on it, typing a draft amount/unit for one token and then
+// switching to a *different* token (without clicking Attach) left the new
+// token's Quantity form showing the old token's unsaved draft instead of
+// resetting to the default amount/unit - same bug class already found and
+// fixed for DurationField above.
+await selectAttachTab("Quantities");
+const quantityAmountInput = attach.locator(".token-attachment-picker__field input");
+const quantityUnitSelect = attach.locator(".token-attachment-picker__field select");
+const defaultQuantityUnit = await quantityUnitSelect.locator("option").first().getAttribute("value");
+await quantityAmountInput.fill("42");
+await quantityUnitSelect.selectOption("kg");
+// step 1 already selected -> selects its 2nd token (declared as `secondToken` later, reused there)
+await page.locator(".instruction-canvas__token").nth(1).click();
+const freshQuantityAmount = await quantityAmountInput.inputValue();
+const freshQuantityUnit = await quantityUnitSelect.inputValue();
+const quantityFormResetsPerToken = freshQuantityAmount === "1" && freshQuantityUnit === defaultQuantityUnit;
+await firstToken.click(); // back to the first token for the rest of the flow
 
 // Time: factored out of "Add to token" entirely - set via DurationField
 // directly in Token details (a token's own time) and Step details (a
@@ -286,6 +313,62 @@ const forwardStepDragLandsAtDropPoint =
 await page.locator("[data-step-index='2']").locator(".step-list__remove").click();
 firstSummaryAfter = await page.locator(".step-list__item").first().locator(".step-list__summary").textContent();
 
+// Task 13 (Undo/Redo): snapshot state first so this block can fully undo
+// itself afterward, leaving the step count/order exactly as the
+// persistence check below expects (it was captured just above, before this
+// block runs).
+const summariesBeforeHistoryTest = await page.locator(".step-list__summary").allTextContents();
+
+// Discrete action: adding a step is its own undo step.
+await page.locator(".step-list__add").click();
+const stepCountAfterAddForHistoryTest = await page.locator(".step-list__item").count();
+await undoButton.click();
+const stepCountAfterUndoingAdd = await page.locator(".step-list__item").count();
+const discreteActionUndoes =
+  stepCountAfterAddForHistoryTest === summariesBeforeHistoryTest.length + 1 &&
+  stepCountAfterUndoingAdd === summariesBeforeHistoryTest.length;
+
+// Continuous action: typing a whole title (several keystrokes) must
+// coalesce into ONE undo step, not one character at a time - StepDetails'
+// title field calls its mutator on every keystroke with no local draft
+// state (see state/document.ts's COALESCE_WINDOW_MS comment), so without
+// coalescing, undo would only ever remove the last-typed character.
+const originalFirstTitle = summariesBeforeHistoryTest[0];
+await page.locator(".step-list__item").first().click();
+await page.locator(".step-details__field input").fill("");
+await page.locator(".step-details__field input").pressSequentially("Renamed step", { delay: 20 });
+await page.locator("body").click({ position: { x: 5, y: 5 } }); // blur
+const titleAfterTyping = await page.locator(".step-list__item").first().locator(".step-list__summary").textContent();
+await undoButton.click(); // one click undoes the WHOLE typed title
+const titleAfterOneUndo = await page.locator(".step-list__item").first().locator(".step-list__summary").textContent();
+const continuousEditCoalescesIntoOneUndo =
+  titleAfterTyping === "Renamed step" && titleAfterOneUndo === originalFirstTitle;
+
+// Redo restores the coalesced edit in one step.
+await redoButton.click();
+const redoRestoresCoalescedEdit =
+  (await page.locator(".step-list__item").first().locator(".step-list__summary").textContent()) === "Renamed step";
+
+// Keyboard shortcuts: Ctrl+Z undoes, Ctrl+Shift+Z redoes.
+await page.keyboard.press("Control+z");
+const titleAfterCtrlZ = await page.locator(".step-list__item").first().locator(".step-list__summary").textContent();
+await page.keyboard.press("Control+Shift+z");
+const titleAfterCtrlShiftZ = await page.locator(".step-list__item").first().locator(".step-list__summary").textContent();
+const keyboardShortcutsWork = titleAfterCtrlZ === originalFirstTitle && titleAfterCtrlShiftZ === "Renamed step";
+
+// Undo the rename back out, leaving state exactly as this block found it.
+await undoButton.click();
+const summariesAfterHistoryTest = await page.locator(".step-list__summary").allTextContents();
+const historyTestLeftStateUnchanged =
+  JSON.stringify(summariesAfterHistoryTest) === JSON.stringify(summariesBeforeHistoryTest);
+
+const undoRedoWorkedEndToEnd =
+  discreteActionUndoes &&
+  continuousEditCoalescesIntoOneUndo &&
+  redoRestoresCoalescedEdit &&
+  keyboardShortcutsWork &&
+  historyTestLeftStateUnchanged;
+
 // Task 8 (Live Preview): toggling it swaps the editor for a read-only canvas.
 await page.locator(".app__preview-toggle").click();
 await page.waitForSelector(".instruction-canvas--readonly");
@@ -316,6 +399,134 @@ const persistedAcrossReload =
 await page.setViewportSize({ width: 390, height: 844 });
 await page.screenshot({ path: path.join(OUT, "04-mobile.png"), fullPage: true });
 
+// Task 18 (JSON Export): add a temporary empty step so there's something for
+// task 14's validation to flag, then export and confirm the downloaded file
+// is the current document plus a non-blocking warning toast (the export
+// itself must still succeed either way - "non-blocking" per
+// docs/Fixed-Issues.md's design intent, not enforced there but this is where
+// it's actually exercised).
+await page.locator(".step-list__add").click();
+const flagCountBeforeExport = await page.locator(".step-list__flag").count();
+const [download] = await Promise.all([
+  page.waitForEvent("download"),
+  page.getByRole("button", { name: "Export", exact: true }).click(),
+]);
+const exportSuggestedFilename = download.suggestedFilename();
+const exportPath = path.join(OUT, "exported-document.json");
+await download.saveAs(exportPath);
+const exportedDoc = JSON.parse(fs.readFileSync(exportPath, "utf8"));
+const exportToastText = await page.locator(".app__toast").textContent();
+const exportWarnedAboutIncompleteSteps =
+  flagCountBeforeExport > 0 &&
+  (await page.locator(".app__toast--warning").count()) === 1 &&
+  exportToastText.includes(String(flagCountBeforeExport));
+const jsonExportDownloadsCurrentDocument =
+  exportSuggestedFilename === "untitled-instructions.json" &&
+  exportedDoc.steps.length === (await page.locator(".step-list__item").count());
+await page.screenshot({ path: path.join(OUT, "07-export-warning-toast.png"), fullPage: true });
+await page.locator(".app__toast-dismiss").click();
+const toastGoneAfterDismiss = (await page.locator(".app__toast").count()) === 0;
+
+// Remove the temporary empty step so the step count is back to what it was.
+await page.locator("[data-step-index='2']").locator(".step-list__remove").click();
+
+// Task 19 (Import): a small valid document, imported via the hidden file
+// input (Playwright's setInputFiles fires the same `change` event a real
+// file picker would, so the visually-hidden input - proxied by the visible
+// "Import" button in normal use - doesn't need to actually be clicked open).
+const summariesBeforeImportTest = await page.locator(".step-list__summary").allTextContents();
+const importFileInput = page.locator('input[type="file"]');
+const validImportDoc = {
+  schemaVersion: 1,
+  meta: { title: "Driver Import Test", domain: "recipe", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  steps: [
+    { id: "import-step-1", title: "Imported step", tokens: [{ id: "import-token-1", category: "action", iconId: "chop", label: "Chop" }] },
+  ],
+};
+await importFileInput.setInputFiles({
+  name: "import.json",
+  mimeType: "application/json",
+  buffer: Buffer.from(JSON.stringify(validImportDoc)),
+});
+const importDialogMentionsStepCount = (await page.locator(".import-confirm-dialog").textContent()).includes("1 step");
+await page.screenshot({ path: path.join(OUT, "08-import-confirm-dialog.png"), fullPage: true });
+await page.getByRole("button", { name: "Replace", exact: true }).click();
+const summariesAfterImport = await page.locator(".step-list__summary").allTextContents();
+const importReplacedDocument = summariesAfterImport.length === 1 && summariesAfterImport[0] === "Imported step";
+await page.locator(".app__toast-dismiss").click();
+
+// Undo/redo must cover import too, same as every other mutation - an
+// accidental "Replace" is one Ctrl+Z away from being reverted.
+await page.keyboard.press("Control+z");
+const summariesAfterUndoingImport = await page.locator(".step-list__summary").allTextContents();
+const undoRevertsImport = JSON.stringify(summariesAfterUndoingImport) === JSON.stringify(summariesBeforeImportTest);
+await page.keyboard.press("Control+Shift+z");
+const summariesAfterRedoingImport = await page.locator(".step-list__summary").allTextContents();
+const redoReappliesImport = summariesAfterRedoingImport.length === 1 && summariesAfterRedoingImport[0] === "Imported step";
+await page.keyboard.press("Control+z"); // leave state back at the pre-import baseline
+
+const importUndoRedoWorked = importReplacedDocument && undoRevertsImport && redoReappliesImport;
+
+// Malformed file (unparseable JSON): must show an error toast and leave the
+// document untouched - never a half-applied import, never a silent crash.
+await importFileInput.setInputFiles({
+  name: "bad.json",
+  mimeType: "application/json",
+  buffer: Buffer.from("not valid json"),
+});
+// `.count()` is a plain snapshot, not an auto-waiting assertion - the file
+// read + parse + migrate happens in an async handler, so without waiting
+// for the toast first, a read this fast reads the pre-toast DOM and gives a
+// false negative even when the app behaves correctly.
+await page.locator(".app__toast").waitFor();
+const noDialogForUnparseableFile = (await page.locator(".import-confirm-dialog").count()) === 0;
+const unparseableFileShowsErrorToast = (await page.locator(".app__toast--error").count()) === 1;
+await page.locator(".app__toast-dismiss").click();
+
+// Wrong-shaped file (valid JSON, but not an InstructionDocument): exercises
+// `migrate`'s own shape validation specifically, not just JSON.parse - and
+// not the incidental safety net of `validateDocument` throwing on badly
+// shaped input, which is why the step below is *structurally* present
+// (a real `tokens` array) with a garbage token inside, rather than missing
+// `steps` outright: `validateStep`'s own checks (`tokens.length`,
+// `.some(t => t.category === "action")`) don't throw on a garbage token
+// shape, so this payload can only be caught by `migrate`'s `isValidToken`
+// check - if that check regresses, this file would otherwise sail through
+// to the confirm dialog instead of being rejected.
+await importFileInput.setInputFiles({
+  name: "wrong-shape.json",
+  mimeType: "application/json",
+  buffer: Buffer.from(
+    JSON.stringify({
+      schemaVersion: 1,
+      meta: validImportDoc.meta,
+      steps: [{ id: "bad-step", tokens: [{ notAValidToken: true }] }],
+    }),
+  ),
+});
+await page.locator(".app__toast").waitFor();
+const noDialogForWrongShapeFile = (await page.locator(".import-confirm-dialog").count()) === 0;
+const wrongShapeFileShowsErrorToast = (await page.locator(".app__toast--error").count()) === 1;
+await page.locator(".app__toast-dismiss").click();
+
+const importRejectsInvalidFile =
+  noDialogForUnparseableFile &&
+  unparseableFileShowsErrorToast &&
+  noDialogForWrongShapeFile &&
+  wrongShapeFileShowsErrorToast;
+
+// Cancel: the dialog closes and the document is left exactly as it was.
+await importFileInput.setInputFiles({
+  name: "import2.json",
+  mimeType: "application/json",
+  buffer: Buffer.from(JSON.stringify(validImportDoc)),
+});
+await page.getByRole("button", { name: "Cancel", exact: true }).click();
+const summariesAfterCancelingImport = await page.locator(".step-list__summary").allTextContents();
+const importCancelLeavesDocumentUnchanged =
+  (await page.locator(".import-confirm-dialog").count()) === 0 &&
+  JSON.stringify(summariesAfterCancelingImport) === JSON.stringify(summariesBeforeImportTest);
+
 await browser.close();
 
 console.log("SCREENSHOTS_DIR=" + OUT);
@@ -323,6 +534,7 @@ console.log("TABS_FILTER_TOKENS=" + tabsFilterTokens);
 console.log("TOKEN_SELECTED_AFTER_FIRST_CLICK=" + tokenSelectedAfterFirstClick);
 console.log("TOKEN_LABEL_UPDATED=" + tokenLabelUpdated);
 console.log("ATTACHMENTS_WORKED_END_TO_END=" + attachmentsWorkedEndToEnd);
+console.log("QUANTITY_FORM_RESETS_PER_TOKEN=" + quantityFormResetsPerToken);
 console.log("TIME_WORKED_END_TO_END=" + timeWorkedEndToEnd);
 console.log("DURATION_FIELD_RESETS_PER_TOKEN=" + durationFieldResetsPerToken);
 console.log("DURATION_FIELD_RESETS_PER_STEP=" + durationFieldResetsPerStep);
@@ -332,9 +544,18 @@ console.log("INSERTION_MARKER_VISIBLE_MID_DRAG=" + insertionMarkerVisibleMidDrag
 console.log("TOKEN_MOVED_BETWEEN_STEPS_VIA_DRAG=" + tokenMovedBetweenSteps);
 console.log("FORWARD_TOKEN_DRAG_LANDS_AT_DROP_POINT=" + forwardTokenDragLandsAtDropPoint);
 console.log("STEPS_REORDERED_VIA_DRAG=" + stepsReordered);
+console.log("HISTORY_BUTTONS_DISABLED_INITIALLY=" + historyButtonsDisabledInitially);
+console.log("UNDO_REDO_WORKED_END_TO_END=" + undoRedoWorkedEndToEnd);
 console.log("FORWARD_STEP_DRAG_LANDS_AT_DROP_POINT=" + forwardStepDragLandsAtDropPoint);
 console.log("PREVIEW_HIDES_EDITING_CONTROLS=" + previewHidesEditingControls);
 console.log("PERSISTED_ACROSS_RELOAD=" + persistedAcrossReload);
 console.log("CANVAS_KEYBOARD_FOCUSABLE=" + canvasControlFocused);
+console.log("JSON_EXPORT_DOWNLOADS_CURRENT_DOCUMENT=" + jsonExportDownloadsCurrentDocument);
+console.log("JSON_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + exportWarnedAboutIncompleteSteps);
+console.log("TOAST_DISMISSIBLE=" + toastGoneAfterDismiss);
+console.log("IMPORT_DIALOG_MENTIONS_STEP_COUNT=" + importDialogMentionsStepCount);
+console.log("IMPORT_UNDO_REDO_WORKED=" + importUndoRedoWorked);
+console.log("IMPORT_REJECTS_INVALID_FILE=" + importRejectsInvalidFile);
+console.log("IMPORT_CANCEL_LEAVES_DOCUMENT_UNCHANGED=" + importCancelLeavesDocumentUnchanged);
 console.log("CONSOLE_ERRORS_COUNT=" + errors.length);
 for (const e of errors) console.log(e);

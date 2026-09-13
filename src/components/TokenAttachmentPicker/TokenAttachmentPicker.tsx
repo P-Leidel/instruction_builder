@@ -103,7 +103,11 @@ export function TokenAttachmentPicker() {
           </div>
           <div class="token-picker__grid" role="tabpanel" id="token-attachment-picker-panel">
             {active === "quantity" ? (
-              <QuantityForm />
+              // `key={token.id}` forces a fresh instance per token - without it,
+              // Preact reuses the same QuantityForm across a token switch and its
+              // draft amount/unit leaks from one token to the next (same bug
+              // class fixed for DurationField - see TokenDetails.tsx).
+              <QuantityForm key={token.id} />
             ) : (
               warningTokens.map((sample: SampleToken) => (
                 <button
