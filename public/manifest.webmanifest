@@ -1,0 +1,11 @@
+{
+  "name": "Visual Instruction Builder",
+  "short_name": "Instructions",
+  "description": "Build step-by-step visual instructions by arranging icons on a structured canvas.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1d1d1f",
+  "icons": []
+}

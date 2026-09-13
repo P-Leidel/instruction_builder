@@ -1,0 +1,864 @@
+/* Minimal reset + prototype styling.
+   Mobile-first per the plan's "Fast and Responsive" principle; a real
+   responsive pass is Phase 2 task 21.
+
+   Design tokens: every color, radius, and shadow used below is defined once
+   in :root and referenced via var() everywhere else. To retheme the app
+   (new palette, sharper/rounder corners, etc.) change the tokens here -
+   nothing that follows should need a hardcoded color or radius. */
+
+:root {
+  /* Backgrounds - three distinct layers so the canvas reads as its own
+     "work surface", separate from both the page chrome and the white
+     panels around it. */
+  --color-app-bg: #f3f4f7;
+  --color-surface: #ffffff;
+  --color-surface-sunken: #f5f6f9;
+  --color-canvas-bg: #e9ecf2;
+
+  --color-border: #e3e5ea;
+  --color-border-strong: #c7cbd4;
+
+  --color-text: #1d1d1f;
+  --color-text-muted: #6b6e76;
+
+  --color-accent: #4f6bff;
+  --color-accent-soft: #eef1ff;
+  --color-accent-contrast: #ffffff;
+
+  --color-danger: #c0392b;
+  --color-warning-bg: #fff4e5;
+  --color-warning-border: #e8a33d;
+  --color-warning-text: #7a4a00;
+
+  /* Radius scale - bump any of these to change roundness everywhere at once. */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 10px rgba(16, 24, 40, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--color-text);
+  background: var(--color-app-bg);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.app__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.app__titles {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.app__preview-toggle {
+  flex-shrink: 0;
+  border: none;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-radius: var(--radius-pill);
+  padding: 0.5rem 1.1rem;
+  min-height: 44px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.app__preview-toggle:hover {
+  filter: brightness(1.08);
+}
+
+.app__toolbar h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.app__tagline {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.app__main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+@media (min-width: 800px) {
+  .app__main {
+    max-width: none;
+    display: grid;
+    grid-template-columns: 240px 1fr 280px;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "panel-steps canvas panel-tokens"
+      "step-details canvas panel-tokens"
+      "token-details canvas panel-token-attachments";
+    align-items: start;
+  }
+
+  /* Named regions so a later reorder (e.g. swap which side a panel sits on,
+     or restack them) only touches grid-template-areas - never the markup or
+     the rules below. Repeating "canvas" in every row makes it span the full
+     column height alongside the three stacked panels on each side - the
+     right column stacks "Add to step" (panel-tokens) over "Add to token"
+     (panel-token-attachments), mirroring the left column's three-panel stack. */
+  .step-list {
+    grid-area: panel-steps;
+  }
+
+  .step-details {
+    grid-area: step-details;
+  }
+
+  .token-details {
+    grid-area: token-details;
+  }
+
+  .instruction-canvas {
+    grid-area: canvas;
+  }
+
+  .token-picker {
+    grid-area: panel-tokens;
+  }
+
+  .token-attachment-picker {
+    grid-area: panel-token-attachments;
+  }
+}
+
+/* Task 8 (Live Preview): a single, centered, read-only canvas replaces the
+   whole editor grid while previewMode is on. */
+.app__main--preview {
+  display: block;
+  max-width: 960px;
+}
+
+/* Task 12 (Data Persistence): shown only when IndexedDB writes fail. */
+.app__persistence-warning {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  background: var(--color-warning-bg);
+  border-bottom: 1px solid var(--color-warning-border);
+  color: var(--color-warning-text);
+  font-size: 0.85rem;
+}
+
+/* Task 9 (Drag-and-Drop): the floating label that follows the pointer. */
+.drag-ghost {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1000;
+  background: var(--color-text);
+  color: #fff;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/* Shared panel chrome (step list, step details, token details, token picker).
+   The canvas gets its own background below - see "Instruction canvas" -
+   so it reads as a distinct work surface rather than another white card. */
+
+.instruction-canvas {
+  /* The clamped min-width on .instruction-canvas__svg (below) can exceed a
+     narrow mobile container - scroll horizontally rather than overflow the page. */
+  overflow-x: auto;
+}
+
+.step-list,
+.step-details,
+.token-details,
+.instruction-canvas,
+.token-picker,
+.token-attachment-picker {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 1rem;
+}
+
+.instruction-canvas {
+  background: var(--color-canvas-bg);
+}
+
+.step-list__heading,
+.step-details__heading,
+.token-details__heading,
+.instruction-canvas__heading,
+.token-picker__heading {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.step-list__items {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.step-list__items li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.step-list__item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  text-align: left;
+  min-height: 44px; /* touch target */
+  /* Task 10: without this, a touch-drag to reorder scrolls the page instead. */
+  touch-action: none;
+}
+
+.step-list__item--selected {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.step-list__number {
+  font-weight: 600;
+}
+
+.step-list__summary {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.step-list__flag {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+.step-list__remove {
+  border: none;
+  background: transparent;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.5rem;
+  color: var(--color-text-muted);
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+}
+
+.step-list__add {
+  border: 1px dashed var(--color-border-strong);
+  background: transparent;
+  border-radius: var(--radius-md);
+  padding: 0.5rem 1rem;
+  min-height: 44px;
+  width: 100%;
+  color: var(--color-text);
+}
+
+.step-list__add:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* Step details */
+
+.step-details__empty {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.step-details__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.step-details__label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+}
+
+.step-details__field input,
+.step-details__field textarea,
+.token-details__field input,
+.token-details__field textarea {
+  font: inherit;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  resize: vertical;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.step-details__field input:focus-visible,
+.step-details__field textarea:focus-visible,
+.token-details__field input:focus-visible,
+.token-details__field textarea:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.step-details__tokens {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.step-details__token-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.step-details__token {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.step-details__token-label {
+  font-weight: 600;
+}
+
+.step-details__token-description {
+  color: var(--color-text-muted);
+}
+
+/* Duration field (Time) - shared by Step details and Token details, see
+   components/DurationField/DurationField.tsx. Collapsed to one line (a
+   "+ Time" button, or a value with Edit/Remove) until actively editing, so
+   it doesn't dominate either panel. */
+
+.duration-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.75rem;
+}
+
+.duration-field__label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+}
+
+.duration-field__add {
+  align-self: flex-start;
+  border: 1px dashed var(--color-border-strong);
+  background: transparent;
+  border-radius: var(--radius-md);
+  padding: 0.35rem 0.75rem;
+  min-height: 36px;
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.duration-field__add:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.duration-field__display {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.duration-field__display-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.duration-field__value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.duration-field__edit,
+.duration-field__remove,
+.duration-field__save,
+.duration-field__cancel {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.6rem;
+  min-height: 32px;
+  font-size: 0.8rem;
+  color: var(--color-text);
+}
+
+.duration-field__remove:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.duration-field__save {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.duration-field__save:disabled {
+  background: var(--color-surface-sunken);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.duration-field__inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.duration-field__unit {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.duration-field__unit input {
+  width: 2.6rem;
+  font: inherit;
+  padding: 0.35rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: right;
+  /* The native up/down spinner ate a disproportionate share of these
+     already-narrow boxes and added visual noise without much benefit at
+     this size - typing (or the browser's own scroll-to-adjust) works fine
+     without it. */
+  -moz-appearance: textfield;
+}
+
+.duration-field__unit input::-webkit-outer-spin-button,
+.duration-field__unit input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.duration-field__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Token details */
+
+.token-details__empty {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.token-details__summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.token-details__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.token-details__label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+}
+
+.token-details__attachments {
+  margin-bottom: 0.75rem;
+}
+
+.token-details__attachment-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.token-details__attachment {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.token-details__attachment-label {
+  flex: 1;
+}
+
+.token-details__attachment-remove {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.25rem;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: var(--radius-sm);
+}
+
+.token-details__attachment-remove:hover {
+  color: var(--color-danger);
+}
+
+/* Instruction canvas */
+
+.instruction-canvas__svg {
+  display: block;
+  /* Bounds the rendered icon size to a reasonable range (roughly 64-128px
+     per chip, since a chip is 96 of the SVG's 720 base design units) no
+     matter how narrow or wide the panel gets. */
+  width: clamp(480px, 100%, 960px);
+  height: auto;
+  font-family: inherit;
+}
+
+.instruction-canvas__step-bg {
+  fill: var(--color-surface);
+  stroke: var(--color-border);
+  stroke-width: 1;
+  cursor: pointer;
+}
+
+.instruction-canvas__step-bg--selected {
+  fill: var(--color-accent-soft);
+  stroke: var(--color-accent);
+}
+
+.instruction-canvas__step-bg--drop-target {
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+
+.instruction-canvas--readonly .instruction-canvas__step-bg {
+  cursor: default;
+}
+
+.instruction-canvas__badge {
+  cursor: pointer;
+}
+
+.instruction-canvas__badge circle {
+  fill: var(--color-accent);
+}
+
+.instruction-canvas__badge text {
+  fill: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.instruction-canvas__badge:focus-visible,
+.instruction-canvas__chip-remove:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.instruction-canvas__flag {
+  fill: var(--color-danger);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.instruction-canvas__hint {
+  fill: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.instruction-canvas__connector {
+  fill: none;
+  stroke: var(--color-border-strong);
+  stroke-width: 2;
+  /* The corner rounding is built into the path geometry itself (see
+     buildConnectors in InstructionCanvas.tsx) - stroke-linejoin's own
+     rounding radius is tied to stroke-width and too small to read as
+     rounded on its own, so this is just a light backstop. */
+  stroke-linejoin: round;
+}
+
+.instruction-canvas__insertion-marker {
+  fill: var(--color-accent);
+}
+
+.instruction-canvas__token {
+  cursor: pointer;
+  /* Task 10: without this, a touch-drag to move a token scrolls the canvas instead. */
+  touch-action: none;
+}
+
+.instruction-canvas--readonly .instruction-canvas__token {
+  cursor: default;
+}
+
+.instruction-canvas__chip {
+  fill: var(--color-surface-sunken);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.instruction-canvas__chip--warning {
+  fill: var(--color-warning-bg);
+  stroke: var(--color-warning-border);
+}
+
+.instruction-canvas__chip--selected {
+  stroke: var(--color-accent);
+  stroke-width: 2;
+}
+
+.instruction-canvas__chip-icon {
+  color: var(--color-text);
+}
+
+.instruction-canvas__chip-label {
+  fill: var(--color-text);
+  font-size: 9px;
+}
+
+.instruction-canvas__chip-remove {
+  cursor: pointer;
+}
+
+.instruction-canvas__chip-remove circle {
+  fill: var(--color-surface);
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+}
+
+.instruction-canvas__chip-remove text {
+  fill: var(--color-text-muted);
+  font-size: 12px;
+}
+
+/* Attachment badges (Quantity/Warning) - small, decorative, non-interactive
+   markers on a chip; managing them (attaching/removing) happens via "Add to
+   token" and Token details, not by clicking the badge itself, so these
+   carry no cursor/hover/focus styling. Time has no chip badge - see
+   .instruction-canvas__step-time below. */
+
+.instruction-canvas__chip-badge--warning circle {
+  fill: var(--color-warning-bg);
+  stroke: var(--color-warning-border);
+}
+
+.instruction-canvas__chip-badge--warning .instruction-canvas__chip-badge-icon {
+  color: var(--color-warning-text);
+}
+
+/* Quantity's badge is a text pill, not an icon circle - the value itself
+   ("250 g") is the useful part, so it's shown directly rather than requiring
+   a hover to see it via a <title> tooltip. */
+.instruction-canvas__chip-badge--quantity rect {
+  fill: var(--color-surface-sunken);
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+}
+
+.instruction-canvas__chip-badge--quantity text {
+  fill: var(--color-text);
+  font-size: 8px;
+  font-weight: 600;
+}
+
+/* Step duration header - centered above a step's card (see
+   InstructionCanvas's TIME_HEADER_HEIGHT), showing either the step's own
+   time or the sum of its tokens' times. */
+.instruction-canvas__step-time {
+  fill: var(--color-text);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Token picker */
+
+.token-picker__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+}
+
+.token-picker__tab {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  border-radius: var(--radius-pill);
+  padding: 0.4rem 0.9rem;
+  min-height: 36px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.token-picker__tab:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.token-picker__tab--active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.token-picker__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.token-picker__button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 64px;
+  min-height: 44px;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  font-size: 0.75rem;
+  color: var(--color-text);
+  /* Task 10: without this, a touch-drag to drop a token onto a step scrolls the page instead. */
+  touch-action: none;
+}
+
+.token-picker__button:hover {
+  border-color: var(--color-accent);
+}
+
+/* Quantity's own form (TokenAttachmentPicker) - replaces a button grid,
+   since Quantity is a free amount+unit value rather than a fixed vocabulary. */
+
+.token-attachment-picker__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.token-attachment-picker__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.token-attachment-picker__field input,
+.token-attachment-picker__field select {
+  font: inherit;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.token-attachment-picker__field input {
+  width: 5.5rem;
+}
+
+.token-attachment-picker__error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-danger);
+}
+
+.token-attachment-picker__attach {
+  border: none;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-radius: var(--radius-md);
+  padding: 0.45rem 1rem;
+  min-height: 36px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.token-attachment-picker__attach:disabled {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}

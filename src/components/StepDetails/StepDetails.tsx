@@ -1,0 +1,78 @@
+import { selectedStep, updateStepTitle, updateStepDescription, setStepTime } from "../../state/document";
+import { descriptionFor } from "../../data/sample-tokens";
+import { Icon } from "../Icon/Icon";
+import { DurationField } from "../DurationField/DurationField";
+
+/**
+ * Editor for the selected step's user-authored title/details, plus a
+ * read-only list of its tokens with the app-given description for each
+ * (from sample-tokens.ts - becomes the icon library's data once task 7
+ * lands). Lives below StepList in the same panel column (see the
+ * "step-details" grid area in global.css).
+ */
+export function StepDetails() {
+  const step = selectedStep.value;
+
+  if (!step) {
+    return (
+      <div class="step-details">
+        <h2 class="step-details__heading">Step details</h2>
+        <p class="step-details__empty">Select a step to edit its title and details.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div class="step-details">
+      <h2 class="step-details__heading">Step details</h2>
+
+      <label class="step-details__field">
+        <span class="step-details__label">Title</span>
+        <input
+          type="text"
+          value={step.title ?? ""}
+          placeholder="e.g. Chop the onion"
+          onInput={(event) => updateStepTitle(step.id, event.currentTarget.value)}
+        />
+      </label>
+
+      <label class="step-details__field">
+        <span class="step-details__label">Details</span>
+        <textarea
+          value={step.description ?? ""}
+          placeholder="Add any extra detail for this step..."
+          rows={3}
+          onInput={(event) => updateStepDescription(step.id, event.currentTarget.value)}
+        />
+      </label>
+
+      {/* `key={step.id}` forces a fresh instance per step - without it, Preact
+          reuses the same DurationField across a step switch and its
+          internal `editing` state (e.g. mid-edit, unsaved) leaks from the
+          previously selected step into whichever step is selected now. */}
+      <DurationField
+        key={step.id}
+        label="Step time"
+        value={step.time}
+        onChange={(time) => setStepTime(step.id, time)}
+      />
+
+      <div class="step-details__tokens">
+        <span class="step-details__label">Tokens in this step</span>
+        {step.tokens.length === 0 ? (
+          <p class="step-details__empty">No tokens yet - add some from the panel on the right.</p>
+        ) : (
+          <ul class="step-details__token-list">
+            {step.tokens.map((token) => (
+              <li key={token.id} class="step-details__token">
+                <Icon iconId={token.iconId} size={18} />
+                <span class="step-details__token-label">{token.label ?? token.iconId}</span>
+                <span class="step-details__token-description">{descriptionFor(token.iconId)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}

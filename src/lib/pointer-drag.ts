@@ -1,0 +1,102 @@
+/**
+ * Phase 2 task 9 (Drag-and-Drop) / task 10 (Touch Support): a small,
+ * framework-agnostic Pointer Events drag tracker, shared by TokenPicker,
+ * InstructionCanvas, and StepList. Pointer Events (rather than the HTML5
+ * Drag-and-Drop API) unify mouse/touch/pen input into one code path per the
+ * plan's task 9 note - task 10 is largely "verify this works on touch,"
+ * not a separate implementation.
+ */
+
+export interface DragHandlers {
+  /** Called on every pointermove once the drag has passed `threshold`. */
+  onMove?: (clientX: number, clientY: number) => void;
+  /**
+   * Called on pointerup/pointercancel. `wasDrag` is false when the pointer
+   * never moved past `threshold` - callers use that to fall back to their
+   * normal click/tap behavior instead of a drop.
+   */
+  onDrop: (clientX: number, clientY: number, wasDrag: boolean) => void;
+  /** Pixels of movement before this counts as a drag. Default 6. */
+  threshold?: number;
+}
+
+/**
+ * Starts tracking a drag from a `pointerdown` event. Pointer capture keeps
+ * delivering move/up events to the origin element even once the pointer
+ * moves elsewhere on the page (e.g. from a TokenPicker button onto the
+ * canvas), so callers don't need their own document-level listeners.
+ */
+export function beginPointerDrag(event: PointerEvent, handlers: DragHandlers): void {
+  const target = event.currentTarget as Element;
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const threshold = handlers.threshold ?? 6;
+  let moved = false;
+
+  target.setPointerCapture(event.pointerId);
+
+  function onPointerMove(e: PointerEvent) {
+    if (!moved && Math.hypot(e.clientX - startX, e.clientY - startY) > threshold) {
+      moved = true;
+    }
+    if (moved) handlers.onMove?.(e.clientX, e.clientY);
+  }
+
+  function onPointerUp(e: PointerEvent) {
+    cleanup();
+    handlers.onDrop(e.clientX, e.clientY, moved);
+  }
+
+  function onPointerCancel(e: PointerEvent) {
+    cleanup();
+    handlers.onDrop(e.clientX, e.clientY, false);
+  }
+
+  function cleanup() {
+    // Plain `Element`'s addEventListener only types its small ElementEventMap
+    // (fullscreen events etc.) - pointer events live on HTMLElement/
+    // SVGElement's GlobalEventHandlersEventMap instead, and `target` here is
+    // typed broadly to cover both. Casting the listener avoids narrowing
+    // `target` to a union that TS can't resolve a shared overload for.
+    target.removeEventListener("pointermove", onPointerMove as EventListener);
+    target.removeEventListener("pointerup", onPointerUp as EventListener);
+    target.removeEventListener("pointercancel", onPointerCancel as EventListener);
+  }
+
+  target.addEventListener("pointermove", onPointerMove as EventListener);
+  target.addEventListener("pointerup", onPointerUp as EventListener);
+  target.addEventListener("pointercancel", onPointerCancel as EventListener);
+}
+
+export interface TokenDropTarget {
+  stepId: string;
+  /** Insertion index within the target step's tokens; Infinity means "append". */
+  index: number;
+}
+
+/**
+ * Hit-tests the point under the pointer (via `elementFromPoint`, which
+ * works regardless of SVG transforms) against `data-step-id`/
+ * `data-token-index` attributes rendered by InstructionCanvas, to find
+ * which step - and, if the pointer is over an existing chip, which
+ * position within it - a token drag is currently over.
+ */
+export function resolveTokenDropTarget(clientX: number, clientY: number): TokenDropTarget | null {
+  const el = window.document.elementFromPoint(clientX, clientY);
+  if (!el) return null;
+
+  const chipEl = el.closest("[data-token-index]");
+  if (chipEl) {
+    const stepId = chipEl.getAttribute("data-step-id");
+    const index = Number(chipEl.getAttribute("data-token-index"));
+    if (stepId !== null && !Number.isNaN(index)) return { stepId, index };
+  }
+
+  const stepEl = el.closest("[data-step-id]");
+  if (stepEl) {
+    const stepId = stepEl.getAttribute("data-step-id");
+    if (stepId !== null) return { stepId, index: Number.POSITIVE_INFINITY };
+  }
+
+  return null;
+}

@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+# TypeScript project-reference build artifacts
+*.tsbuildinfo
+vite.config.d.ts
+vite.config.js
+
+# Editor/OS
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
