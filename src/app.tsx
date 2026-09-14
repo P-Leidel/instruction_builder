@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "preact/hooks";
+import { effect } from "@preact/signals";
 import { StepList } from "./components/StepList/StepList";
 import { StepDetails } from "./components/StepDetails/StepDetails";
 import { TokenDetails } from "./components/TokenDetails/TokenDetails";
@@ -7,36 +8,36 @@ import { TokenPicker } from "./components/TokenPicker/TokenPicker";
 import { TokenAttachmentPicker } from "./components/TokenAttachmentPicker/TokenAttachmentPicker";
 import { DragGhost } from "./components/DragGhost/DragGhost";
 import { ImportConfirmDialog } from "./components/ImportConfirmDialog/ImportConfirmDialog";
-import { previewMode, toast, pendingImport } from "./state/ui";
+import { NewDocumentConfirmDialog } from "./components/NewDocumentConfirmDialog/NewDocumentConfirmDialog";
+import { previewMode, toast, pendingImport, confirmingNewDocument } from "./state/ui";
 import { persistenceStatus } from "./state/persistence";
-import { document, undo, redo, canUndo, canRedo } from "./state/document";
-import { validateDocument } from "./model/validate";
-import { exportDocumentAsJson, parseImportedDocument } from "./lib/document-file";
-import { exportCanvasAsSvg } from "./lib/svg-export";
-import { exportCanvasAsPng } from "./lib/png-export";
-import { exportCanvasAsPdf } from "./lib/pdf-export";
+import { document, undo, redo, canUndo, canRedo, updateTitle } from "./state/document";
+import {
+  runJsonExport,
+  runSvgExport,
+  runPngExport,
+  runPdfExport,
+  readImportFile,
+  type ExportResult,
+} from "./lib/document-actions";
 
 /**
- * Task 14's link into every export format: a non-blocking warning toast
- * naming how many steps are incomplete. The file has always already
- * downloaded by the time this is called - it only informs, it never gates
- * an export. Shared by JSON (18), SVG (15), and PNG (16) exports rather
- * than repeated a third time verbatim.
+ * Turns a `lib/document-actions.ts` result into the one toast this app
+ * ever shows at a time - the one piece of export orchestration that
+ * genuinely belongs here rather than in `lib/`, since routing a result to
+ * the right signal is UI orchestration, not export logic.
  */
-function warnAboutIncompleteSteps(): void {
-  const issues = validateDocument(document.value).filter((result) => !result.isComplete);
-  if (issues.length > 0) {
-    toast.value = {
-      text: `Exported with ${issues.length} incomplete step${issues.length === 1 ? "" : "s"} (missing an action, or empty).`,
-      tone: "warning",
-    };
+function showExportResult(result: ExportResult): void {
+  if (result.error) {
+    toast.value = { text: result.error, tone: "error" };
+  } else if (result.warning) {
+    toast.value = { text: result.warning, tone: "warning" };
   }
 }
 
 /** Task 18 (JSON Export): downloads the current document as pretty-printed JSON. */
 function handleExportJson(): void {
-  exportDocumentAsJson(document.value);
-  warnAboutIncompleteSteps();
+  showExportResult(runJsonExport(document.value));
 }
 
 /**
@@ -47,29 +48,11 @@ function handleExportJson(): void {
  * an exported file.
  */
 function handleExportSvg(svgElement: SVGSVGElement | null): void {
-  if (!svgElement) return; // the hidden export canvas hasn't mounted yet - shouldn't happen once past first render
-  try {
-    exportCanvasAsSvg(svgElement, document.value.meta.title);
-    warnAboutIncompleteSteps();
-  } catch (err) {
-    toast.value = {
-      text: err instanceof Error ? err.message : "Could not export an SVG.",
-      tone: "error",
-    };
-  }
+  showExportResult(runSvgExport(svgElement, document.value));
 }
 
 async function handleExportPng(svgElement: SVGSVGElement | null): Promise<void> {
-  if (!svgElement) return; // the hidden export canvas hasn't mounted yet - shouldn't happen once past first render
-  try {
-    await exportCanvasAsPng(svgElement, document.value.meta.title);
-    warnAboutIncompleteSteps();
-  } catch (err) {
-    toast.value = {
-      text: err instanceof Error ? err.message : "Could not export a PNG.",
-      tone: "error",
-    };
-  }
+  showExportResult(await runPngExport(svgElement, document.value));
 }
 
 /**
@@ -81,17 +64,17 @@ async function handleExportPng(svgElement: SVGSVGElement | null): Promise<void> 
  * global.css, not by anything here.
  */
 function handleExportPdf(): void {
-  exportCanvasAsPdf();
-  warnAboutIncompleteSteps();
+  showExportResult(runPdfExport(document.value));
 }
 
 /**
  * Task 19 (Import): reads the chosen file, parses+shape-validates it (see
- * `parseImportedDocument`), and - on success - hands it to `ImportConfirmDialog`
- * rather than replacing the document immediately, so the user gets an
- * explicit go/no-go before anything is overwritten. A parse/shape failure
- * (bad JSON, missing fields, unsupported schema version) surfaces as an
- * error toast instead, and the current document is left untouched either way.
+ * `lib/document-actions.ts`'s `readImportFile`), and - on success - hands it
+ * to `ImportConfirmDialog` rather than replacing the document immediately,
+ * so the user gets an explicit go/no-go before anything is overwritten. A
+ * parse/shape failure (bad JSON, missing fields, unsupported schema
+ * version) surfaces as an error toast instead, and the current document is
+ * left untouched either way.
  */
 async function handleImportFileChange(event: Event): Promise<void> {
   const input = event.currentTarget as HTMLInputElement;
@@ -99,17 +82,31 @@ async function handleImportFileChange(event: Event): Promise<void> {
   input.value = ""; // allow re-selecting the same filename later
   if (!file) return;
 
-  try {
-    const text = await file.text();
-    const imported = parseImportedDocument(text);
-    const incompleteCount = validateDocument(imported).filter((result) => !result.isComplete).length;
-    pendingImport.value = { document: imported, incompleteCount };
-  } catch (err) {
-    toast.value = {
-      text: err instanceof Error ? err.message : "Could not read that file.",
-      tone: "error",
-    };
+  const result = await readImportFile(file);
+  if (result.ok) {
+    pendingImport.value = { document: result.document, incompleteCount: result.incompleteCount };
+  } else {
+    toast.value = { text: result.error, tone: "error" };
   }
+}
+
+/**
+ * Task 27: keeps the browser tab title in sync with the document's own
+ * `meta.title`, so the browser's native "Save as PDF" dialog (Export PDF,
+ * task 17) suggests a filename that matches it instead of this app's
+ * static title - the one export path `meta.title` couldn't reach before,
+ * since `window.print()` has no filename of its own to derive (see
+ * docs/known-issues.md's former "every export downloads as
+ * untitled-instructions" entry). Uses `@preact/signals`' own `effect()`
+ * (auto-tracks `document.value.meta.title`, reruns on every change)
+ * rather than `useEffect`'s dependency array, since App doesn't otherwise
+ * re-render on every document change - `effect()`'s disposer is returned
+ * from `useEffect` so it's cleaned up the same way a normal effect would be.
+ */
+function useDocumentTitleSync(): void {
+  useEffect(() => effect(() => {
+    window.document.title = document.value.meta.title || "Visual Instruction Builder";
+  }), []);
 }
 
 /**
@@ -182,6 +179,7 @@ function useHistoryKeyboardShortcuts(): void {
  */
 export function App() {
   useHistoryKeyboardShortcuts();
+  useDocumentTitleSync();
   const importInputRef = useRef<HTMLInputElement>(null);
   const exportCanvasRef = useRef<HTMLDivElement>(null);
   const getExportSvgElement = () =>
@@ -192,7 +190,16 @@ export function App() {
       <header class="app__toolbar">
         <div class="app__titles">
           <h1>Visual Instruction Builder</h1>
-          <p class="app__tagline">Phase 2 — instruction canvas</p>
+          <p class="app__tagline">Build step-by-step recipe instructions</p>
+          <label class="app__document-title">
+            <span class="visually-hidden">Document title</span>
+            <input
+              type="text"
+              value={document.value.meta.title}
+              placeholder="Untitled instructions"
+              onInput={(event) => updateTitle(event.currentTarget.value)}
+            />
+          </label>
         </div>
         <div class="app__history-controls">
           <button
@@ -217,6 +224,13 @@ export function App() {
           </button>
         </div>
         <div class="app__file-controls">
+          <button
+            type="button"
+            class="app__file-button"
+            onClick={() => (confirmingNewDocument.value = true)}
+          >
+            New
+          </button>
           <button type="button" class="app__file-button" onClick={handleExportJson}>
             Export JSON
           </button>
@@ -287,6 +301,7 @@ export function App() {
       </main>
       <DragGhost />
       <ImportConfirmDialog />
+      <NewDocumentConfirmDialog />
       <div class="app__export-canvas" aria-hidden="true" ref={exportCanvasRef}>
         <InstructionCanvas readOnly />
       </div>

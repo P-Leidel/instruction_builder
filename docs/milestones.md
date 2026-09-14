@@ -71,6 +71,54 @@ negligible at this app's actual scale - deferred, not fixed; see
 and [known-issues.md](./known-issues.md#full-canvasstep-list-re-render-on-any-edit-anywhere-in-the-document).
 With task 24 done, all 20 of Phase 2's tasks (5-24) are complete.
 
+**Phase 3 was reprioritized and scoped with the user on 2026-09-14** (see
+the note in [project-plan.md](./project-plan.md#implementation-plan)).
+Phase 3 is no longer "Generic Instruction Framework" - it's now "Recipe
+Content & Launch": build the recipe domain out fully (a much larger icon
+library, aligned sample content, a UI polish pass) and get it in front of
+real users, before investing in generalizing to a second domain. The
+original Phase 3 work (content packs, a theme system, second-domain
+validation) moves to Phase 4, now "Generalize," alongside its own original
+stretch/optional tasks. Per this file's own "Documentation status
+conventions" below, [phase-2/progress/README.md](./phase-2/progress/README.md)
+is frozen as HISTORICAL as of this edit, and
+[phase-3/progress/README.md](./phase-3/progress/README.md) takes over as
+the CURRENT progress log. Tasks 25-27 shipped the same day: the icon
+library grew from 12 recipe icons to a curated "v1" list of 55 (18 actions,
+28 objects, 9 tools), verified with a real browser-driven check of
+`TokenPicker`'s category tabs (see
+[phase-3/progress/tasks-25-26-icon-library.md](./phase-3/progress/tasks-25-26-icon-library.md));
+and an inline document-title field in the toolbar closed the
+every-export-collides-on-filename gap tracked in known-issues.md since
+task 18, also syncing the browser tab title so Export PDF's "Save as PDF"
+dialog suggests a matching filename (see
+[phase-3/progress/task-27-document-title-ui.md](./phase-3/progress/task-27-document-title-ui.md)).
+Task 28 (UI Polish Pass) was scoped with the user first, then shipped a
+"New document" action (there was previously no way to start fresh short of
+clearing browser storage), a plainer toolbar tagline, and a general
+audit-first visual/responsive sweep - deliberately excluding the two
+accessibility gaps already tracked in known-issues.md, kept deferred. The
+new confirm dialog this needed was built by extracting a shared
+`useConfirmDialogFocusTrap` hook out of the existing `ImportConfirmDialog`
+rather than duplicating its keyboard-focus logic a second time (see
+[phase-3/progress/task-28-ui-polish-pass.md](./phase-3/progress/task-28-ui-polish-pass.md)).
+A same-day `/mattpocock-skills:improve-codebase-architecture` review (see
+[phase-3/audits/2026-09-14-architecture-review.html](./phase-3/audits/2026-09-14-architecture-review.html))
+surfaced five candidates; discussed with the user before acting, three
+were fixed the same day - `app.tsx`'s export/import orchestration moved
+to `lib/document-actions.ts` (keeping this codebase's existing convention
+that `lib/` modules never write UI state directly, and picking up 3 new
+Vitest tests along the way), `useConfirmDialogFocusTrap` tightened from
+raw refs to ready-to-spread prop bags, and a known-issues.md entry
+sharpened - one (collapsing the tab-strip duplicated across `TokenPicker`
+and `TokenAttachmentPicker`) was deliberately deferred to Phase 4 task 32
+with that concrete trigger recorded rather than left vague, since it's a
+pure internal-cohesion change with zero effect on the recipe builder real
+users are about to test. Verifying the `app.tsx` extraction also caught
+and fixed a genuine, unrelated flaky check in the Playwright driver itself
+(see
+[phase-3/progress/architecture-2026-09-14-review-remediation.md](./phase-3/progress/architecture-2026-09-14-review-remediation.md)).
+
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
 information live only in scattered per-file mentions (which is exactly
@@ -122,9 +170,8 @@ per-task notes above. This file's "Documentation status conventions"
 section below calls for freezing
 [phase-2/progress/README.md](./phase-2/progress/README.md) as HISTORICAL
 and starting a `phase-3/progress/README.md` the day a phase's exit criteria
-are met - not yet done here, since Phase 3 itself (Content Pack System,
-Theme System, Validating a second domain) hasn't been scoped with the user
-yet; do that in the same edit Phase 3 actually starts.
+are met and the next phase is scoped - done in this edit, now that Phase 3
+has been reprioritized and scoped with the user (see above).
 
 See [phase-2/progress/README.md](./phase-2/progress/README.md) for what actually
 shipped in tasks 5–24, plus product additions beyond the
@@ -139,24 +186,33 @@ deferred - including a new one from task 18: every export format downloads
 as "untitled-instructions.\<ext\>" because no UI lets the user set
 `meta.title` yet.
 
-## Phase 3: Generic Instruction Framework — Not started
+## Phase 3: Recipe Content & Launch — Not started
 
 | # | Task | Status |
 |---|---|---|
-| 25 | Create Content Pack System | Not started |
-| 26 | Create Theme System | Not started |
-| 27 | Validate a Second Domain | Not started |
-
-## Phase 4: Polish — Not started
-
-| # | Task | Status |
-|---|---|---|
-| 28 | Add Vector PDF Export (Stretch) | Not started |
-| 29 | Add Basic Gamification (Optional) | Not started |
+| 25 | Expand Recipe Icon Library (curated v1) | ✅ |
+| 26 | Expand Sample/Starter Tokens | ✅ |
+| 27 | Add Document Title UI | ✅ |
+| 28 | UI Polish Pass | ✅ |
+| 29 | Publish MVP | Not started |
 | 30 | Test Real Users | Not started |
 | 31 | Refine UX | Not started |
-| 32 | Publish MVP | Not started |
-| 33 | Prepare Future Expansion | Not started |
+
+See [phase-3/progress/README.md](./phase-3/progress/README.md) for detail
+as these tasks ship.
+
+## Phase 4: Generalize — Not started
+
+| # | Task | Status |
+|---|---|---|
+| 32 | Formalize the Content-Pack Shape | Not started |
+| 33 | Build & Validate a Second Domain | Not started |
+| 34 | Build In-App Domain Switcher UI | Not started |
+| 35 | Create Theme System | Not started |
+| 36 | Continue Icon Library Expansion | Not started |
+| 37 | Add Vector PDF Export (Stretch) | Not started |
+| 38 | Add Basic Gamification (Optional) | Not started |
+| 39 | Prepare Future Expansion | Not started |
 
 ---
 

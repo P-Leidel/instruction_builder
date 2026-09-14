@@ -415,6 +415,23 @@ function removeTokenFromStepCore(session: DocumentSession, stepId: string, token
   }
 }
 
+/**
+ * Task 27 (Add Document Title UI): updates `meta.title`, the field every
+ * export filename is derived from (`lib/document-file.ts`'s `slugify`) -
+ * previously stuck at its creation-time default forever since nothing
+ * wrote to it (see docs/known-issues.md's former "every export downloads
+ * as untitled-instructions" entry). Mirrors `setSteps`'s coalescing/
+ * `updatedAt` handling but for `meta` instead of `steps`, since `setSteps`
+ * only ever replaces the steps array.
+ */
+function updateTitleCore(session: DocumentSession, title: string): void {
+  recordHistory(session, true);
+  session.document.value = {
+    ...session.document.value,
+    meta: { ...session.document.value.meta, title, updatedAt: new Date().toISOString() },
+  };
+}
+
 function updateStepTitleCore(session: DocumentSession, stepId: string, title: string): void {
   setSteps(
     session,
@@ -547,6 +564,7 @@ export const sessionActions = {
   moveStepUp: moveStepUpCore,
   moveStepDown: moveStepDownCore,
   removeTokenFromStep: removeTokenFromStepCore,
+  updateTitle: updateTitleCore,
   updateStepTitle: updateStepTitleCore,
   updateStepDescription: updateStepDescriptionCore,
   updateTokenLabel: updateTokenLabelCore,
@@ -617,6 +635,7 @@ export const {
   moveStepUp,
   moveStepDown,
   removeTokenFromStep,
+  updateTitle,
   updateStepTitle,
   updateStepDescription,
   updateTokenLabel,

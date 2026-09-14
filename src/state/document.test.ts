@@ -338,6 +338,28 @@ describe("time", () => {
   });
 });
 
+describe("updateTitle", () => {
+  it("updates meta.title and is undoable", () => {
+    const session = createDocumentSession();
+    const originalTitle = session.document.value.meta.title;
+
+    sessionActions.updateTitle(session, "Weeknight Pasta");
+    expect(session.document.value.meta.title).toBe("Weeknight Pasta");
+
+    sessionActions.undo(session);
+    expect(session.document.value.meta.title).toBe(originalTitle);
+  });
+
+  it("doesn't touch steps", () => {
+    const session = createDocumentSession();
+    const stepsBefore = session.document.value.steps;
+
+    sessionActions.updateTitle(session, "Weeknight Pasta");
+
+    expect(session.document.value.steps).toBe(stepsBefore);
+  });
+});
+
 describe("undo / redo", () => {
   it("undoes and redoes a discrete action as one step", () => {
     const session = createDocumentSession();

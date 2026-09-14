@@ -187,7 +187,7 @@ button {
   .app__toast,
   .app__main,
   .drag-ghost,
-  .import-confirm-overlay {
+  .confirm-dialog-overlay {
     display: none !important;
   }
 
@@ -256,7 +256,11 @@ button {
   padding: 0 0.25rem;
 }
 
-.import-confirm-overlay {
+/* Shared by every two-button "confirm this destructive action" dialog -
+   ImportConfirmDialog (task 19) and NewDocumentConfirmDialog (task 28) -
+   rather than each carrying its own copy of this same overlay/card/button
+   styling under an import-specific class name. */
+.confirm-dialog-overlay {
   position: fixed;
   inset: 0;
   background: rgba(16, 24, 40, 0.45);
@@ -267,7 +271,7 @@ button {
   z-index: 50;
 }
 
-.import-confirm-dialog {
+.confirm-dialog {
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
@@ -276,26 +280,26 @@ button {
   width: 100%;
 }
 
-.import-confirm-dialog h2 {
+.confirm-dialog h2 {
   margin: 0 0 0.5rem;
   font-size: 1.1rem;
 }
 
-.import-confirm-dialog p {
+.confirm-dialog p {
   margin: 0;
   color: var(--color-text-muted);
   font-size: 0.9rem;
 }
 
-.import-confirm-actions {
+.confirm-dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1.25rem;
 }
 
-.import-confirm-cancel,
-.import-confirm-replace {
+.confirm-dialog-cancel,
+.confirm-dialog-confirm {
   border-radius: var(--radius-pill);
   padding: 0.5rem 1.1rem;
   min-height: 44px;
@@ -303,23 +307,23 @@ button {
   font-weight: 600;
 }
 
-.import-confirm-cancel {
+.confirm-dialog-cancel {
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
 }
 
-.import-confirm-cancel:hover {
+.confirm-dialog-cancel:hover {
   background: var(--color-app-bg);
 }
 
-.import-confirm-replace {
+.confirm-dialog-confirm {
   border: none;
   background: var(--color-accent);
   color: var(--color-accent-contrast);
 }
 
-.import-confirm-replace:hover {
+.confirm-dialog-confirm:hover {
   filter: brightness(1.08);
 }
 
@@ -332,6 +336,35 @@ button {
   margin: 0.25rem 0 0;
   font-size: 0.85rem;
   color: var(--color-text-muted);
+}
+
+/* Task 27: an inline field for meta.title, the source every export
+   filename derives from (lib/document-file.ts's slugify). Lives inside
+   .app__titles (already flex: 1 1 200px; min-width: 0) so it shrinks
+   correctly on narrow viewports instead of forcing the toolbar to
+   overflow - the same min-width: 0 discipline task 21's audit established
+   for this row's other flex children. */
+.app__document-title {
+  display: block;
+  margin-top: 0.4rem;
+  min-width: 0;
+}
+
+.app__document-title input {
+  font: inherit;
+  width: 100%;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.85rem;
+}
+
+.app__document-title input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .app__main {

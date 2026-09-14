@@ -698,25 +698,25 @@ await importFileInput.setInputFiles({
   mimeType: "application/json",
   buffer: Buffer.from(JSON.stringify(validImportDoc)),
 });
-await page.locator(".import-confirm-dialog").waitFor();
+await page.locator(".confirm-dialog").waitFor();
 const accessibilityViolationsImportDialog = await countAxeViolations("import dialog");
 const dialogFocusedCancelOnOpen = await page.evaluate(
-  () => document.activeElement?.className === "import-confirm-cancel",
+  () => document.activeElement?.className === "confirm-dialog-cancel",
 );
 await page.keyboard.press("Tab");
 const focusedReplaceAfterOneTab = await page.evaluate(() => document.activeElement?.className);
 await page.keyboard.press("Tab");
 const focusWrappedBackToCancel = await page.evaluate(
-  () => document.activeElement?.className === "import-confirm-cancel",
+  () => document.activeElement?.className === "confirm-dialog-cancel",
 );
 await page.keyboard.press("Escape");
 const escapeClosedDialogWithNoChange =
-  (await page.locator(".import-confirm-dialog").count()) === 0 &&
+  (await page.locator(".confirm-dialog").count()) === 0 &&
   JSON.stringify(await page.locator(".step-list__summary").allTextContents()) ===
     JSON.stringify(summariesBeforeImportTest);
 const importDialogTrapsFocusAndEscapeCloses =
   dialogFocusedCancelOnOpen &&
-  focusedReplaceAfterOneTab === "import-confirm-replace" &&
+  focusedReplaceAfterOneTab === "confirm-dialog-confirm" &&
   focusWrappedBackToCancel &&
   escapeClosedDialogWithNoChange;
 
@@ -725,7 +725,7 @@ await importFileInput.setInputFiles({
   mimeType: "application/json",
   buffer: Buffer.from(JSON.stringify(validImportDoc)),
 });
-const importDialogMentionsStepCount = (await page.locator(".import-confirm-dialog").textContent()).includes("1 step");
+const importDialogMentionsStepCount = (await page.locator(".confirm-dialog").textContent()).includes("1 step");
 await page.screenshot({ path: path.join(OUT, "08-import-confirm-dialog.png"), fullPage: true });
 await page.getByRole("button", { name: "Replace", exact: true }).click();
 const summariesAfterImport = await page.locator(".step-list__summary").allTextContents();
@@ -756,7 +756,7 @@ await importFileInput.setInputFiles({
 // for the toast first, a read this fast reads the pre-toast DOM and gives a
 // false negative even when the app behaves correctly.
 await page.locator(".app__toast").waitFor();
-const noDialogForUnparseableFile = (await page.locator(".import-confirm-dialog").count()) === 0;
+const noDialogForUnparseableFile = (await page.locator(".confirm-dialog").count()) === 0;
 const unparseableFileShowsErrorToast = (await page.locator(".app__toast--error").count()) === 1;
 await page.locator(".app__toast-dismiss").click();
 
@@ -782,7 +782,7 @@ await importFileInput.setInputFiles({
   ),
 });
 await page.locator(".app__toast").waitFor();
-const noDialogForWrongShapeFile = (await page.locator(".import-confirm-dialog").count()) === 0;
+const noDialogForWrongShapeFile = (await page.locator(".confirm-dialog").count()) === 0;
 const wrongShapeFileShowsErrorToast = (await page.locator(".app__toast--error").count()) === 1;
 await page.locator(".app__toast-dismiss").click();
 
@@ -801,7 +801,7 @@ await importFileInput.setInputFiles({
 await page.getByRole("button", { name: "Cancel", exact: true }).click();
 const summariesAfterCancelingImport = await page.locator(".step-list__summary").allTextContents();
 const importCancelLeavesDocumentUnchanged =
-  (await page.locator(".import-confirm-dialog").count()) === 0 &&
+  (await page.locator(".confirm-dialog").count()) === 0 &&
   JSON.stringify(summariesAfterCancelingImport) === JSON.stringify(summariesBeforeImportTest);
 
 // Regression test for a live bug found in an external architecture audit
@@ -833,6 +833,21 @@ async function readStoredDocument() {
     });
   });
 }
+
+// A pending debounced autosave (SAVE_DEBOUNCE_MS, state/persistence.ts) from
+// an earlier action in this script (e.g. the Ctrl+Z a few steps up) can still
+// be in flight here - if it fires *after* the IndexedDB seed below but
+// *before* the reload, it silently overwrites the seeded corrupted doc with
+// the app's own current (valid) document, and the reload then finds nothing
+// wrong: the corrupted doc simply isn't there anymore. This isn't the bug
+// this test exists to catch (see the comment below) - it's a race in this
+// driver's own direct-IndexedDB-write technique against the app's real
+// autosave - caught 2026-09-14 when it made VERSION_MISMATCH_HANDLED_SAFELY
+// fail intermittently (roughly 1 run in 3) after an unrelated app.tsx
+// refactor made no behavioral difference to this flow at all. Waiting out
+// the debounce first, same pattern used elsewhere in this file, closes the
+// window.
+await page.waitForTimeout(300);
 
 const corruptedSaveDoc = {
   schemaVersion: 2,

@@ -1,7 +1,7 @@
 /**
  * Common EU food-measurement units for the Quantity attachment. Deliberately
  * a plain, swappable list rather than baked into the model or a component -
- * when Phase 3's content-pack system lands (see
+ * when Phase 4's content-pack system lands (see
  * docs/project-plan.md), a non-food domain (e.g.
  * assembly instructions) can offer a different unit list without this
  * file's shape - or the Quantity attachment's own shape - needing to change.

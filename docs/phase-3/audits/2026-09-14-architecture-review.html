@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review — instruction_builder (Phase 3)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+      .font-serif-head { font-family: Georgia, "Times New Roman", serif; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+      <header class="space-y-3 border-b border-slate-200 pb-8">
+        <p class="text-xs uppercase tracking-widest text-slate-500">Architecture review</p>
+        <h1 class="font-serif-head text-3xl">instruction_builder — Phase 3</h1>
+        <p class="text-sm text-slate-500">2026-09-14 · scoped to Phase 3 tasks 25–28 and their immediate seams</p>
+        <div class="flex flex-wrap gap-x-6 gap-y-2 pt-2 text-xs text-slate-600">
+          <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 h-3 border border-slate-400 bg-white"></span> module</span>
+          <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 border-t-2 border-dashed border-slate-500"></span> seam</span>
+          <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 border-t-2 border-red-600"></span> leak</span>
+          <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 h-3 deep"></span> deep module</span>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-14">
+
+        <!-- Candidate 5 (promoted first — top recommendation) -->
+        <article id="c5" class="space-y-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1">Strong</span>
+            <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-2.5 py-1">in-process</span>
+            <h2 class="text-xl font-semibold ml-1">Collapse the category tab-strip duplicated across TokenPicker and TokenAttachmentPicker</h2>
+          </div>
+          <p class="font-mono text-xs text-slate-500">TokenPicker.tsx:46-60 · TokenAttachmentPicker.tsx:89-103</p>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before</p>
+              <div class="grid grid-cols-2 gap-3 h-72">
+                <div class="border border-slate-300 rounded p-2 flex flex-col">
+                  <p class="text-xs uppercase tracking-wider text-slate-500">TokenPicker</p>
+                  <div class="mt-2 border border-dashed border-slate-400 rounded p-2 text-xs text-slate-600 flex-1">
+                    role=tablist<br/>aria-selected<br/>active-class toggle<br/>token-picker__tab
+                  </div>
+                </div>
+                <div class="border border-slate-300 rounded p-2 flex flex-col">
+                  <p class="text-xs uppercase tracking-wider text-slate-500">TokenAttachmentPicker</p>
+                  <div class="mt-2 border border-dashed border-red-400 rounded p-2 text-xs text-slate-600 flex-1">
+                    role=tablist<br/>aria-selected<br/>active-class toggle<br/>token-picker__tab
+                  </div>
+                </div>
+              </div>
+              <p class="text-xs text-red-600 mt-2">same markup, same classes, hand-copied twice</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">After</p>
+              <div class="h-72 flex flex-col items-center justify-center gap-3">
+                <div class="deep text-white text-xs uppercase tracking-wider rounded px-4 py-3 w-48 text-center">CategoryTabs<br/><span class="text-slate-300 normal-case">(one interface)</span></div>
+                <div class="flex gap-8">
+                  <div class="text-xs text-slate-500 flex flex-col items-center">
+                    <svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" class="seam" stroke="#64748b" stroke-width="2"/></svg>
+                    TokenPicker
+                  </div>
+                  <div class="text-xs text-slate-500 flex flex-col items-center">
+                    <svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" class="seam" stroke="#64748b" stroke-width="2"/></svg>
+                    TokenAttachmentPicker
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p><span class="font-semibold">Problem:</span> the tab-strip is shallow twice over — TokenPicker and TokenAttachmentPicker each reimplement the identical interface (category list in, active-tab out) with no shared seam.</p>
+          <p><span class="font-semibold">Solution:</span> deepen one <code class="text-xs bg-slate-100 px-1 rounded">CategoryTabs</code> module (categories, active signal, labels in — a tablist out) and have both pickers become adapters at that seam.</p>
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Locality: known-issues.md's deferred roving-tabindex fix lands once, not twice</li>
+            <li>Leverage: a third tab-consuming picker gets the pattern free</li>
+            <li>Two adapters already exist — a real seam, not hypothetical</li>
+          </ul>
+          <div class="rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-sm px-3 py-2">
+            Directly reduces the cost of the roving-tabindex/arrow-key fix already deferred in known-issues.md — fix once instead of twice, in sync.
+          </div>
+        </article>
+
+        <!-- Candidate 2 -->
+        <article id="c2" class="space-y-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="rounded-full bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1">Worth exploring</span>
+            <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-2.5 py-1">in-process</span>
+            <h2 class="text-xl font-semibold ml-1">Pull export/import orchestration out of app.tsx</h2>
+          </div>
+          <p class="font-mono text-xs text-slate-500">app.tsx:28-115 (warnAboutIncompleteSteps, handleExportJson/Svg/Png/Pdf, handleImportFileChange)</p>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before</p>
+              <div class="h-72 flex flex-col gap-1">
+                <div class="h-10 border-l-4 border-slate-400 bg-slate-50 text-xs flex items-center px-2">JSX layout + root hooks</div>
+                <div class="h-10 border-l-4 border-red-400 bg-red-50 text-xs flex items-center px-2">handleExportJson</div>
+                <div class="h-10 border-l-4 border-red-400 bg-red-50 text-xs flex items-center px-2">handleExportSvg</div>
+                <div class="h-10 border-l-4 border-red-400 bg-red-50 text-xs flex items-center px-2">handleExportPng</div>
+                <div class="h-10 border-l-4 border-red-400 bg-red-50 text-xs flex items-center px-2">handleExportPdf</div>
+                <div class="h-10 border-l-4 border-red-400 bg-red-50 text-xs flex items-center px-2">handleImportFileChange</div>
+                <div class="h-10 border-l-4 border-red-400 bg-red-50 text-xs flex items-center px-2">warnAboutIncompleteSteps</div>
+              </div>
+              <p class="text-xs text-red-600 mt-2">6 layers in one file — none touch App's props/render, none unit-testable (no app.test.tsx exists)</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">After</p>
+              <div class="h-72 flex flex-col gap-2 justify-center">
+                <div class="h-14 border-l-4 border-slate-400 bg-slate-50 text-xs flex items-center px-2">App: JSX layout + root hooks only</div>
+                <div class="deep text-white text-xs uppercase tracking-wider rounded px-3 py-4 flex items-center justify-center">lib/export-actions.ts<br/>(1 small interface, 5 flows behind it)</div>
+              </div>
+            </div>
+          </div>
+
+          <p><span class="font-semibold">Problem:</span> app.tsx is shallow in one region — five handler functions with no relation to App's own render sit there only because the buttons calling them live in this file's JSX.</p>
+          <p><span class="font-semibold">Solution:</span> deepen a <code class="text-xs bg-slate-100 px-1 rounded">lib/export-actions.ts</code> module (document in, toast/downloaded-file out) that app.tsx calls, leaving app.tsx as pure composition root.</p>
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Locality: 4 export formats + import concentrate in one testable module</li>
+            <li>Leverage: the interface is the test surface — no app.test.tsx exists today</li>
+            <li>Deletion test passes: logic reappears elsewhere, doesn't vanish — confirms it's real, just misplaced</li>
+          </ul>
+        </article>
+
+        <!-- Candidate 4 -->
+        <article id="c4" class="space-y-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="rounded-full bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1">Worth exploring</span>
+            <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-2.5 py-1">in-process</span>
+            <h2 class="text-xl font-semibold ml-1">Tighten useConfirmDialogFocusTrap's unenforced two-button contract</h2>
+          </div>
+          <p class="font-mono text-xs text-slate-500">lib/dialog-focus-trap.ts:16-44 · ImportConfirmDialog.tsx · NewDocumentConfirmDialog.tsx</p>
+
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid">
+              flowchart LR
+                A[ImportConfirmDialog] -->|cancelRef, confirmRef, onKeyDown| H[useConfirmDialogFocusTrap]
+                B[NewDocumentConfirmDialog] -->|cancelRef, confirmRef, onKeyDown| H
+                H -.silent no-op if a ref is unattached.-> L[wrong wiring]
+                classDef leak stroke:#dc2626,stroke-width:2px,stroke-dasharray:4 4;
+                class L leak
+            </pre>
+          </div>
+
+          <p><span class="font-semibold">Problem:</span> the hook is deep (small interface, real focus/Tab-trap/Escape behavior behind it) and proven as a real seam — two adapters already use it correctly — but callers must correctly attach two refs and one key handler with nothing enforcing it; a wrong wiring fails silently (<code class="text-xs bg-slate-100 px-1 rounded">if (!cancelButton || !confirmButton) return</code>).</p>
+          <p><span class="font-semibold">Solution:</span> shift the interface from raw refs toward ready-to-spread prop bags for the two buttons, so a caller can't wire it wrong without a type error.</p>
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Leverage: a third dialog adapter gets correct wiring for free</li>
+            <li>No live bug today — both current adapters are correct</li>
+          </ul>
+        </article>
+
+        <!-- Candidate 1 -->
+        <article id="c1" class="space-y-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="rounded-full bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1">Worth exploring</span>
+            <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-2.5 py-1">docs</span>
+            <h2 class="text-xl font-semibold ml-1">The "content-pack isolation" claim in units.ts / instruction.ts overstates today's seam</h2>
+          </div>
+          <p class="font-mono text-xs text-slate-500">data/units.ts:1-7 · model/instruction.ts:11-17 · TokenPicker.tsx:13 · TokenAttachmentPicker.tsx:14 · TokenDetails.tsx:14 · model/migrate.ts:9</p>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Claimed seam</p>
+              <div class="h-56 flex items-center justify-center">
+                <div class="border-2 border-dashed border-emerald-500 rounded px-4 py-6 text-xs text-center text-emerald-700 w-56">
+                  data/units.ts<br/>"swap this file, done"
+                </div>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Actual seam</p>
+              <div class="h-56 grid grid-cols-2 gap-2 text-xs">
+                <div class="border border-red-300 bg-red-50 rounded p-2">model/instruction.ts<br/>TokenCategory union</div>
+                <div class="border border-red-300 bg-red-50 rounded p-2">TokenPicker.tsx<br/>STEP_TOKEN_CATEGORIES</div>
+                <div class="border border-red-300 bg-red-50 rounded p-2">TokenAttachmentPicker.tsx<br/>ATTACHMENT_CATEGORIES</div>
+                <div class="border border-red-300 bg-red-50 rounded p-2">migrate.ts<br/>TOKEN_CATEGORIES</div>
+              </div>
+            </div>
+          </div>
+
+          <p><span class="font-semibold">Problem:</span> the comments promise a data-file-only swap for a non-food domain, but <code class="text-xs bg-slate-100 px-1 rounded">TokenCategory</code> is a closed union in a model file, and its assignment to UI surfaces is hardcoded across four component/validation files — a real domain swap touches code, not just data.</p>
+          <p><span class="font-semibold">Solution:</span> no code change yet — correct the comments now, and let this sharpen (not replace) known-issues.md's existing "vocabulary in seven places" item and Phase 4 task 32's scoping.</p>
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Locality: Phase 4 task 32 learns the true blast radius before, not during, implementation</li>
+          </ul>
+          <div class="rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-sm px-3 py-2">
+            Sharpens known-issues.md's existing "Token/attachment vocabulary enumerated in seven places" item — doesn't reopen it, adds detail.
+          </div>
+        </article>
+
+        <!-- Candidate 3 -->
+        <article id="c3" class="space-y-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="rounded-full bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-1">Speculative</span>
+            <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-2.5 py-1">in-process</span>
+            <h2 class="text-xl font-semibold ml-1">updateTitleCore duplicates setSteps's history/updatedAt dance</h2>
+          </div>
+          <p class="font-mono text-xs text-slate-500">state/document.ts:166-177 (setSteps) · :427-433 (updateTitleCore)</p>
+
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid">
+              flowchart LR
+                S[setSteps] --> R1[recordHistory + updatedAt]
+                U[updateTitleCore] --> R2[recordHistory + updatedAt]
+                classDef dup fill:#f1f5f9,stroke:#94a3b8;
+                class R1,R2 dup
+            </pre>
+          </div>
+
+          <p><span class="font-semibold">Problem:</span> both functions repeat the same three-line recordHistory/spread/updatedAt shape, differing only in which top-level field they replace.</p>
+          <p><span class="font-semibold">Solution:</span> leave as-is — two call sites with clear, intention-revealing names beat one vaguer shared "commit a document transform" interface.</p>
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Deletion test: forcing an abstraction now just relocates 3 duplicated lines</li>
+          </ul>
+          <div class="rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-sm px-3 py-2">
+            Revisit if Phase 4 adds a third `meta`-field mutator (e.g. switching `meta.domain`) — three near-identical implementations is where "two adapters = a real seam" tips into worth abstracting.
+          </div>
+        </article>
+
+      </section>
+
+      <section id="top-recommendation" class="rounded-xl border-2 border-emerald-600 bg-emerald-50 p-6">
+        <p class="text-xs uppercase tracking-widest text-emerald-700 mb-1">Top recommendation</p>
+        <h2 class="font-serif-head text-2xl mb-2">Collapse the tab-strip duplicated across TokenPicker and TokenAttachmentPicker</h2>
+        <p class="text-sm text-emerald-900">The sharpest candidate here isn't just cosmetic duplication — it sits directly in the path of a fix <code class="text-xs bg-white px-1 rounded">known-issues.md</code> already says is coming (WAI-ARIA roving-tabindex for these exact tabs). Deepening one <code class="text-xs bg-white px-1 rounded">CategoryTabs</code> module now means that fix lands once, in one place, instead of twice, possibly out of sync — the same drift pattern that already bit <code class="text-xs bg-white px-1 rounded">ATTACHMENT_CATEGORIES</code>/<code class="text-xs bg-white px-1 rounded">ATTACHMENT_KINDS</code>. <a href="#c5" class="underline">See candidate ↑</a></p>
+      </section>
+
+    </main>
+  </body>
+</html>

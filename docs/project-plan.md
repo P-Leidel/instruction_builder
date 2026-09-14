@@ -106,11 +106,32 @@ This reduces what was previously three loosely-specified export tasks into one p
 ## Phase 2: MVP
 - Build a complete instruction editor with saving, exporting, and mobile support.
 
-## Phase 3: Generic Instruction Framework
-- Introduce content packs and reusable templates.
+## Phase 3: Recipe Content & Launch
+- Build the recipe builder out fully (icon library, sample content, UI polish) and get it in front of real users, before investing in generalizing to other domains.
 
-## Phase 4: Polish
-- Improve performance, accessibility, design, and user experience.
+## Phase 4: Generalize
+- Turn the now-proven recipe content into an actual swappable content-pack shape, validate it against a second, non-recipe domain, and add the in-app switcher/theming that makes multiple builders real. Also covers general polish (performance, accessibility, stretch export formats).
+
+---
+
+**Reprioritized 2026-09-14** (discussed and scoped with the user): Phase 3
+was originally "Generic Instruction Framework" (a content-pack system, a
+theme system, and second-domain validation, built before any one domain
+was fully fleshed out). Decided instead to build the recipe domain out
+fully first - a much larger icon library, aligned sample content, and a
+UI polish pass - then publish and get real users on it, and only
+generalize to a second domain once real recipe usage has shown what a
+content pack actually needs to support (rather than guessing upfront).
+Phase 3 also absorbs two of Phase 4's originally-planned tasks (Publish
+MVP, Test Real Users) plus Refine UX as its own closing task, and folds in
+one item previously tracked only as a known issue (the exported-filename
+collision from unset `meta.title` - see
+[known-issues.md](./known-issues.md)). Phase 4 keeps the rest of the
+original Phase 3 (content packs, theme system, second-domain validation,
+now evidence-based instead of speculative) plus its own original stretch/
+optional tasks and closing task. See
+[phase-3/progress/README.md](./phase-3/progress/README.md) for what's
+actually shipped as Phase 3 proceeds.
 
 ---
 
@@ -146,18 +167,24 @@ This reduces what was previously three loosely-specified export tasks into one p
 23. Convert to PWA - Enable installation and offline operation on Vercel; keep Vite's `base`, manifest, and service-worker scope aligned to the Vercel domain root.
 24. Optimize Performance - Keep interactions smooth and fast.
 
-## Phase 3: Generic Instruction Framework
-25. Create Content Pack System - Support future instruction domains.
-26. Create Theme System - Allow easy visual customization.
-27. Validate a Second Domain - Build one non-recipe example (e.g. a simple assembly guide) to prove the instruction model is actually generic, not recipe-shaped.
+## Phase 3: Recipe Content & Launch
+25. Expand Recipe Icon Library (curated v1) - Grow the icon library from its Phase 2 sample set (16 icons) to a curated, bounded list of common recipe actions/objects/tools, sourced from Lucide only (see [known-issues.md](./known-issues.md) for the accepted approximate-icon tradeoff). Deliberately not the library's final size - ongoing expansion beyond this curated list is Phase 4 task 36.
+26. Expand Sample/Starter Tokens - Align `data/sample-tokens.ts` with the expanded icon set so default picker content matches.
+27. Add Document Title UI - Let users set `meta.title` from within the app, fixing the every-export-downloads-as-"untitled-instructions" filename collision (previously tracked only as a known issue).
+28. UI Polish Pass - A small, scoped visual/UX polish pass immediately before publishing - not an open-ended redesign.
+29. Publish MVP - Deploy the static build to Vercel (moved from the original Phase 4).
+30. Test Real Users - Validate assumptions through feedback; first round is informal (share the URL directly with a small group, gather feedback by conversation) (moved from the original Phase 4).
+31. Refine UX - Improve workflows based on that feedback (moved from the original Phase 4).
 
-## Phase 4: Polish
-28. Add Vector PDF Export (Stretch) - Integrate jsPDF + svg2pdf.js, lazy-loaded, for true vector PDF output.
-29. Add Basic Gamification (Optional) - Add progress and feedback mechanisms, only if it doesn't compete with the single-purpose goal.
-30. Test Real Users - Validate assumptions through feedback.
-31. Refine UX - Improve workflows based on testing.
-32. Publish MVP - Deploy the static build to Vercel.
-33. Prepare Future Expansion - Maintain a flexible architecture.
+## Phase 4: Generalize
+32. Formalize the Content-Pack Shape - Turn the recipe content built in Phase 3 (icon library, sample tokens, units list - already isolated, swappable modules) into an actual pack mechanism, informed by what building one real domain out actually needed rather than guessed upfront.
+33. Build & Validate a Second Domain - Build one non-recipe example (e.g. a simple assembly guide) on that pack shape, to prove the instruction model is actually generic, not recipe-shaped (the original Phase 3 task 27, now evidence-based).
+34. Build In-App Domain Switcher UI - Let a user pick which builder (recipe, the new second domain, etc.) they're using.
+35. Create Theme System - Allow easy visual customization, revisited once real usage and a second domain show whether it's actually wanted (the original Phase 3 task 26).
+36. Continue Icon Library Expansion - Open-ended, ongoing growth of icon coverage beyond Phase 3's curated v1 list.
+37. Add Vector PDF Export (Stretch) - Integrate jsPDF + svg2pdf.js, lazy-loaded, for true vector PDF output.
+38. Add Basic Gamification (Optional) - Add progress and feedback mechanisms, only if it doesn't compete with the single-purpose goal.
+39. Prepare Future Expansion - Maintain a flexible architecture.
 
 ---
 
@@ -178,5 +205,5 @@ This reduces what was previously three loosely-specified export tasks into one p
 - No backend is required for any core feature (build, save, export).
 - Hosting cost remains €0/month.
 - SVG exports open cleanly in a standard vector editor (e.g. Inkscape/Illustrator); PNG exports are sharp at 2x pixel density; PDF exports print without clipping.
-- The instruction engine is proven generic by Phase 3: at least one non-recipe instruction set (e.g. an assembly guide) is built using the same core model, not a fork of it.
+- The instruction engine is proven generic by Phase 4: at least one non-recipe instruction set (e.g. an assembly guide) is built using the same core model, not a fork of it - deliberately sequenced after Phase 3 ships and tests the recipe domain first, so the proof is grounded in what real usage actually needed rather than a guess made before any domain was fully built out (reprioritized 2026-09-14 - see the note under Phase 3 above).
 - The application remains focused on a single purpose — creating visual instructions — with no features added outside that scope (gamification and similar additions stay optional/deferred, per Phase 4).

@@ -1,8 +1,10 @@
 /**
- * Phase 2 task 7 (Icon Library). Icons are Lucide (lucide-static, ISC
- * license - permissive, same spirit as the plan's "MIT" note; see
+ * Phase 2 task 7 (Icon Library), expanded by Phase 3 task 25 to a curated
+ * "v1" recipe vocabulary. Icons are Lucide (lucide-static, ISC license -
+ * permissive, same spirit as the plan's "MIT" note; see
  * node_modules/lucide-static/LICENSE), imported by exact file path so Vite
- * bundles only the ~17 icons this app actually uses, not the whole set.
+ * bundles only the icons this app actually uses (~50), not the whole
+ * 2,000+-icon set.
  *
  * Each import is the icon's raw <svg>...</svg> source (Vite's `?raw`
  * suffix), 24x24 viewBox, stroke="currentColor". `innerMarkupOf` strips the
@@ -17,21 +19,60 @@
  * Icon choices are approximate where Lucide has no literal match (e.g. no
  * "onion" or "oven" icon exists) - swapping any single mapping later never
  * touches the model, since tokens only ever store a stable `iconId` string.
+ * A handful of icons are deliberately reused across more than one entry
+ * (same pattern already used for Quantity/Time below) where Lucide has no
+ * distinct icon for a related concept - e.g. Fry reuses Bake's flame, and
+ * Garlic/Tomato/Potato/Cheese/Bread/Salt/Pepper/Sugar all share one generic
+ * "food" fallback icon (`utensils`) since Lucide has no literal icon for any
+ * of them - decided 2026-09-14 rather than omitting these common staples
+ * entirely. Each import is named for the token it's used in, not the icon
+ * file, since a name like `flame` would be misleading once it's reused.
  */
 import chop from "lucide-static/icons/utensils-crossed.svg?raw";
 import stir from "lucide-static/icons/refresh-cw.svg?raw";
-import bake from "lucide-static/icons/flame.svg?raw";
-import boil from "lucide-static/icons/droplets.svg?raw";
+import whisk from "lucide-static/icons/refresh-ccw.svg?raw";
 import mix from "lucide-static/icons/blend.svg?raw";
+import knead from "lucide-static/icons/hand-fist.svg?raw";
+import slice from "lucide-static/icons/slice.svg?raw";
+import bake from "lucide-static/icons/flame.svg?raw";
+import roast from "lucide-static/icons/flame-kindling.svg?raw";
+import boil from "lucide-static/icons/droplets.svg?raw";
+import simmer from "lucide-static/icons/thermometer-sun.svg?raw";
+import steam from "lucide-static/icons/wind.svg?raw";
+import pour from "lucide-static/icons/droplet.svg?raw";
+import drain from "lucide-static/icons/funnel.svg?raw";
+import chill from "lucide-static/icons/snowflake.svg?raw";
+import freeze from "lucide-static/icons/thermometer-snowflake.svg?raw";
+import serve from "lucide-static/icons/hand-platter.svg?raw";
 
 import onion from "lucide-static/icons/carrot.svg?raw";
 import egg from "lucide-static/icons/egg.svg?raw";
 import flour from "lucide-static/icons/wheat.svg?raw";
 import water from "lucide-static/icons/glass-water.svg?raw";
+import apple from "lucide-static/icons/apple.svg?raw";
+import banana from "lucide-static/icons/banana.svg?raw";
+import grape from "lucide-static/icons/grape.svg?raw";
+import citrus from "lucide-static/icons/citrus.svg?raw";
+import beef from "lucide-static/icons/beef.svg?raw";
+import fish from "lucide-static/icons/fish.svg?raw";
+import milk from "lucide-static/icons/milk.svg?raw";
+import beans from "lucide-static/icons/bean.svg?raw";
+import nuts from "lucide-static/icons/nut.svg?raw";
+import wine from "lucide-static/icons/wine.svg?raw";
+import coffee from "lucide-static/icons/coffee.svg?raw";
+import soup from "lucide-static/icons/soup.svg?raw";
+import leafyGreen from "lucide-static/icons/leafy-green.svg?raw";
+import herbs from "lucide-static/icons/sprout.svg?raw";
+import genericFood from "lucide-static/icons/utensils.svg?raw";
 
 import pan from "lucide-static/icons/cooking-pot.svg?raw";
 import knife from "lucide-static/icons/pocket-knife.svg?raw";
 import oven from "lucide-static/icons/microwave.svg?raw";
+import blender from "lucide-static/icons/blender.svg?raw";
+import fridge from "lucide-static/icons/refrigerator.svg?raw";
+import scale from "lucide-static/icons/scale.svg?raw";
+import timer from "lucide-static/icons/timer.svg?raw";
+import container from "lucide-static/icons/container.svg?raw";
 
 import weight from "lucide-static/icons/weight.svg?raw";
 import clock from "lucide-static/icons/clock.svg?raw";
@@ -78,16 +119,62 @@ export const ICON_PRESENTATION_PROPS = {
 const RAW_ICONS: Record<string, string> = {
   "action.chop": chop,
   "action.stir": stir,
-  "action.bake": bake,
-  "action.boil": boil,
+  "action.whisk": whisk,
   "action.mix": mix,
+  "action.knead": knead,
+  "action.slice": slice,
+  "action.bake": bake,
+  "action.fry": bake,
+  "action.roast": roast,
+  "action.boil": boil,
+  "action.simmer": simmer,
+  "action.steam": steam,
+  "action.pour": pour,
+  "action.drain": drain,
+  "action.rinse": boil,
+  "action.chill": chill,
+  "action.freeze": freeze,
+  "action.serve": serve,
+
   "object.onion": onion,
   "object.egg": egg,
   "object.flour": flour,
   "object.water": water,
+  "object.apple": apple,
+  "object.banana": banana,
+  "object.grape": grape,
+  "object.citrus": citrus,
+  "object.beef": beef,
+  "object.fish": fish,
+  "object.milk": milk,
+  "object.beans": beans,
+  "object.nuts": nuts,
+  "object.oil": pour,
+  "object.wine": wine,
+  "object.coffee": coffee,
+  "object.soup": soup,
+  "object.leafy-green": leafyGreen,
+  "object.herbs": herbs,
+  "object.ice": chill,
+  "object.garlic": genericFood,
+  "object.tomato": genericFood,
+  "object.potato": genericFood,
+  "object.cheese": genericFood,
+  "object.bread": genericFood,
+  "object.salt": genericFood,
+  "object.pepper": genericFood,
+  "object.sugar": genericFood,
+
   "tool.pan": pan,
   "tool.knife": knife,
   "tool.oven": oven,
+  "tool.blender": blender,
+  "tool.fridge": fridge,
+  "tool.scale": scale,
+  "tool.timer": timer,
+  "tool.thermometer": hot,
+  "tool.container": container,
+
   [QUANTITY_ICON_ID]: weight,
   "warning.hot": hot,
   "warning.sharp": sharp,

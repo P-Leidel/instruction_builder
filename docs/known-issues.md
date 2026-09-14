@@ -50,31 +50,6 @@ noted and deliberately left alone.
   isolation.
 - **First noted:** 2026-09-13.
 
-## Every export format downloads as "untitled-instructions.\<ext\>"
-
-- **What it is:** `InstructionDocument.meta.title` exists in the model and is
-  what every export filename is derived from (slugified - `slugify` in
-  `lib/document-file.ts`), but no UI anywhere lets the user set it - it's
-  created once, at document creation, as the literal string `"Untitled
-  instructions"`, and nothing ever writes to it afterward. Every export from
-  every document a user ever makes downloads as the same
-  `untitled-instructions.json` (task 18), `untitled-instructions.svg` (task
-  15), or `untitled-instructions.png` (task 16), colliding in a Downloads
-  folder the moment someone exports a second document or a second format.
-  Task 17 (Print/PDF Export) isn't affected the same way - `window.print()`
-  has no filename to derive at all; the browser's own "Save as PDF" dialog
-  asks the user for one at save time, using the page's `<title>` (currently
-  the app's own static title, not `meta.title`) as its only suggestion.
-- **Why it's not fixed:** raised during task 18/19 implementation and
-  deliberately deferred rather than bolting on a document-title input as an
-  ad hoc addition - a proper place for it (a document-settings area, likely
-  alongside `meta.domain` once Phase 3's content packs make that field
-  meaningful too) is a small, separate, intentional piece of UI, not a
-  side effect of any one export task. Still deferred as of task 17 for the
-  same reason - it affects every export format equally, so there's no more
-  reason to fix it now than there was at task 18.
-- **First noted:** 2026-09-13.
-
 ## Design debt flagged by an external architecture audit, one item still deferred
 
 An external architecture-review report (a third-party HTML document, not the
@@ -141,9 +116,52 @@ The remaining item is still deliberately deferred:
   number+unit once attached. Deferred - the audit's own assessment is that
   this is weaker than the other candidates (deleting it moves the complexity
   back into three render sites rather than removing it) and it earns its
-  keep more clearly once Phase 3's content packs need one place to extend
-  the vocabulary.
+  keep more clearly once a real content-pack system needs one place to
+  extend the vocabulary - now Phase 4 task 32 (Formalize the Content-Pack
+  Shape), per the 2026-09-14 Phase 3/4 reprioritization (see
+  [project-plan.md](./project-plan.md#implementation-plan)), not Phase 3.
+  A 2026-09-14 internal architecture review (see
+  [phase-3/audits/2026-09-14-architecture-review.html](./phase-3/audits/2026-09-14-architecture-review.html))
+  sharpened this further: `units.ts`'s and `instruction.ts`'s own comments
+  ("a non-food domain can offer a different unit list without this file's
+  shape needing to change," "kept generic so Phase 4 content packs can
+  extend it without changing this interface") are each accurate about
+  their own narrow scope, but neither warns that `TokenCategory` itself,
+  or any of its four hand-copied arrays above, are *not* part of that
+  swappable surface - a real domain swap touches code in at least four
+  places, not just a data file. Worth keeping in mind when task 32 is
+  scoped, so it doesn't start from a rosier picture than what's actually
+  there.
 - **First noted:** 2026-09-13.
+
+## Category tab-strip duplicated between `TokenPicker` and `TokenAttachmentPicker`
+
+- **What it is:** the `role="tablist"` block - markup, classes
+  (`token-picker__tab`/`token-picker__grid`), `aria-selected`/
+  `aria-controls` wiring, and active-class toggling - is hand-copied
+  between `TokenPicker.tsx` (lines ~46-60) and `TokenAttachmentPicker.tsx`
+  (lines ~89-103), differing only in the category array, the active-
+  category signal, and the tab list's `aria-label`. Two real adapters of
+  the same shape, not sharing a seam. Flagged as the "Strong" candidate in
+  the 2026-09-14 internal architecture review (see
+  [phase-3/audits/2026-09-14-architecture-review.html](./phase-3/audits/2026-09-14-architecture-review.html)) -
+  it directly increases the cost of the roving-tabindex/arrow-key fix
+  already deferred above ("Two accessibility gaps"), since that fix would
+  currently need to be hand-applied twice, in sync.
+- **Why it's not fixed now:** purely an internal-cohesion issue with zero
+  user-facing effect - real users in task 30 (Test Real Users) can't
+  perceive whether these two pickers share a module. Deferring costs
+  nothing extra (the duplication is stable and well-understood, not
+  actively drifting further), while fixing it now would mean touching two
+  components right before publish for no product benefit, and its main
+  payoff (cheaper roving-tabindex fix) is itself prep for another deferred
+  item with no scheduled date.
+- **Revisit when:** Phase 4 task 32 (Formalize the Content-Pack Shape)
+  actually starts - that work will very plausibly touch both components
+  anyway when generalizing the category vocabulary, so the tab-strip
+  extraction should be shaped by real content-pack requirements at that
+  point rather than guessed now and possibly redesigned later.
+- **First noted:** 2026-09-14.
 
 ## Two accessibility gaps deliberately left for a later pass
 

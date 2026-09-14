@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "preact/hooks";
 import { pendingImport, toast } from "../../state/ui";
 import { replaceDocument } from "../../state/document";
+import { useConfirmDialogFocusTrap } from "../../lib/dialog-focus-trap";
 
 /**
  * Task 19 (Import): a confirmation gate between a successfully parsed file
@@ -11,28 +11,27 @@ import { replaceDocument } from "../../state/document";
  * user's explicit go/no-go, not any part of the parsing itself.
  *
  * Task 22: an `alertdialog` needs to actually behave like a modal for
- * keyboard/screen-reader users, not just carry the role - focus moves to
- * Cancel (the safer default for a destructive "replace everything" action)
- * the moment it opens, Escape cancels same as clicking Cancel, and Tab is
- * trapped between the two buttons so it can't silently escape to whatever's
- * underneath.
+ * keyboard/screen-reader users, not just carry the role - see
+ * `useConfirmDialogFocusTrap` (`lib/dialog-focus-trap.ts`, shared with
+ * task 28's NewDocumentConfirmDialog) for the focus/Tab-trap/Escape
+ * behavior.
  */
 export function ImportConfirmDialog() {
   const pending = pendingImport.value;
-  const cancelRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (pending) cancelRef.current?.focus();
-  }, [pending]);
+  function cancel(): void {
+    pendingImport.value = null;
+  }
+
+  const { dialogProps, cancelButtonProps, confirmButtonProps } = useConfirmDialogFocusTrap(
+    pending !== null,
+    cancel,
+  );
 
   if (!pending) return null;
 
   const importedDocument = pending.document;
   const stepCount = importedDocument.steps.length;
-
-  function cancel(): void {
-    pendingImport.value = null;
-  }
 
   function confirm(): void {
     replaceDocument(importedDocument);
@@ -40,36 +39,14 @@ export function ImportConfirmDialog() {
     toast.value = { text: "Imported.", tone: "info" };
   }
 
-  function handleKeyDown(event: KeyboardEvent): void {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      cancel();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    // Only two buttons ever live in this dialog, so trapping Tab between
-    // them is just "Shift+Tab off the first wraps to the last, and vice
-    // versa" - no need for a general-purpose focusable-element query.
-    const cancelButton = cancelRef.current;
-    const replaceButton = cancelButton?.nextElementSibling as HTMLElement | null;
-    if (!cancelButton || !replaceButton) return;
-    if (event.shiftKey && document.activeElement === cancelButton) {
-      event.preventDefault();
-      replaceButton.focus();
-    } else if (!event.shiftKey && document.activeElement === replaceButton) {
-      event.preventDefault();
-      cancelButton.focus();
-    }
-  }
-
   return (
-    <div class="import-confirm-overlay">
+    <div class="confirm-dialog-overlay">
       <div
-        class="import-confirm-dialog"
+        class="confirm-dialog"
         role="alertdialog"
         aria-labelledby="import-confirm-heading"
         aria-describedby="import-confirm-body"
-        onKeyDown={handleKeyDown}
+        {...dialogProps}
       >
         <h2 id="import-confirm-heading">Replace current document?</h2>
         <p id="import-confirm-body">
@@ -80,11 +57,11 @@ export function ImportConfirmDialog() {
             : ""}
           . You can undo this afterward.
         </p>
-        <div class="import-confirm-actions">
-          <button type="button" class="import-confirm-cancel" ref={cancelRef} onClick={cancel}>
+        <div class="confirm-dialog-actions">
+          <button type="button" class="confirm-dialog-cancel" onClick={cancel} {...cancelButtonProps}>
             Cancel
           </button>
-          <button type="button" class="import-confirm-replace" onClick={confirm}>
+          <button type="button" class="confirm-dialog-confirm" onClick={confirm} {...confirmButtonProps}>
             Replace
           </button>
         </div>

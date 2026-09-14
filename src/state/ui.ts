@@ -51,3 +51,13 @@ export interface PendingImport {
   incompleteCount: number;
 }
 export const pendingImport = signal<PendingImport | null>(null);
+
+/**
+ * Task 28: true while `NewDocumentConfirmDialog` is open, waiting on the
+ * user's explicit confirmation before the current document is replaced
+ * with a blank one - set by the toolbar's "New" button, cleared on either
+ * Start New or Cancel. Unlike `pendingImport`, there's no data to carry
+ * alongside it (a new document is always the same blank
+ * `createEmptyDocument()`), so a plain boolean is enough.
+ */
+export const confirmingNewDocument = signal(false);

@@ -75,7 +75,7 @@ export interface InstructionToken {
    */
   time?: DurationAttachment;
   /**
-   * Free-form, category-specific data. Kept generic so Phase 3 content
+   * Free-form, category-specific data. Kept generic so Phase 4 content
    * packs can extend it without changing this interface.
    */
   metadata?: Record<string, string | number | boolean>;
@@ -100,7 +100,7 @@ export interface InstructionStep {
 /** Top-level metadata about the instruction set, independent of domain. */
 export interface InstructionMeta {
   title: string;
-  /** e.g. "recipe", "assembly", "safety" — a free string until Phase 3 turns it into a content-pack id. */
+  /** e.g. "recipe", "assembly", "safety" — a free string until Phase 4 turns it into a content-pack id. */
   domain: string;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
