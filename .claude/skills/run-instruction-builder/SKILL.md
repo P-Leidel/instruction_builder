@@ -1,6 +1,6 @@
 ---
 name: run-instruction-builder
-description: Build, start, and drive the Visual Instruction Builder Preact/Vite dev app in a real browser to check a UI change - screenshots the canvas/step-list/token-picker, exercises step/token select, category tabs in "Add to step"/"Add to token", attaching a Quantity or Warning to a token and removing it, setting an independent duration on a token and a step via DurationField (and the step/token-switch-while-editing regression it once had), drag-and-drop (adding, moving, and reordering, including the live insertion-point marker), undo/redo (buttons and keyboard shortcuts, including that continuous typing coalesces into one undo step), JSON/SVG/PNG/PDF export and JSON import (including the incomplete-steps warning, the confirm-before-replace dialog, invalid-file rejection, that import goes through undo/redo too, that the downloaded SVG is self-contained with real colors baked in rather than just CSS classes, that the downloaded PNG is actually rasterized at its declared pixel density, and that Export PDF's print stylesheet isolates the hidden read-only canvas via `emulateMedia`), IndexedDB persistence across a reload (including a saved document with a mismatched schema version, seeded directly into IndexedDB), the token connector lines, the read-only preview toggle, an axe-core accessibility scan at several app states, keyboard-only step reordering and token selection, and the Import dialog's focus trap/Escape handling, and checks the console for errors. Also runs `npm test`, the Vitest unit suite covering the instruction model, the document session's undo/redo, and pure lib/ logic. Use for "run the app," "screenshot the instruction builder," "check this UI change works," "does drag-and-drop work," "does token attachment work," "does step/token time work," "does undo/redo work," "does export/import work," "does SVG export look right," "does PNG export look right," "does print/PDF export work," "does persistence handle a bad/old save," "does the canvas render correctly," "does keyboard access/accessibility work," or "run the unit tests."
+description: Build, start, and drive the Visual Instruction Builder Preact/Vite dev app in a real browser to check a UI change - screenshots the canvas/step-list/token-picker, exercises step/token select, category tabs in "Add to step"/"Add to token", attaching a Quantity or Warning to a token and removing it, setting an independent duration on a token and a step via DurationField (and the step/token-switch-while-editing regression it once had), drag-and-drop (adding, moving, and reordering, including the live insertion-point marker), undo/redo (buttons and keyboard shortcuts, including that continuous typing coalesces into one undo step), JSON/SVG/PNG/PDF export and JSON import (including the incomplete-steps warning, the confirm-before-replace dialog, invalid-file rejection, that import goes through undo/redo too, that the downloaded SVG is self-contained with real colors baked in rather than just CSS classes, that the downloaded PNG is actually rasterized at its declared pixel density, and that Export PDF's print stylesheet isolates the hidden read-only canvas via `emulateMedia`), IndexedDB persistence across a reload (including a saved document with a mismatched schema version, seeded directly into IndexedDB), the token connector lines, the read-only preview toggle, an axe-core accessibility scan at several app states, keyboard-only step reordering and token selection, and the Import dialog's focus trap/Escape handling, and checks the console for errors. Also runs `npm test`, the Vitest unit suite covering the instruction model, the document session's undo/redo, and pure lib/ logic - and, via a separate `pwa-check.mjs` script against a real production build (not the dev server), the offline service worker: registration, runtime caching, and that the app actually still loads with no network at all. Use for "run the app," "screenshot the instruction builder," "check this UI change works," "does drag-and-drop work," "does token attachment work," "does step/token time work," "does undo/redo work," "does export/import work," "does SVG export look right," "does PNG export look right," "does print/PDF export work," "does persistence handle a bad/old save," "does the canvas render correctly," "does keyboard access/accessibility work," "does offline/PWA support work," or "run the unit tests."
 ---
 
 Paths below are relative to the project root (`instruction_builder/`).
@@ -248,6 +248,39 @@ the only one that needs the steps under "Run (agent path)".
      ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
    ```
 
+## PWA verification (task 23)
+
+`driver.mjs` above drives the **dev server**, where the service worker is
+deliberately never registered (see Gotchas) - it can't verify offline
+support at all. Use `pwa-check.mjs` instead, against a real **production
+build**:
+
+```bash
+export PATH="/c/Program Files/nodejs:$PATH"
+npm run build
+nohup npm run preview -- --port 4173 --strictPort > /tmp/vite-preview.log 2>&1 &
+disown
+for i in $(seq 1 30); do
+  curl -sf http://localhost:4173 >/dev/null 2>&1 && echo UP && break
+  sleep 1
+done
+node .claude/skills/run-instruction-builder/pwa-check.mjs
+```
+
+It confirms the manifest and all three app icons
+(`public/icons/icon-192.png`/`icon-512.png`/`icon-maskable-512.png`) are
+reachable, that the service worker actually takes control of the page,
+reloads once more (simulating a real second visit - see Gotchas for why
+the *first* load can never be SW-controlled) and confirms the runtime
+cache now holds the page shell and its hashed JS/CSS, then sets the
+browser context fully offline and reloads again - the actual point of the
+task - confirming the app still renders. Prints
+`MANIFEST_AND_ICONS_REACHABLE=...`, `SHELL_CACHED_AFTER_SECOND_VISIT=...`,
+`CACHED_URLS=...`, `APP_LOADS_WHILE_OFFLINE=...`, and
+`REQUEST_FAILURES_COUNT=...` (plus each failure's URL/reason, if any).
+Stop the preview server the same way as the dev server, on port 4173
+instead of 5173.
+
 ## Run (human path)
 
 ```bash
@@ -469,6 +502,44 @@ taken - watch the terminal output for the actual URL).
   keyboard-press assertions against the canvas token chips expecting them
   to select anything - they won't; only the badge (step select) and
   chip-remove (token remove) are keyboard-interactive inside the SVG.
+
+- **`public/sw.js` is never registered against the dev server, only a
+  production build - don't expect `driver.mjs` (which drives `npm run
+  dev`) to exercise it at all.** `src/main.tsx` gates registration behind
+  `import.meta.env.PROD` specifically so Vite's fast-refreshing, unhashed
+  dev modules never fight with a caching service worker. Use
+  `pwa-check.mjs` (see "PWA verification" above) against `npm run build &&
+  npm run preview` instead.
+- **A page reload's navigation `Request` can carry `cache:
+  "only-if-cached"` paired with `mode: "navigate"` (not `"same-origin"`) -
+  re-fetching that exact `Request` object inside a service worker's
+  `fetch` handler throws immediately** (`TypeError: 'only-if-cached' can
+  be set only if 'mode' is 'same-origin'`), breaking every reload outright
+  while online, not just offline. This is a general constraint of
+  intercepting navigation requests in *any* service worker, not anything
+  specific to this app - `sw.js`'s `fetch` handler checks for exactly this
+  combination and returns early (letting the browser handle that one
+  request natively) before doing anything else. See
+  `docs/fixed-issues/service-worker-broke-every-page-reload.md`.
+- **A service worker's `response.clone()` must happen synchronously,
+  before anything else touches the response - cloning inside an
+  already-async `.then()` throws silently and drops the write with no
+  visible symptom.** `Response.clone()` throws
+  (`"Response body is already used"`) the instant a response's body has
+  been read at all, which - once a response has been handed to the page
+  via `event.respondWith` - can happen at any point after, often well
+  before an async `caches.open(...).then(...)` chain gets around to
+  cloning it. The rejected promise inside that unawaited `.then()` fails
+  silently: the page still renders correctly (the *original*, unconsumed
+  response was returned to it), so nothing looks broken without
+  deliberately reading `caches.open(...).keys()` back afterward and
+  finding it empty. `sw.js`'s `cachePut` clones immediately on receiving
+  the response, before doing anything else, and separately wraps the
+  actual cache write in `event.waitUntil` (a fetch event's own promise is
+  the only thing the browser guarantees to wait for - a bare `.then()`
+  chain hanging off nothing can still be dropped if the SW is freed
+  first). See
+  `docs/fixed-issues/service-worker-never-actually-cached-anything.md`.
 
 ## Troubleshooting
 

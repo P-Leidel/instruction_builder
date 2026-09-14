@@ -37,3 +37,5 @@ One file per bug, newest last (matching the order they were found):
 18. [A long token title in Step details starved its description column](./long-token-title-starved-description-column.md)
 19. [The accent color's white text/icons fell short of WCAG AA contrast](./accent-color-failed-contrast-minimum.md)
 20. [The hidden Import file input had no accessible label](./import-file-input-had-no-accessible-label.md)
+21. [A naive service worker fetch handler broke every page reload](./service-worker-broke-every-page-reload.md)
+22. [The service worker's runtime cache silently cached nothing, ever](./service-worker-never-actually-cached-anything.md)

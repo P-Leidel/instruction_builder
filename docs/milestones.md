@@ -6,7 +6,7 @@
 > this doc relates to every other doc in `docs/`.
 
 **Current status (2026-09-14): Phase 2 (MVP) is in progress.** Phase 1
-(Concept Validation) is complete. Of Phase 2's 20 tasks, 5–22 are done -
+(Concept Validation) is complete. Of Phase 2's 20 tasks, 5–23 are done -
 tasks 18/19 (JSON Export, Import) were deliberately pulled ahead of 15–17
 (SVG/PNG/Print export) on request, since a working JSON round-trip makes
 both automated and manual testing of everything else easier. Task 15
@@ -38,7 +38,15 @@ keyboard-reachability gaps - no keyboard way to reorder a step, and no
 keyboard way to select a token at all - the latter found by reading the
 code before the audit even started, not by either the plan or axe-core
 (see [phase-2/progress/task-22-accessibility-features.md](./phase-2/progress/task-22-accessibility-features.md)).
-Task 23 (Convert to PWA) is next.
+Task 23 (Convert to PWA) added a hand-written offline service worker (no
+new dependency, per the minimal-dependency groundwork Phase 1 already
+committed to) and the app icons the manifest had been waiting on since
+Phase 1 - and, verified against a real production build rather than just
+the dev server, caught and fixed two real service-worker bugs (a reload
+that crashed outright, and a cache that silently never wrote anything)
+before either ever shipped (see
+[phase-2/progress/task-23-pwa.md](./phase-2/progress/task-23-pwa.md)).
+Task 24 (Optimize Performance) is next.
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
@@ -58,7 +66,7 @@ this file existed).
 Exit criterion met: an in-memory clickable prototype validated the
 interaction model. See [phase-1/status-report.md](./phase-1/status-report.md).
 
-## Phase 2: MVP — 🔶 In progress (18 of 20 tasks complete)
+## Phase 2: MVP — 🔶 In progress (19 of 20 tasks complete)
 
 | # | Task | Status |
 |---|---|---|
@@ -80,11 +88,11 @@ interaction model. See [phase-1/status-report.md](./phase-1/status-report.md).
 | 20 | Add Automated Testing | ✅ (Vitest, 107 tests over the instruction model/document session/pure `lib/` logic; export pipeline/persistence/components deliberately left to the Playwright driver - see [phase-2/plans/task-20-automated-testing-plan.md](./phase-2/plans/task-20-automated-testing-plan.md)) |
 | 21 | Build Responsive Layouts | ✅ (audit-first pass; found and fixed 3 real overflow bugs plus a desktop-breakpoint canvas-crowding improvement - see [phase-2/progress/task-21-responsive-layouts.md](./phase-2/progress/task-21-responsive-layouts.md)) |
 | 22 | Add Accessibility Features | ✅ (audit-first pass with axe-core + a manual keyboard walkthrough; fixed a WCAG contrast failure, a missing form label, and keyboard-reachability gaps for step reorder and token select - see [phase-2/progress/task-22-accessibility-features.md](./phase-2/progress/task-22-accessibility-features.md)) |
-| 23 | Convert to PWA | ▶️ Next |
-| 24 | Optimize Performance | Not started |
+| 23 | Convert to PWA | ✅ (hand-written service worker, no new dependency; app icons; caught and fixed 2 real SW bugs before shipping - see [phase-2/progress/task-23-pwa.md](./phase-2/progress/task-23-pwa.md)) |
+| 24 | Optimize Performance | ▶️ Next |
 
 See [phase-2/progress/README.md](./phase-2/progress/README.md) for what actually
-shipped in tasks 5–22, plus product additions beyond the
+shipped in tasks 5–23, plus product additions beyond the
 original task list (step titles/details, per-token descriptions, two-stage
 step/token selection, connector lines, the live drag insertion marker, a
 CSS design-token visual refresh, and token/step attachments - a validated

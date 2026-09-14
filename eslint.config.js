@@ -21,4 +21,14 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
     },
   },
+  {
+    // Task 23: the hand-written service worker runs in its own global
+    // scope (self/caches/clients), not a browser window - it's real
+    // shipped code (unlike .claude/'s tooling scripts, ignored above), so
+    // it still gets linted, just with the right globals for where it runs.
+    files: ["public/sw.js"],
+    languageOptions: {
+      globals: globals.serviceworker,
+    },
+  },
 );

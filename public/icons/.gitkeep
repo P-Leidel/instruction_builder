@@ -1,1 +1,0 @@
-This folder holds the bundled icon set added in Phase 2 task 7 (Build Icon Library) and the PWA app icons referenced by ../manifest.webmanifest, added in Phase 2 task 23 (Convert to PWA). Icons are bundled locally rather than loaded from a CDN for offline support and to avoid canvas-tainting on PNG export. Empty in Phase 1 by design.

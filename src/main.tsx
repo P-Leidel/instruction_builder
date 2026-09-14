@@ -14,3 +14,17 @@ if (!root) {
 initPersistence().finally(() => {
   render(<App />, root);
 });
+
+// Task 23 (Convert to PWA): registered only in a production build - the
+// dev server's own fast-refreshing, unhashed module URLs are exactly what
+// a caching service worker would fight with, so `import.meta.env.PROD`
+// keeps `npm run dev` (and this project's Playwright driver, which drives
+// the dev server) completely unaffected. Registration failure (an
+// unsupported browser, an odd deployment served over plain HTTP) is
+// swallowed - offline support is a progressive enhancement, never a
+// requirement for the app to work online.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}

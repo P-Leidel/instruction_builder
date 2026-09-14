@@ -6,6 +6,13 @@
     <meta name="theme-color" content="#1d1d1f" />
     <meta name="description" content="Build step-by-step visual instructions by arranging icons on a structured canvas." />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
+    <!-- iOS home-screen install doesn't read the manifest's icons/display
+         the way other platforms do - these are its separate, older route to
+         the same result (a proper icon, no Safari chrome once launched). -->
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Instructions" />
     <title>Visual Instruction Builder</title>
   </head>
   <body>
