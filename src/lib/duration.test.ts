@@ -11,14 +11,14 @@ import {
 import { createEmptyStep, createToken } from "../model/instruction";
 
 describe("formatDuration / splitDuration", () => {
-  it("formats a mixed duration as XXd-XXh-XXm-XXs", () => {
+  it("formats a mixed duration with only its non-zero units", () => {
     // 1 day, 2 hours, 3 minutes, 4 seconds.
     const seconds = 1 * 86400 + 2 * 3600 + 3 * 60 + 4;
-    expect(formatDuration(seconds)).toBe("01d-02h-03m-04s");
+    expect(formatDuration(seconds)).toBe("1d 2h 3m 4s");
   });
 
-  it("formats zero as all-zero", () => {
-    expect(formatDuration(0)).toBe("00d-00h-00m-00s");
+  it("formats zero as 0s", () => {
+    expect(formatDuration(0)).toBe("0s");
   });
 
   it("round-trips through splitDuration", () => {
@@ -32,7 +32,7 @@ describe("buildDuration", () => {
     const result = buildDuration(0, 1, 30, 0);
     expect(result).toEqual({
       iconId: expect.any(String),
-      label: "00d-01h-30m-00s",
+      label: "1h 30m",
       seconds: 3600 + 1800,
     });
   });

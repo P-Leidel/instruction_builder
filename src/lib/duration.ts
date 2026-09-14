@@ -9,17 +9,28 @@ const SECONDS_PER_DAY = 86400;
 const SECONDS_PER_HOUR = 3600;
 const SECONDS_PER_MINUTE = 60;
 
-function pad2(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-/** "XXd-XXh-XXm-XXs", the fixed display format used everywhere a duration shows. */
+/**
+ * A human-readable duration, e.g. "1d 2h 3m 4s" or "1h 30m" - only the
+ * non-zero units are shown, so a plain 30-minute estimate reads as "30m",
+ * not "00d-00h-30m-00s". This is the one label used everywhere a duration
+ * displays - it's stored verbatim as `DurationAttachment.label` (see
+ * `buildDuration`/`sumDurations` below) and reused as-is by the on-screen
+ * Step/Token details readout and by the canvas, so every visual export
+ * (SVG/PNG/PDF) shows the same friendly text too. JSON export is
+ * unaffected: it round-trips through `DurationAttachment.seconds`, not
+ * this string.
+ */
 export function formatDuration(totalSeconds: number): string {
   const days = Math.floor(totalSeconds / SECONDS_PER_DAY);
   const hours = Math.floor((totalSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR);
   const minutes = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
   const seconds = Math.floor(totalSeconds % SECONDS_PER_MINUTE);
-  return `${pad2(days)}d-${pad2(hours)}h-${pad2(minutes)}m-${pad2(seconds)}s`;
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
+  return parts.join(" ");
 }
 
 /** Splits a total-seconds value back into its d/h/m/s parts, for pre-filling an edit form. */

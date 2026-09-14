@@ -1,6 +1,6 @@
 # Visual Instruction Builder
 
-A browser-based, offline-first app for building step-by-step visual instructions by arranging icons on a structured canvas. Currently in **Phase 1: Concept Validation**.
+A browser-based, offline-first app for building step-by-step visual instructions by arranging icons on a structured canvas.
 
 ## Getting started
 
@@ -18,9 +18,10 @@ npm run build     # typecheck + production build
 
 Planning and architecture docs live in [docs/](docs/):
 
+- [docs/milestones.md](docs/milestones.md) — the single source of truth for current phase/task status; start here.
 - [docs/project-plan.md](docs/project-plan.md) — the approved project plan (goals, stack, phased task list, risks, success criteria).
-- [docs/phase-1/architecture.md](docs/phase-1/architecture.md) — the Phase 1 architecture blueprint (data model, app architecture, folder structure, component responsibilities, roadmap, risks).
-- [docs/phase-1/foundation.md](docs/phase-1/foundation.md) — explains every file in this scaffold and why it exists.
+- [docs/phase-1/architecture.md](docs/phase-1/architecture.md) — the Phase 1 architecture blueprint (data model, app architecture, folder structure, component responsibilities, roadmap, risks). Historical - see milestones.md for what's actually been built since.
+- [docs/phase-1/foundation.md](docs/phase-1/foundation.md) — explains every file in the original Phase 1 scaffold and why it exists.
 
 ## Deployment
 
@@ -36,4 +37,4 @@ required. The app is deployed as a static client-side build.
 
 ## Status
 
-Phase 1 only: an in-memory, no-persistence prototype validating the "assemble a step from tokens" interaction. No canvas, export, drag-and-drop, or saving yet — those are Phase 2.
+See [docs/milestones.md](docs/milestones.md) for the current phase and task-by-task status - it's the one place that's kept up to date as work lands, so it's deliberately not duplicated here.

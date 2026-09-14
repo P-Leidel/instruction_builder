@@ -140,10 +140,17 @@ function useHistoryKeyboardShortcuts(): void {
 
 /**
  * Phase 2 task 5: the toolbar/canvas/panel regions from
- * docs/phase-1/architecture.md section 5. Placement is driven entirely by
- * grid-template-areas in global.css, so repositioning a region later (e.g.
- * moving StepList to the other side) is a CSS-only change - no markup here
- * needs to move.
+ * docs/phase-1/architecture.md section 5. `.app__col-left`/`.app__col-right`
+ * wrap the three-panel stack on each side in its own independent flex
+ * column (task 28 UI polish follow-up) - each side's height now depends
+ * only on its own panels' content, not on a shared grid row also spanning
+ * the *other* side's stack, which previously left "Add to token" (the
+ * right column's second panel) stranded below a large gap dictated by
+ * "Step details"/"Token details" (the left column's own content) rather
+ * than anything in its own column. Reordering a region within a side is
+ * still markup-only within that side's `<div>`; swapping which side a
+ * whole stack sits on is `grid-template-columns`'s column order plus this
+ * markup's element order.
  *
  * The canvas region now renders InstructionCanvas (task 6), replacing
  * Phase 1's StepBuilder HTML prototype now that the interaction model is
@@ -223,14 +230,14 @@ export function App() {
             Redo
           </button>
         </div>
+        <button
+          type="button"
+          class="app__file-button"
+          onClick={() => (confirmingNewDocument.value = true)}
+        >
+          New
+        </button>
         <div class="app__file-controls">
-          <button
-            type="button"
-            class="app__file-button"
-            onClick={() => (confirmingNewDocument.value = true)}
-          >
-            New
-          </button>
           <button type="button" class="app__file-button" onClick={handleExportJson}>
             Export JSON
           </button>
@@ -290,12 +297,16 @@ export function App() {
           <InstructionCanvas readOnly />
         ) : (
           <>
-            <StepList />
-            <StepDetails />
-            <TokenDetails />
+            <div class="app__col-left">
+              <StepList />
+              <StepDetails />
+              <TokenDetails />
+            </div>
             <InstructionCanvas />
-            <TokenPicker />
-            <TokenAttachmentPicker />
+            <div class="app__col-right">
+              <TokenPicker />
+              <TokenAttachmentPicker />
+            </div>
           </>
         )}
       </main>

@@ -6,7 +6,8 @@
 > this gets frozen with a HISTORICAL banner the day Phase 3 closes out, and
 > a new `phase-4/progress/README.md` takes over as CURRENT.
 
-Date: 2026-09-14, updated 2026-09-14 (tasks 25-28, plus an architecture review pass)
+Date: 2026-09-14, updated 2026-09-14 (tasks 25-28, plus an architecture
+review pass and a pre-launch file/docs and UI audit)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
 [../../project-plan.md](../../project-plan.md#implementation-plan)'s Phase 3
@@ -51,6 +52,18 @@ entry), one was deliberately deferred to Phase 4 task 32 with a concrete
 trigger, and fixing the app.tsx extraction incidentally caught and fixed
 a flaky Playwright driver check (see
 [architecture-2026-09-14-review-remediation.md](./architecture-2026-09-14-review-remediation.md)).
+A final pre-launch pass (also 2026-09-14, ahead of task 29) audited the
+whole repo's file/docs hygiene (one stale README, one vestigial folder,
+both fixed) and did a critical UI review, shipping six polish fixes: the
+"Add to token" panel's dead gap and the canvas panel's oversized empty
+state (one shared root cause, a CSS grid row-track coupling), a visually
+grouped export/import toolbar tray, human-readable durations
+("1h 30m" instead of "01h-30m-00s") everywhere one displays including
+exported files, a deferred incomplete-step badge on untouched steps, and
+stronger document-title field contrast - see
+[pre-launch-file-and-ui-audit.md](./pre-launch-file-and-ui-audit.md). Two
+further mobile-only findings were tracked instead of fixed, in
+[known-issues.md](../../known-issues.md#mobile-layout-order-buries-the-canvas-below-an-empty-token-details-placeholder).
 
 ## What shipped
 
@@ -63,14 +76,17 @@ One file per task (or per notable pass), in task-number order:
 | 27 | Add Document Title UI | [task-27-document-title-ui.md](./task-27-document-title-ui.md) |
 | 28 | UI Polish Pass | [task-28-ui-polish-pass.md](./task-28-ui-polish-pass.md) |
 | — | Architecture: 2026-09-14 review remediation (`lib/document-actions.ts` extraction, `useConfirmDialogFocusTrap` prop-bag contract, a `known-issues.md` sharpening, and a flaky driver check fixed) | [architecture-2026-09-14-review-remediation.md](./architecture-2026-09-14-review-remediation.md) |
+| — | Pre-launch file/docs audit and UI polish follow-up (stale README, vestigial `tests/`, grid layout fix, toolbar grouping, human-readable durations, deferred incomplete-step badge, document-title contrast) | [pre-launch-file-and-ui-audit.md](./pre-launch-file-and-ui-audit.md) |
 | 29 | Publish MVP | *not started* |
 | 30 | Test Real Users | *not started* |
 | 31 | Refine UX | *not started* |
 
 ## Verification
 
-- `npm run lint`, `npm run typecheck`, `npm test` (115 tests), and
-  `npm run build` all pass cleanly after tasks 25-28.
+- `npm run lint`, `npm run typecheck`, `npm test` (118 tests - unchanged in
+  count by the pre-launch audit, which only updated 3 existing
+  `duration.test.ts` assertions' expected strings for the new
+  human-readable format), and `npm run build` all pass cleanly.
 - See each task's own file above for full verification detail
   (browser-driven checks, bundle size deltas, and the decisions made along
   the way).

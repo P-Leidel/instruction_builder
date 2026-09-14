@@ -28,3 +28,18 @@ export function validateStep(step: InstructionStep): StepValidationResult {
 export function validateDocument(doc: InstructionDocument): StepValidationResult[] {
   return doc.steps.map(validateStep);
 }
+
+/**
+ * Whether a step's persistent incomplete-state indicator (the on-canvas/
+ * step-list "!" badge) should actually render. A brand-new step with zero
+ * tokens is always technically incomplete (`validateStep`'s "Step is empty"
+ * issue), but flagging that before the user has added anything reads as
+ * "you've already done something wrong" rather than useful guidance - so
+ * the persistent badge is deferred until at least one token exists.
+ * Export's own "N incomplete steps" warning toast (tasks 14/18-19) keeps
+ * checking `isComplete` directly and is unaffected by this - only the
+ * always-visible badge is deferred.
+ */
+export function shouldFlagIncompleteStep(step: InstructionStep, result: StepValidationResult): boolean {
+  return !result.isComplete && step.tokens.length > 0;
+}

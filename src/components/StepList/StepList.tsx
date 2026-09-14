@@ -9,7 +9,7 @@ import {
   moveStepUp,
   moveStepDown,
 } from "../../state/document";
-import { validateStep } from "../../model/validate";
+import { validateStep, shouldFlagIncompleteStep } from "../../model/validate";
 import { dragGhost } from "../../state/drag";
 import { beginPointerDrag, createClickAfterDragGuard } from "../../lib/pointer-drag";
 
@@ -47,6 +47,7 @@ export function StepList() {
       <ol class="step-list__items" ref={listRef}>
         {steps.map((step, index) => {
           const result = validateStep(step);
+          const showIncompleteFlag = shouldFlagIncompleteStep(step, result);
           const isSelected = step.id === selectedStepId.value;
           const issuesId = `step-issues-${step.id}`;
           return (
@@ -55,7 +56,7 @@ export function StepList() {
                 type="button"
                 class={`step-list__item${isSelected ? " step-list__item--selected" : ""}`}
                 aria-current={isSelected ? "step" : undefined}
-                aria-describedby={!result.isComplete ? issuesId : undefined}
+                aria-describedby={showIncompleteFlag ? issuesId : undefined}
                 onClick={() => {
                   if (dragGuard.wasJustDragged()) return;
                   selectStep(step.id);
@@ -76,12 +77,12 @@ export function StepList() {
               >
                 <span class="step-list__number">{index + 1}</span>
                 <span class="step-list__summary">{step.title || "Untitled step"}</span>
-                {!result.isComplete && (
+                {showIncompleteFlag && (
                   <span class="step-list__flag" aria-hidden="true" title={result.issues.join(", ")}>
                     !
                   </span>
                 )}
-                {!result.isComplete && (
+                {showIncompleteFlag && (
                   <span id={issuesId} class="visually-hidden">
                     {result.issues.join(", ")}
                   </span>

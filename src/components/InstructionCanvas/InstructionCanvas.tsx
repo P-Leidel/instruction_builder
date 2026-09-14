@@ -197,9 +197,16 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
             ? Math.min(dropTarget.value!.index, step.tokens.length)
             : null;
           const stepNumber = index + 1;
-          const selectLabel = isComplete
-            ? `Select step ${stepNumber}`
-            : `Select step ${stepNumber}, incomplete: ${issues.join(", ")}`;
+          // See model/validate.ts's shouldFlagIncompleteStep: a step with zero
+          // tokens is always technically incomplete, but the persistent badge
+          // (and this label) is deferred until the user has actually added
+          // one, so a brand-new document doesn't flag itself before anything
+          // has been built. Export's own incomplete-step warning toast still
+          // checks `isComplete` directly and is unaffected.
+          const showIncompleteFlag = !isComplete && step.tokens.length > 0;
+          const selectLabel = showIncompleteFlag
+            ? `Select step ${stepNumber}, incomplete: ${issues.join(", ")}`
+            : `Select step ${stepNumber}`;
           const connectors = buildConnectors(step.tokens.length, chipsPerRow);
           // Center the token block horizontally within the step card instead
           // of leaving it flush against the left edge - a step with only a
@@ -259,7 +266,7 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                   </text>
                 </g>
               )}
-              {!isComplete && (
+              {showIncompleteFlag && (
                 <g aria-hidden="true">
                   <text class="instruction-canvas__flag" x={canvasWidth - PADDING * 2 - 14} y={20}>
                     !<title>{issues.join(", ")}</title>

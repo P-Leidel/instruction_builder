@@ -118,6 +118,20 @@ users are about to test. Verifying the `app.tsx` extraction also caught
 and fixed a genuine, unrelated flaky check in the Playwright driver itself
 (see
 [phase-3/progress/architecture-2026-09-14-review-remediation.md](./phase-3/progress/architecture-2026-09-14-review-remediation.md)).
+A final pre-launch pass (also 2026-09-14, ahead of task 29) audited the
+whole repo's file/docs hygiene - a stale root README still describing
+Phase 1 was rewritten to point at this file instead, and a vestigial
+`tests/` folder was removed - and ran a critical UI review, shipping six
+polish fixes: a CSS grid layout bug that left "Add to token" stranded
+below a large empty gap (and the canvas panel artificially tall) is fixed,
+the toolbar's 5 export/import buttons now read as one visually grouped
+tray, durations display as "1h 30m" instead of "01h-30m-00s" everywhere
+one shows (including exported files), the incomplete-step "!" badge no
+longer appears on an untouched step before the user has added anything,
+and the document-title field has stronger contrast. Two further
+mobile-only findings were tracked rather than fixed - see
+[phase-3/progress/pre-launch-file-and-ui-audit.md](./phase-3/progress/pre-launch-file-and-ui-audit.md)
+and [known-issues.md](./known-issues.md#mobile-layout-order-buries-the-canvas-below-an-empty-token-details-placeholder).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that

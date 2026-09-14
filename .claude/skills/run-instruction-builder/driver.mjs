@@ -203,7 +203,7 @@ await tokenDurationInputs.nth(2).fill("30"); // 30 minutes
 await tokenDurationField.getByRole("button", { name: "Save token time", exact: true }).click();
 
 const stepTimeAfterTokenTime = await editableCanvas.locator(".instruction-canvas__step-time").first().textContent();
-const tokenTimeMatchesSum = stepTimeAfterTokenTime === "00d-01h-30m-00s";
+const tokenTimeMatchesSum = stepTimeAfterTokenTime === "1h 30m";
 
 // Regression test for a bug found in manual testing: DurationField is the
 // same component instance across a token switch (same position in the
@@ -229,7 +229,7 @@ await stepDurationInputs.nth(0).fill("2"); // 2 days - an explicit step estimate
 await stepDurationField.getByRole("button", { name: "Save step time", exact: true }).click();
 
 const stepTimeAfterStepTime = await editableCanvas.locator(".instruction-canvas__step-time").first().textContent();
-const stepTimeOverridesTokenSum = stepTimeAfterStepTime === "02d-00h-00m-00s";
+const stepTimeOverridesTokenSum = stepTimeAfterStepTime === "2d";
 
 // Same regression as above, for a step switch: edit step 1's time again
 // without saving, then switch to step 2 - its own DurationField must show
@@ -519,7 +519,20 @@ const noHorizontalOverflowAtMobileWidth = mobileOverflow === 0;
 // docs/fixed-issues/README.md's design intent, not enforced there but this is where
 // it's actually exercised).
 await page.locator(".step-list__add").click();
-const flagCountBeforeExport = await page.locator(".step-list__flag").count();
+// Reconstruct the true incomplete-step count from two DOM signals rather
+// than trusting `.step-list__flag`'s count alone: that persistent badge is
+// deliberately suppressed for an untouched, zero-token step (see
+// model/validate.ts's shouldFlagIncompleteStep) even though it's still
+// counted incomplete by this export warning, which checks `isComplete`
+// directly and doesn't go through the badge at all. A step is incomplete
+// for exactly one of two reasons - zero tokens (badge suppressed, but the
+// canvas still shows its "Empty step" hint) or tokens with no action among
+// them (badge shown) - so the two counts together give the real total. At
+// this point in the flow that's step 1 (its action token was removed
+// earlier below) plus the empty step just added here.
+const flaggedIncompleteCount = await page.locator(".step-list__flag").count();
+const emptyStepCount = await editableCanvas.locator(".instruction-canvas__hint").count();
+const expectedIncompleteCount = flaggedIncompleteCount + emptyStepCount;
 const [download] = await Promise.all([
   page.waitForEvent("download"),
   page.getByRole("button", { name: "Export JSON", exact: true }).click(),
@@ -530,9 +543,9 @@ await download.saveAs(exportPath);
 const exportedDoc = JSON.parse(fs.readFileSync(exportPath, "utf8"));
 const exportToastText = await page.locator(".app__toast").textContent();
 const exportWarnedAboutIncompleteSteps =
-  flagCountBeforeExport > 0 &&
+  expectedIncompleteCount > 0 &&
   (await page.locator(".app__toast--warning").count()) === 1 &&
-  exportToastText.includes(String(flagCountBeforeExport));
+  exportToastText.includes(String(expectedIncompleteCount));
 const jsonExportDownloadsCurrentDocument =
   exportSuggestedFilename === "untitled-instructions.json" &&
   exportedDoc.steps.length === (await page.locator(".step-list__item").count());
@@ -562,9 +575,9 @@ await svgDownload.saveAs(svgExportPath);
 const svgContent = fs.readFileSync(svgExportPath, "utf8");
 const svgToastText = await page.locator(".app__toast").textContent();
 const svgExportWarnedAboutIncompleteSteps =
-  flagCountBeforeExport > 0 &&
+  expectedIncompleteCount > 0 &&
   (await page.locator(".app__toast--warning").count()) === 1 &&
-  svgToastText.includes(String(flagCountBeforeExport));
+  svgToastText.includes(String(expectedIncompleteCount));
 const svgExportIsSelfContainedAndStyled =
   svgSuggestedFilename === "untitled-instructions.svg" &&
   svgContent.startsWith('<?xml version="1.0" encoding="UTF-8"?>') &&
@@ -599,9 +612,9 @@ await pngDownload.saveAs(pngExportPath);
 const pngBuffer = fs.readFileSync(pngExportPath);
 const pngToastText = await page.locator(".app__toast").textContent();
 const pngExportWarnedAboutIncompleteSteps =
-  flagCountBeforeExport > 0 &&
+  expectedIncompleteCount > 0 &&
   (await page.locator(".app__toast--warning").count()) === 1 &&
-  pngToastText.includes(String(flagCountBeforeExport));
+  pngToastText.includes(String(expectedIncompleteCount));
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const PIXEL_DENSITY = 2; // must match lib/png-export.ts's PIXEL_DENSITY
@@ -641,9 +654,9 @@ await page.getByRole("button", { name: "Export PDF", exact: true }).click();
 const pdfExportInvokedWindowPrint = await page.evaluate(() => window.__printFired);
 const pdfToastText = await page.locator(".app__toast").textContent();
 const pdfExportWarnedAboutIncompleteSteps =
-  flagCountBeforeExport > 0 &&
+  expectedIncompleteCount > 0 &&
   (await page.locator(".app__toast--warning").count()) === 1 &&
-  pdfToastText.includes(String(flagCountBeforeExport));
+  pdfToastText.includes(String(expectedIncompleteCount));
 await page.locator(".app__toast-dismiss").click();
 
 await page.emulateMedia({ media: "print" });

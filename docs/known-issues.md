@@ -225,6 +225,33 @@ only - see
   rather than its own isolated cost.
 - **First noted:** 2026-09-14.
 
+## Mobile layout order buries the canvas below an empty Token details placeholder
+
+- **What it is:** at the 390px mobile stacking order, `Token details` (an
+  empty "Select a step, then click one of its tokens..." placeholder until
+  a token is actually picked) and the entire `Instructions` canvas sit
+  between `Step details` and `Add to step`. A first-time mobile user
+  scrolls past a placeholder with nothing in it before reaching the canvas
+  that actually shows what they've built - the one view that's the whole
+  point of the app.
+- **Why it's not fixed now:** found during a 2026-09-14 pre-launch UI
+  review (see
+  [phase-3/progress/pre-launch-file-and-ui-audit.md](./phase-3/progress/pre-launch-file-and-ui-audit.md))
+  alongside 6 other findings; the user asked for the smaller, purely
+  visual/CSS items to ship immediately and this one - a mobile-only
+  reorder - to be tracked instead, since it touches more of the stacking
+  order than a small CSS tweak.
+- **Related:** the canvas's token icon/label chips are also fairly small
+  at 390px width - already flagged as a known area of active work in
+  `.claude/skills/run-instruction-builder/SKILL.md`'s own troubleshooting
+  table (`.instruction-canvas__svg`'s scale clamp). Worth revisiting
+  together, since both are about the mobile canvas experience.
+- **Revisit when:** task 31 (Refine UX) or a dedicated mobile-layout pass -
+  reordering `.app__main`'s mobile (< 800px) stacking so canvas follows
+  Steps, and collapsing `Token details` until a token is selected instead
+  of reserving its slot unconditionally.
+- **First noted:** 2026-09-14.
+
 ## Persistence: an edit within ~200ms of closing/reloading the tab can be lost
 
 - **What it is:** `state/persistence.ts` (task 12) debounces saves to
