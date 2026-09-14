@@ -353,7 +353,15 @@ function moveTokenCore(
   );
 }
 
-/** Moves a step from `fromIndex` to `toIndex` - dragging a step in StepList (task 9). */
+/**
+ * Moves a step from `fromIndex` to `toIndex` - dragging a step in StepList
+ * (task 9). `toIndex` is a pre-removal splice target (see
+ * `adjustIndexForRemoval`'s comment), not "the index it should end up at" -
+ * a fact `moveStepUpCore`/`moveStepDownCore` below exist specifically so no
+ * other caller has to rediscover. `StepList.tsx`'s drag handler is the one
+ * remaining direct caller, since its drop index already comes out of
+ * `resolveDropIndex` in that same pre-removal convention.
+ */
 function reorderStepsCore(session: DocumentSession, fromIndex: number, toIndex: number): void {
   const steps = [...session.document.value.steps];
   if (fromIndex < 0 || fromIndex >= steps.length) return;
@@ -362,6 +370,35 @@ function reorderStepsCore(session: DocumentSession, fromIndex: number, toIndex: 
   const clamped = Math.max(0, Math.min(adjustedToIndex, steps.length));
   steps.splice(clamped, 0, moved);
   setSteps(session, steps);
+}
+
+/**
+ * Move up/down verbs (task 22's keyboard-operable alternative to dragging a
+ * step) - the seam callers actually want, so they never have to reason
+ * about `reorderStepsCore`'s pre-removal splice-index convention
+ * themselves. A no-op at either end of the list (moving the first step up,
+ * or the last step down) rather than clamping to a no-op reorder - `StepList.tsx`
+ * disables the corresponding button at those positions, but these guard
+ * independently in case either is ever called some other way.
+ */
+function moveStepUpCore(session: DocumentSession, stepId: string): void {
+  const index = session.document.value.steps.findIndex((s) => s.id === stepId);
+  if (index <= 0) return;
+  reorderStepsCore(session, index, index - 1);
+}
+
+/**
+ * Moving one slot *down* means landing just after the next step - which,
+ * expressed as a pre-removal splice target (see `reorderStepsCore`), is two
+ * slots ahead of `index`, not one: removing the moved step first shifts
+ * everything after it back by one, so `index + 1` would land it right back
+ * where it started.
+ */
+function moveStepDownCore(session: DocumentSession, stepId: string): void {
+  const steps = session.document.value.steps;
+  const index = steps.findIndex((s) => s.id === stepId);
+  if (index === -1 || index >= steps.length - 1) return;
+  reorderStepsCore(session, index, index + 2);
 }
 
 function removeTokenFromStepCore(session: DocumentSession, stepId: string, tokenId: string): void {
@@ -507,6 +544,8 @@ export const sessionActions = {
   addTokenToSelectedStep: addTokenToSelectedStepCore,
   moveToken: moveTokenCore,
   reorderSteps: reorderStepsCore,
+  moveStepUp: moveStepUpCore,
+  moveStepDown: moveStepDownCore,
   removeTokenFromStep: removeTokenFromStepCore,
   updateStepTitle: updateStepTitleCore,
   updateStepDescription: updateStepDescriptionCore,
@@ -575,6 +614,8 @@ export const {
   addTokenToSelectedStep,
   moveToken,
   reorderSteps,
+  moveStepUp,
+  moveStepDown,
   removeTokenFromStep,
   updateStepTitle,
   updateStepDescription,

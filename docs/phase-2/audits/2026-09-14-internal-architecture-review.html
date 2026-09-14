@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review for instruction_builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      body { font-family: ui-serif, Georgia, "Times New Roman", serif; }
+      .sans { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; }
+      .deep-box {
+        background: linear-gradient(135deg, #0f172a, #1e293b);
+        color: #e2e8f0;
+      }
+      .badge {
+        font-size: 0.7rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        font-weight: 600;
+      }
+      .badge-strong { background: #d1fae5; color: #065f46; }
+      .badge-explore { background: #fef3c7; color: #92400e; }
+      .badge-speculative { background: #e2e8f0; color: #334155; }
+      .tag {
+        font-size: 0.65rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 0.15rem 0.5rem;
+        border-radius: 4px;
+        background: #f1f5f9;
+        color: #475569;
+        border: 1px solid #e2e8f0;
+      }
+      .diagram-label {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.65rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+      <!-- Header -->
+      <header class="space-y-4 border-b border-slate-300 pb-8">
+        <p class="sans text-xs uppercase tracking-widest text-slate-500">Architecture review</p>
+        <h1 class="text-4xl font-semibold tracking-tight">instruction_builder</h1>
+        <p class="sans text-sm text-slate-500">2026-09-14 &middot; scope: work from tasks 20&ndash;23 (document session, drag-and-drop, accessibility, PWA) &mdash; the codebase's recent hot spots</p>
+        <div class="sans flex flex-wrap gap-x-8 gap-y-2 text-xs text-slate-600 pt-2">
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-3 border border-slate-500"></span> module</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-5 border-t-2 border-dashed border-slate-500"></span> seam</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-5 border-t-2 border-red-600"></span> leakage</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-3 deep-box"></span> deep module</span>
+        </div>
+      </header>
+
+      <!-- Candidates -->
+      <section id="candidates" class="space-y-16">
+
+        <!-- Candidate 1 -->
+        <article id="c1" class="space-y-5">
+          <div class="sans flex items-center gap-3 flex-wrap">
+            <span class="badge badge-strong">Strong</span>
+            <span class="tag">in-process</span>
+          </div>
+          <h2 class="text-2xl font-semibold">Split the service worker's routing policy from its execution glue</h2>
+          <p class="sans font-mono text-sm text-slate-600">public/sw.js</p>
+
+          <p class="text-lg leading-relaxed"><span class="font-semibold">Problem:</span> the <code class="font-mono text-base">fetch</code> handler <em>is</em> its own interface &mdash; routing policy (same-origin filter, the only-if-cached passthrough guard, network-first-vs-cache-first) and execution glue (clone timing, <code class="font-mono text-base">waitUntil</code> wrapping) sit in the same 35 lines with nothing testable in isolation.</p>
+          <p class="text-lg leading-relaxed"><span class="font-semibold">Solution:</span> pull the routing decision out as a pure function of a <code class="font-mono text-base">Request</code>'s properties; keep one small executor that owns clone/waitUntil/cache-write mechanics exactly once.</p>
+
+          <!-- Mass diagram: interface vs implementation -->
+          <div class="grid grid-cols-2 gap-6 py-4">
+            <div class="space-y-2">
+              <p class="diagram-label text-slate-500 text-center">Before &mdash; shallow</p>
+              <div class="border border-slate-300 rounded-lg overflow-hidden h-72 flex flex-col">
+                <div class="bg-slate-200 flex items-center justify-center diagram-label text-slate-700" style="height: 62%;">
+                  fetch listener (interface = implementation)
+                </div>
+                <div class="bg-slate-100 flex-1 flex items-center justify-center diagram-label text-slate-500">
+                  nothing left underneath
+                </div>
+              </div>
+              <p class="sans text-xs text-slate-500 text-center">routing + clone timing + waitUntil, all inline. No pure function to hand a mock Request to.</p>
+            </div>
+            <div class="space-y-2">
+              <p class="diagram-label text-slate-500 text-center">After &mdash; deep</p>
+              <div class="border border-slate-300 rounded-lg overflow-hidden h-72 flex flex-col">
+                <div class="bg-slate-200 flex items-center justify-center diagram-label text-slate-700" style="height: 18%;">
+                  chooseStrategy(request) &mdash; pure, unit-tested
+                </div>
+                <div class="deep-box flex-1 flex items-center justify-center diagram-label" style="opacity: 0.95;">
+                  executor: clone &middot; waitUntil &middot; cache.match/put
+                  <br/>(the only place body-consumption bugs can hide)
+                </div>
+              </div>
+              <p class="sans text-xs text-slate-500 text-center">small interface, deep implementation behind it</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid">
+flowchart LR
+  R[Request] --> CS["chooseStrategy(request)<br/>pure &middot; vitest-testable"]
+  CS -->|passthrough| NET[fetch, untouched]
+  CS -->|network-first| EXEC[executor]
+  CS -->|cache-first| EXEC
+  EXEC --> CACHE[(Cache Storage)]
+  classDef pure fill:#d1fae5,stroke:#065f46,color:#065f46;
+  class CS pure
+            </pre>
+          </div>
+
+          <div class="sans">
+            <p class="text-sm font-semibold text-slate-700 mb-2">Wins</p>
+            <ul class="text-sm text-slate-700 space-y-1 list-disc list-inside">
+              <li>Leverage: routing rules become unit-testable with plain Request-shaped objects</li>
+              <li>Locality: body-consumption bugs can only hide in one small executor</li>
+              <li>Both shipped-and-caught bugs become one-line test cases</li>
+              <li>Interface shrinks to a return type; implementation absorbs the glue</li>
+            </ul>
+          </div>
+          <p class="sans text-sm text-slate-500">Two real production bugs this session &mdash; <code class="font-mono">service-worker-broke-every-page-reload.md</code>, <code class="font-mono">service-worker-never-actually-cached-anything.md</code> &mdash; both only caught by deliberately driving a real browser afterward. Zero automated coverage exists today.</p>
+        </article>
+
+        <!-- Candidate 2 -->
+        <article id="c2" class="space-y-5">
+          <div class="sans flex items-center gap-3 flex-wrap">
+            <span class="badge badge-strong">Strong</span>
+            <span class="tag">in-process</span>
+          </div>
+          <h2 class="text-2xl font-semibold">Give step reordering an intent-level seam instead of a splice-index primitive</h2>
+          <p class="sans font-mono text-sm text-slate-600">src/state/document.ts &middot; src/components/StepList/StepList.tsx</p>
+
+          <p class="text-lg leading-relaxed"><span class="font-semibold">Problem:</span> <code class="font-mono text-base">reorderSteps(fromIndex, toIndex)</code>'s <code class="font-mono text-base">toIndex</code> means "a splice target computed against the pre-removal array" &mdash; not "where it ends up." Two real callers (drag, and task 22's Move up/down buttons) each have to reason about that off-by-one shift themselves; the button caller needs a 6-line comment just to justify <code class="font-mono text-base">index + 2</code> instead of <code class="font-mono text-base">index + 1</code>.</p>
+          <p class="text-lg leading-relaxed"><span class="font-semibold">Solution:</span> keep today's splice/clamp math as an unexported implementation detail; expose <code class="font-mono text-base">moveStepUp(id)</code> / <code class="font-mono text-base">moveStepDown(id)</code> / <code class="font-mono text-base">moveStepToIndex(id, index)</code> as the seam in <code class="font-mono text-base">sessionActions</code>.</p>
+
+          <div class="grid grid-cols-2 gap-6 py-4">
+            <div class="space-y-2">
+              <p class="diagram-label text-slate-500 text-center">Before</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-3">
+                <pre class="mermaid">
+flowchart TD
+  D["StepList drag handler<br/>resolveDropIndex()"] -->|"toIndex (happens to work)"| RS[reorderStepsCore]
+  B["Move up/down buttons<br/>index-1 / index+2"] -->|"toIndex (hand-derived,<br/>6-line comment)"| RS
+  RS --> AI[adjustIndexForRemoval]
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class D,B leak
+                </pre>
+              </div>
+            </div>
+            <div class="space-y-2">
+              <p class="diagram-label text-slate-500 text-center">After</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-3">
+                <pre class="mermaid">
+flowchart TD
+  D2[StepList drag handler] --> MI[moveStepToIndex]
+  B2[Move up/down buttons] --> MU[moveStepUp]
+  B2 --> MD[moveStepDown]
+  MI --> Core[reorderStepsCore + adjustIndexForRemoval]
+  MU --> Core
+  MD --> Core
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class Core deep
+                </pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="sans">
+            <p class="text-sm font-semibold text-slate-700 mb-2">Wins</p>
+            <ul class="text-sm text-slate-700 space-y-1 list-disc list-inside">
+              <li>Leverage: one verb per intent, no caller does index arithmetic</li>
+              <li>Locality: the pre-removal-splice fact lives in exactly one place</li>
+              <li>Deletes a 6-line justification comment by making it unnecessary</li>
+              <li>Protects the next caller (a deferred move-token-to-step keyboard path)</li>
+            </ul>
+          </div>
+          <p class="sans text-sm text-slate-500">Two adapters (drag, buttons) satisfying one shallow primitive is the seam test showing the primitive itself is under-abstracted &mdash; the underlying splice/clamp math (shared with <code class="font-mono">moveTokenCore</code>) is already correctly centralized and deep; only the caller-facing verb is missing.</p>
+        </article>
+
+        <!-- Candidate 3 -->
+        <article id="c3" class="space-y-5">
+          <div class="sans flex items-center gap-3 flex-wrap">
+            <span class="badge badge-explore">Worth exploring</span>
+            <span class="tag">local-substitutable</span>
+          </div>
+          <h2 class="text-2xl font-semibold">The exported chip's style allowlist has no seam back to the stylesheet it describes</h2>
+          <p class="sans font-mono text-sm text-slate-600">src/lib/svg-export.ts &middot; src/styles/global.css &middot; src/components/InstructionCanvas/InstructionCanvas.tsx &middot; src/lib/canvas-layout.ts</p>
+
+          <p class="text-lg leading-relaxed"><span class="font-semibold">Problem:</span> "what does a token chip look like, and does it survive export?" is answered by four files with no compiler or test link between them. <code class="font-mono text-base">BAKED_STYLE_PROPS</code> is a hand-maintained ten-item allowlist that must stay in sync with whatever <code class="font-mono text-base">global.css</code> actually sets on <code class="font-mono text-base">.instruction-canvas__chip*</code> &mdash; enforced by nobody.</p>
+          <p class="text-lg leading-relaxed"><span class="font-semibold">Solution:</span> a light guardrail, not a redesign &mdash; a test that renders one chip and diffs <code class="font-mono text-base">getComputedStyle()</code> against <code class="font-mono text-base">BAKED_STYLE_PROPS</code>'s coverage, so a new visual property (an opacity, a gradient) fails loudly instead of silently vanishing from every exported file.</p>
+
+          <!-- Cross-section: layers a fact passes through with no link -->
+          <div class="py-4 space-y-1">
+            <p class="diagram-label text-slate-500">"What does a chip look like" &mdash; four unlinked layers</p>
+            <div class="border-l-4 border-slate-400 pl-3 py-2 bg-white h-12 flex items-center diagram-label text-slate-700">canvas-layout.ts &mdash; geometry constants</div>
+            <div class="border-l-4 border-slate-400 pl-3 py-2 bg-white h-12 flex items-center diagram-label text-slate-700">InstructionCanvas.tsx &mdash; chip markup, badge components</div>
+            <div class="border-l-4 border-red-500 pl-3 py-2 bg-white h-12 flex items-center diagram-label text-slate-700">global.css &mdash; the actual visual truth <span class="ml-2 text-red-600">&#8674; nothing reads this to check coverage</span></div>
+            <div class="border-l-4 border-red-500 pl-3 py-2 bg-white h-12 flex items-center diagram-label text-slate-700">svg-export.ts BAKED_STYLE_PROPS &mdash; a ten-item guess at the layer above</div>
+          </div>
+
+          <div class="sans">
+            <p class="text-sm font-semibold text-slate-700 mb-2">Wins</p>
+            <ul class="text-sm text-slate-700 space-y-1 list-disc list-inside">
+              <li>Locality: a stylesheet/allowlist drift fails a test, not a visual diff</li>
+              <li>Catches the failure mode before it ships, not after (unlike the sw.js bugs)</li>
+            </ul>
+          </div>
+          <p class="sans text-sm text-slate-500">No bug has shipped from this yet &mdash; it's the same silent-drift shape as the two sw.js bugs, one step earlier.</p>
+        </article>
+
+        <!-- Candidate 4 -->
+        <article id="c4" class="space-y-5 opacity-90">
+          <div class="sans flex items-center gap-3 flex-wrap">
+            <span class="badge badge-speculative">Speculative</span>
+            <span class="tag">re-examined, not new</span>
+          </div>
+          <h2 class="text-2xl font-semibold">InstructionCanvas.tsx: re-examined, largely holds up</h2>
+          <p class="sans font-mono text-sm text-slate-600">src/components/InstructionCanvas/InstructionCanvas.tsx</p>
+
+          <p class="text-lg leading-relaxed"><span class="font-semibold">Problem considered:</span> one ~400-line file fuses SVG rendering, two-stage selection, inline drag orchestration, and badge components &mdash; a plausible shallow-fusion candidate given it's recent, high-traffic code.</p>
+          <p class="text-lg leading-relaxed"><span class="font-semibold">Finding:</span> the deletion test doesn't support splitting it. Selection logic isn't duplicated &mdash; <code class="font-mono text-base">selectedToken</code> already centralizes the two-stage rule in <code class="font-mono text-base">state/document.ts</code>; per-row booleans here are necessary render-time comparisons, not a second copy. The prior call to not share <code class="font-mono text-base">createClickAfterDragGuard()</code> with StepList/TokenPicker still holds: there's no parallel <code class="font-mono text-base">justDragged</code> state to unify, since the decision already folds into <code class="font-mono text-base">onDrop</code>'s <code class="font-mono text-base">wasDrag</code> check.</p>
+
+          <div class="py-4">
+            <div class="mx-auto max-w-sm rounded-lg deep-box p-6 text-center diagram-label">
+              one deep module &mdash; SVG rendering for one visual surface<br/>
+              <span class="opacity-70">(canvas-layout.ts already extracted the pure geometry in an earlier pass)</span>
+            </div>
+          </div>
+
+          <div class="sans">
+            <p class="text-sm font-semibold text-slate-700 mb-2">Wins if pursued anyway</p>
+            <ul class="text-sm text-slate-700 space-y-1 list-disc list-inside">
+              <li>Only cosmetic: badge components could move files for length, not depth</li>
+            </ul>
+          </div>
+          <p class="sans text-sm text-slate-500">Included for completeness since it was the review's starting hypothesis &mdash; recommend leaving it alone.</p>
+        </article>
+
+      </section>
+
+      <!-- Top recommendation -->
+      <section id="top-recommendation" class="border-t-2 border-slate-800 pt-10">
+        <p class="sans text-xs uppercase tracking-widest text-slate-500 mb-2">Top recommendation</p>
+        <h2 class="text-2xl font-semibold mb-3">
+          <a href="#c1" class="hover:underline">Split the service worker's routing policy from its execution glue</a>
+        </h2>
+        <p class="text-lg leading-relaxed max-w-3xl">Start here over the <a href="#c2" class="underline">reorderSteps seam</a>: this one has already shipped two real bugs and has zero automated coverage today, while <code class="font-mono text-base">reorderSteps</code> is merely awkward &mdash; correct, just leaky. Pulling <code class="font-mono text-base">chooseStrategy</code> out as a pure function is also the smallest cut of the four: one new function, one thin executor, and the two already-documented Fixed Issues entries become permanent regression tests instead of a memory of a bug that was caught once.</p>
+      </section>
+    </main>
+  </body>
+</html>

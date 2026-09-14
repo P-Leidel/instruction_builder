@@ -6,6 +6,8 @@ import {
   addStep,
   removeStep,
   reorderSteps,
+  moveStepUp,
+  moveStepDown,
 } from "../../state/document";
 import { validateStep } from "../../model/validate";
 import { dragGhost } from "../../state/drag";
@@ -31,12 +33,9 @@ function resolveDropIndex(clientY: number, container: HTMLElement): number {
  * sharing the same Pointer Events tracker as the canvas/picker; a quick tap
  * (no real movement) still just selects the step, same as Phase 1. Task 22
  * adds Move up/down buttons as the keyboard-operable alternative to that
- * drag - `reorderSteps(index, index - 1)` / `reorderSteps(index, index + 2)`
- * land the step exactly one slot earlier/later (see reorderStepsCore's
- * drop-before-removal semantics in state/document.ts); the `+ 2` (not `+ 1`)
- * is because moving one slot forward means landing *after* the very next
- * step, which - expressed as a pre-removal index - is two slots ahead, not
- * one.
+ * drag, via `moveStepUp`/`moveStepDown` (state/document.ts) - unlike the
+ * drag handler below, these buttons never have to reason about
+ * `reorderSteps`'s own pre-removal splice-index convention themselves.
  */
 export function StepList() {
   const steps = document.value.steps;
@@ -95,7 +94,7 @@ export function StepList() {
                     class="step-list__move"
                     aria-label={`Move step ${index + 1} up`}
                     disabled={index === 0}
-                    onClick={() => reorderSteps(index, index - 1)}
+                    onClick={() => moveStepUp(step.id)}
                   >
                     ↑
                   </button>
@@ -104,7 +103,7 @@ export function StepList() {
                     class="step-list__move"
                     aria-label={`Move step ${index + 1} down`}
                     disabled={index === steps.length - 1}
-                    onClick={() => reorderSteps(index, index + 2)}
+                    onClick={() => moveStepDown(step.id)}
                   >
                     ↓
                   </button>

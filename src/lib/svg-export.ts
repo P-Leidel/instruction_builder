@@ -9,9 +9,14 @@ import { downloadBlob, slugify } from "./document-file";
  * unstyled/invisible shapes in any tool that isn't this app's own page.
  * These are exactly (and only) the presentation properties this app's
  * canvas rules in global.css actually set - see the `.instruction-canvas__*`
- * rules - not a general-purpose style-baking list.
+ * rules - not a general-purpose style-baking list. Exported (not just used
+ * internally) so `svg-export.test.ts` can assert this list actually stays
+ * in sync with global.css, rather than trusting this comment alone - see
+ * docs/known-issues.md's "chip style-baking allowlist" entry, added after
+ * a 2026-09-14 architecture review flagged the two having no seam back to
+ * each other as a silent-drift risk.
  */
-const BAKED_STYLE_PROPS = [
+export const BAKED_STYLE_PROPS = [
   "fill",
   "stroke",
   "stroke-width",

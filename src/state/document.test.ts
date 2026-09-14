@@ -225,6 +225,63 @@ describe("reorderSteps", () => {
   });
 });
 
+describe("moveStepUp / moveStepDown", () => {
+  it("moveStepUp swaps a step with its predecessor", () => {
+    const session = createDocumentSession();
+    sessionActions.addStep(session);
+    sessionActions.addStep(session);
+    const [s1, s2, s3] = session.document.value.steps;
+
+    sessionActions.moveStepUp(session, s2.id);
+
+    expect(stepIds(session)).toEqual([s2.id, s1.id, s3.id]);
+  });
+
+  it("moveStepDown swaps a step with its successor", () => {
+    const session = createDocumentSession();
+    sessionActions.addStep(session);
+    sessionActions.addStep(session);
+    const [s1, s2, s3] = session.document.value.steps;
+
+    sessionActions.moveStepDown(session, s2.id);
+
+    expect(stepIds(session)).toEqual([s1.id, s3.id, s2.id]);
+  });
+
+  it("moveStepUp is a no-op on the first step", () => {
+    const session = createDocumentSession();
+    sessionActions.addStep(session);
+    const before = session.document.value;
+    const [s1] = session.document.value.steps;
+
+    sessionActions.moveStepUp(session, s1.id);
+
+    expect(session.document.value).toBe(before);
+  });
+
+  it("moveStepDown is a no-op on the last step", () => {
+    const session = createDocumentSession();
+    sessionActions.addStep(session);
+    const before = session.document.value;
+    const [, s2] = session.document.value.steps;
+
+    sessionActions.moveStepDown(session, s2.id);
+
+    expect(session.document.value).toBe(before);
+  });
+
+  it("both are a no-op for an unknown stepId", () => {
+    const session = createDocumentSession();
+    sessionActions.addStep(session);
+    const before = session.document.value;
+
+    sessionActions.moveStepUp(session, "does-not-exist");
+    sessionActions.moveStepDown(session, "does-not-exist");
+
+    expect(session.document.value).toBe(before);
+  });
+});
+
 describe("attachments", () => {
   it("attaches, replaces, and removes at most one of each kind", () => {
     const session = createDocumentSession();

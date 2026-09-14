@@ -24,6 +24,48 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+/**
+ * Routing policy, kept separate from the fetch handler's execution
+ * mechanics below (a 2026-09-14 architecture review's own distinction -
+ * see docs/known-issues.md) - a pure function of a `Request`'s own
+ * properties, with no `self`/`caches`/`event` access, so the decision
+ * itself is easy to reason about (and to hand-check against a plain
+ * `Request` in a console) independent of the clone/waitUntil mechanics
+ * that actually carry it out.
+ *
+ * - "passthrough": let the browser handle this one natively, untouched.
+ * - "network-first": try the network, falling back to the cache.
+ * - "cache-first": try the cache, falling back to the network.
+ */
+function chooseStrategy(request) {
+  // Only same-origin GET requests are ever handled - anything else (a
+  // POST, a cross-origin font/API call) passes straight through untouched.
+  if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) {
+    return "passthrough";
+  }
+
+  // A page reload's navigation request can carry cache:"only-if-cached"
+  // paired with mode:"navigate" (not "same-origin") - re-fetching that
+  // exact Request object throws immediately ("'only-if-cached' can be set
+  // only if 'mode' is 'same-origin'"), breaking every reload. Let the
+  // browser handle this one natively instead of intercepting it.
+  if (request.cache === "only-if-cached" && request.mode !== "same-origin") {
+    return "passthrough";
+  }
+
+  // Navigations (loading/reloading the page itself): network-first, so an
+  // online user always gets the current build, falling back to whatever
+  // was last cached (the SPA shell at "/") once offline.
+  if (request.mode === "navigate") {
+    return "network-first";
+  }
+
+  // Everything else (hashed JS/CSS bundles, the manifest, icons): cache-first
+  // - a hashed filename never changes meaning once built, so a cache hit is
+  // never stale.
+  return "cache-first";
+}
+
 // Caches a response as a side effect of returning it - two things about
 // *when* each step happens matter here, not just what they do. `.clone()`
 // must happen synchronously, before this function returns, or it throws
@@ -45,25 +87,11 @@ function cachePut(event, request, response) {
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  // Only same-origin GET requests are ever handled - anything else (a
-  // POST, a cross-origin font/API call) passes straight through untouched.
-  if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) {
-    return;
-  }
+  const strategy = chooseStrategy(request);
 
-  // A page reload's navigation request can carry cache:"only-if-cached"
-  // paired with mode:"navigate" (not "same-origin") - re-fetching that
-  // exact Request object throws immediately ("'only-if-cached' can be set
-  // only if 'mode' is 'same-origin'"), breaking every reload. Let the
-  // browser handle this one natively instead of intercepting it.
-  if (request.cache === "only-if-cached" && request.mode !== "same-origin") {
-    return;
-  }
+  if (strategy === "passthrough") return;
 
-  // Navigations (loading/reloading the page itself): network-first, so an
-  // online user always gets the current build, falling back to whatever
-  // was last cached (the SPA shell at "/") once offline.
-  if (request.mode === "navigate") {
+  if (strategy === "network-first") {
     event.respondWith(
       fetch(request)
         .then((response) => cachePut(event, request, response))
@@ -72,9 +100,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Everything else (hashed JS/CSS bundles, the manifest, icons): cache-first
-  // - a hashed filename never changes meaning once built, so a cache hit is
-  // never stale.
   event.respondWith(
     caches
       .match(request)

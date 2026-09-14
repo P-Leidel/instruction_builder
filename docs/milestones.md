@@ -46,6 +46,15 @@ the dev server, caught and fixed two real service-worker bugs (a reload
 that crashed outright, and a cache that silently never wrote anything)
 before either ever shipped (see
 [phase-2/progress/task-23-pwa.md](./phase-2/progress/task-23-pwa.md)).
+A 2026-09-14 `/improve-codebase-architecture` review then surfaced four more
+candidates against that same task 23 work; all four were validated against
+the actual source and resolved the same day - an intent-level
+`moveStepUp`/`moveStepDown` seam replacing a leaky splice-index primitive in
+`state/document.ts`, a Vitest guardrail catching future drift between the
+exported SVG's style-baking allowlist and the stylesheet it describes, and
+splitting `public/sw.js`'s routing policy out from its cache-mechanics glue
+(the fourth candidate, `InstructionCanvas.tsx`, needed no remediation - see
+[phase-2/progress/architecture-2026-09-14-review-remediation.md](./phase-2/progress/architecture-2026-09-14-review-remediation.md)).
 Task 24 (Optimize Performance) is next.
 
 This file is the single source of truth for "what phase are we in" -
