@@ -32,14 +32,36 @@ export function beginPointerDrag(event: PointerEvent, handlers: DragHandlers): v
   const startY = event.clientY;
   const threshold = handlers.threshold ?? 6;
   let moved = false;
+  // A trackpad/high-polling-rate mouse can fire several pointermove events
+  // per animation frame; each one otherwise triggered a synchronous
+  // elementFromPoint hit-test (resolveTokenDropTarget) and a signal write
+  // that re-renders the whole canvas (task 24 perf pass - see
+  // docs/phase-2/progress/task-24-performance.md). Coalescing onMove to at
+  // most once per frame, driven by the *last* pointer position seen before
+  // that frame paints, keeps the visible result identical - the eye only
+  // ever sees one position per frame anyway - while cutting the hit-test/
+  // re-render work down to the display's actual refresh rate.
+  let latestX = startX;
+  let latestY = startY;
+  let rafId: number | null = null;
 
   target.setPointerCapture(event.pointerId);
+
+  function flush() {
+    rafId = null;
+    handlers.onMove?.(latestX, latestY);
+  }
 
   function onPointerMove(e: PointerEvent) {
     if (!moved && Math.hypot(e.clientX - startX, e.clientY - startY) > threshold) {
       moved = true;
     }
-    if (moved) handlers.onMove?.(e.clientX, e.clientY);
+    if (!moved) return;
+    latestX = e.clientX;
+    latestY = e.clientY;
+    if (rafId === null) {
+      rafId = requestAnimationFrame(flush);
+    }
   }
 
   function onPointerUp(e: PointerEvent) {
@@ -53,6 +75,10 @@ export function beginPointerDrag(event: PointerEvent, handlers: DragHandlers): v
   }
 
   function cleanup() {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
     // Plain `Element`'s addEventListener only types its small ElementEventMap
     // (fullscreen events etc.) - pointer events live on HTMLElement/
     // SVGElement's GlobalEventHandlersEventMap instead, and `target` here is

@@ -5,9 +5,9 @@
 > any task's status; see "Documentation status conventions" below for how
 > this doc relates to every other doc in `docs/`.
 
-**Current status (2026-09-14): Phase 2 (MVP) is in progress.** Phase 1
-(Concept Validation) is complete. Of Phase 2's 20 tasks, 5–23 are done -
-tasks 18/19 (JSON Export, Import) were deliberately pulled ahead of 15–17
+**Current status (2026-09-14): Phase 2 (MVP) is complete.** Phase 1
+(Concept Validation) is complete, and all 20 of Phase 2's tasks (5–24) are
+done - tasks 18/19 (JSON Export, Import) were deliberately pulled ahead of 15–17
 (SVG/PNG/Print export) on request, since a working JSON round-trip makes
 both automated and manual testing of everything else easier. Task 15
 (SVG Export) picked the original order back up and also folded in an
@@ -55,7 +55,21 @@ exported SVG's style-baking allowlist and the stylesheet it describes, and
 splitting `public/sw.js`'s routing policy out from its cache-mechanics glue
 (the fourth candidate, `InstructionCanvas.tsx`, needed no remediation - see
 [phase-2/progress/architecture-2026-09-14-review-remediation.md](./phase-2/progress/architecture-2026-09-14-review-remediation.md)).
-Task 24 (Optimize Performance) is next.
+Task 24 (Optimize Performance) ran the same audit-first way: the production
+bundle (66.86 kB JS / 21.70 kB gzip) was already trivially under the plan's
+load-time criterion, so that needed no work, and a source-grounded hot-spot
+survey found and fixed one real issue - the drag-and-drop pointer-event
+path did an unthrottled DOM hit-test and signal write on every raw
+`pointermove`, forcing a full canvas re-render even while hovering the same
+slot - via `requestAnimationFrame`-batching in the shared `lib/
+pointer-drag.ts` tracker plus a drop-target equality guard. A second
+finding (the canvas/step list re-rendering wholesale on any edit anywhere
+in the document) was investigated further and found to need a real rework
+of the canvas layout algorithm to fix properly, for a saving judged
+negligible at this app's actual scale - deferred, not fixed; see
+[phase-2/progress/task-24-performance.md](./phase-2/progress/task-24-performance.md)
+and [known-issues.md](./known-issues.md#full-canvasstep-list-re-render-on-any-edit-anywhere-in-the-document).
+With task 24 done, all 20 of Phase 2's tasks (5-24) are complete.
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
@@ -75,7 +89,7 @@ this file existed).
 Exit criterion met: an in-memory clickable prototype validated the
 interaction model. See [phase-1/status-report.md](./phase-1/status-report.md).
 
-## Phase 2: MVP — 🔶 In progress (19 of 20 tasks complete)
+## Phase 2: MVP — ✅ Complete (20 of 20 tasks)
 
 | # | Task | Status |
 |---|---|---|
@@ -98,10 +112,22 @@ interaction model. See [phase-1/status-report.md](./phase-1/status-report.md).
 | 21 | Build Responsive Layouts | ✅ (audit-first pass; found and fixed 3 real overflow bugs plus a desktop-breakpoint canvas-crowding improvement - see [phase-2/progress/task-21-responsive-layouts.md](./phase-2/progress/task-21-responsive-layouts.md)) |
 | 22 | Add Accessibility Features | ✅ (audit-first pass with axe-core + a manual keyboard walkthrough; fixed a WCAG contrast failure, a missing form label, and keyboard-reachability gaps for step reorder and token select - see [phase-2/progress/task-22-accessibility-features.md](./phase-2/progress/task-22-accessibility-features.md)) |
 | 23 | Convert to PWA | ✅ (hand-written service worker, no new dependency; app icons; caught and fixed 2 real SW bugs before shipping - see [phase-2/progress/task-23-pwa.md](./phase-2/progress/task-23-pwa.md)) |
-| 24 | Optimize Performance | ▶️ Next |
+| 24 | Optimize Performance | ✅ (audit-first; bundle size already well under the load-time criterion; fixed an unthrottled drag hit-test/re-render path, investigated and deferred a whole-document re-render finding - see [phase-2/progress/task-24-performance.md](./phase-2/progress/task-24-performance.md)) |
+
+Exit criterion met: a complete instruction editor with saving, exporting,
+and mobile support, per the plan's own definition of Phase 2 (see
+[project-plan.md](./project-plan.md#implementation-plan)) - every task
+audited/verified as it landed rather than assumed done, per this file's own
+per-task notes above. This file's "Documentation status conventions"
+section below calls for freezing
+[phase-2/progress/README.md](./phase-2/progress/README.md) as HISTORICAL
+and starting a `phase-3/progress/README.md` the day a phase's exit criteria
+are met - not yet done here, since Phase 3 itself (Content Pack System,
+Theme System, Validating a second domain) hasn't been scoped with the user
+yet; do that in the same edit Phase 3 actually starts.
 
 See [phase-2/progress/README.md](./phase-2/progress/README.md) for what actually
-shipped in tasks 5–23, plus product additions beyond the
+shipped in tasks 5–24, plus product additions beyond the
 original task list (step titles/details, per-token descriptions, two-stage
 step/token selection, connector lines, the live drag insertion marker, a
 CSS design-token visual refresh, and token/step attachments - a validated

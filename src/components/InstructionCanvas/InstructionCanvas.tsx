@@ -296,7 +296,20 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                                 beginPointerDrag(event, {
                                   onMove: (x, y) => {
                                     dragGhost.value = { label, x, y };
-                                    dropTarget.value = resolveTokenDropTarget(x, y);
+                                    const target = resolveTokenDropTarget(x, y);
+                                    // Reassigning an equal-but-new object would
+                                    // still re-render the whole canvas below
+                                    // (it reads dropTarget.value directly) even
+                                    // though nothing about the hovered slot
+                                    // actually changed - skip the write when
+                                    // the target is the same one already set.
+                                    const current = dropTarget.value;
+                                    if (
+                                      current?.stepId !== target?.stepId ||
+                                      current?.index !== target?.index
+                                    ) {
+                                      dropTarget.value = target;
+                                    }
                                   },
                                   onDrop: (x, y, wasDrag) => {
                                     dragGhost.value = null;

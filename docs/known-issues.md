@@ -171,6 +171,42 @@ only - see
   with it.
 - **First noted:** 2026-09-14.
 
+## Full canvas/step list re-render on any edit anywhere in the document
+
+- **What it is:** `InstructionCanvas.tsx` and `StepList.tsx` both read
+  `document.value.steps` directly in their component body, so editing one
+  step (typing a title, attaching a warning, moving a token) re-renders
+  the *entire* canvas/step list - every step, not just the one that
+  changed. This is the one place this app's `@preact/signals`-based
+  "fine-grained reactivity" (see
+  [project-plan.md](./project-plan.md#technology-stack)) isn't actually
+  exercised; `selectedStep`/`selectedToken` (`state/document.ts`) get this
+  right via `computed()` + referential stability, these two components
+  don't.
+- **Why it's not fixed:** raised and investigated during task 24
+  (Optimize Performance) - see
+  [phase-2/progress/task-24-performance.md](./phase-2/progress/task-24-performance.md#investigated-not-fixed-whole-document-signal-subscription).
+  The seemingly-obvious fix (split each component into a per-step child
+  that reads the relevant signals directly) doesn't actually work today:
+  `lib/canvas-layout.ts`'s `computeCanvasLayout` recomputes every step's
+  `cardY` from scratch on every edit (each step's vertical position
+  depends on every step above it), so per-step layout objects have no
+  referential stability to split components around - a per-step split
+  would still re-render every step after the edited one, just via a
+  different mechanism. A real fix needs `computeCanvasLayout` reworked for
+  incremental per-step stability first - a real change to an
+  already-tested layout module, deferred because the re-render cost it
+  would save is small at this app's actual scale (dozens of DOM nodes,
+  where Preact's diffing is already cheap without memoization).
+- **Revisit if:** a real document grows far beyond "a handful of steps,
+  each with a handful of tokens" (the scale this app and its testing are
+  built around), or if `computeCanvasLayout` ever needs reworking for
+  another reason (e.g. the radial-layout idea in
+  [planned-additions.md](./planned-additions.md#2-radial-steps-point-to-a-center-goal-canvas))
+  and per-step stability could be picked up as a side effect of that work
+  rather than its own isolated cost.
+- **First noted:** 2026-09-14.
+
 ## Persistence: an edit within ~200ms of closing/reloading the tab can be lost
 
 - **What it is:** `state/persistence.ts` (task 12) debounces saves to
