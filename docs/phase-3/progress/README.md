@@ -6,7 +6,7 @@
 > this gets frozen with a HISTORICAL banner the day Phase 3 closes out, and
 > a new `phase-4/progress/README.md` takes over as CURRENT.
 
-Date: 2026-09-14, updated 2026-09-14 (tasks 25-28, plus an architecture
+Date: 2026-09-14, updated 2026-09-14 (tasks 25-29, plus an architecture
 review pass and a pre-launch file/docs and UI audit)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
@@ -26,7 +26,7 @@ still deferred, to Phase 4).
 
 ## Summary
 
-Tasks 25-28 are done. The icon library grew from 12 recipe icons (Phase 2's
+Tasks 25-29 are done. The icon library grew from 12 recipe icons (Phase 2's
 prototype set) to a curated "v1" list of 55 (18 actions, 28 objects, 9
 tools), and `data/sample-tokens.ts` was expanded alongside it so every new
 icon is actually reachable in `TokenPicker` (see
@@ -64,6 +64,15 @@ stronger document-title field contrast - see
 [pre-launch-file-and-ui-audit.md](./pre-launch-file-and-ui-audit.md). Two
 further mobile-only findings were tracked instead of fixed, in
 [known-issues.md](../../known-issues.md#mobile-layout-order-buries-the-canvas-below-an-empty-token-details-placeholder).
+Task 29 (Publish MVP) shipped the same day: a source-grounded `vercel.json`
+(a Content-Security-Policy plus 5 other headers, each directive checked
+against what the app actually uses rather than guessed) and a live
+deployment at <https://instructionbuilder-seven.vercel.app>, verified in a
+real browser against the live URL - including Export PNG end-to-end, the
+one flow that specifically depends on the CSP's `blob:` allowance (see
+[task-29-publish-mvp.md](./task-29-publish-mvp.md)). Git-based
+push-to-deploy is a same-day follow-up, pending the user adding GitHub as
+a Login Connection on their Vercel account.
 
 ## What shipped
 
@@ -77,7 +86,7 @@ One file per task (or per notable pass), in task-number order:
 | 28 | UI Polish Pass | [task-28-ui-polish-pass.md](./task-28-ui-polish-pass.md) |
 | — | Architecture: 2026-09-14 review remediation (`lib/document-actions.ts` extraction, `useConfirmDialogFocusTrap` prop-bag contract, a `known-issues.md` sharpening, and a flaky driver check fixed) | [architecture-2026-09-14-review-remediation.md](./architecture-2026-09-14-review-remediation.md) |
 | — | Pre-launch file/docs audit and UI polish follow-up (stale README, vestigial `tests/`, grid layout fix, toolbar grouping, human-readable durations, deferred incomplete-step badge, document-title contrast) | [pre-launch-file-and-ui-audit.md](./pre-launch-file-and-ui-audit.md) |
-| 29 | Publish MVP | *not started* |
+| 29 | Publish MVP | [task-29-publish-mvp.md](./task-29-publish-mvp.md) |
 | 30 | Test Real Users | *not started* |
 | 31 | Refine UX | *not started* |
 
@@ -96,4 +105,4 @@ One file per task (or per notable pass), in task-number order:
 See [../../milestones.md](../../milestones.md) for the current status at a
 glance, or the full task list in
 [../../project-plan.md](../../project-plan.md#step-by-step-project-tasks).
-Tasks 25-28 are done. Task 29 (Publish MVP) is next.
+Tasks 25-29 are done. Task 30 (Test Real Users) is next.

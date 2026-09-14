@@ -132,6 +132,27 @@ and the document-title field has stronger contrast. Two further
 mobile-only findings were tracked rather than fixed - see
 [phase-3/progress/pre-launch-file-and-ui-audit.md](./phase-3/progress/pre-launch-file-and-ui-audit.md)
 and [known-issues.md](./known-issues.md#mobile-layout-order-buries-the-canvas-below-an-empty-token-details-placeholder).
+Task 29 (Publish MVP) shipped the same day: the Vercel CLI was installed
+and authenticated (`vercel whoami` confirmed the account independently,
+not just the CLI's own success message), a
+[vercel.json](../vercel.json) added a Content-Security-Policy plus 5 other
+security headers scoped to what the app actually needs - grep-verified
+against the source first rather than guessed, e.g. `'unsafe-inline'` in
+`style-src` only because `DragGhost` sets one inline `style` attribute,
+and `blob:` in `img-src` only because PNG export loads its serialized SVG
+through an `<img>` via `URL.createObjectURL` (`lib/svg-export.ts`). The
+project was linked (`p-leidel/instruction_builder`) and deployed via
+`vercel deploy` - Vercel assigns a brand-new project's first deployment to
+production automatically, so this went live immediately rather than as a
+preview - at <https://instructionbuilder-seven.vercel.app>. Verified
+against the live URL in a real headless browser, not just a 200 response:
+all 6 headers confirmed present via `curl -I`, zero console/CSP-violation
+errors, the service worker registers and activates, the manifest loads,
+and - the one path that specifically exercises the CSP's `blob:`
+allowance - Export PNG completes end-to-end (a real downloaded file, not
+just a click). Git-based push-to-deploy was not yet connected at
+deploy time (the Vercel account had no GitHub Login Connection) -
+being finished with the user as a follow-up.
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
@@ -200,7 +221,7 @@ deferred - including a new one from task 18: every export format downloads
 as "untitled-instructions.\<ext\>" because no UI lets the user set
 `meta.title` yet.
 
-## Phase 3: Recipe Content & Launch — Not started
+## Phase 3: Recipe Content & Launch — In progress (5 of 7 tasks)
 
 | # | Task | Status |
 |---|---|---|
@@ -208,7 +229,7 @@ as "untitled-instructions.\<ext\>" because no UI lets the user set
 | 26 | Expand Sample/Starter Tokens | ✅ |
 | 27 | Add Document Title UI | ✅ |
 | 28 | UI Polish Pass | ✅ |
-| 29 | Publish MVP | Not started |
+| 29 | Publish MVP | ✅ (live at <https://instructionbuilder-seven.vercel.app>) |
 | 30 | Test Real Users | Not started |
 | 31 | Refine UX | Not started |
 
