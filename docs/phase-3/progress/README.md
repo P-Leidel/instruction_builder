@@ -69,10 +69,11 @@ Task 29 (Publish MVP) shipped the same day: a source-grounded `vercel.json`
 against what the app actually uses rather than guessed) and a live
 deployment at <https://instructionbuilder-seven.vercel.app>, verified in a
 real browser against the live URL - including Export PNG end-to-end, the
-one flow that specifically depends on the CSP's `blob:` allowance (see
-[task-29-publish-mvp.md](./task-29-publish-mvp.md)). Git-based
-push-to-deploy is a same-day follow-up, pending the user adding GitHub as
-a Login Connection on their Vercel account.
+one flow that specifically depends on the CSP's `blob:` allowance. Git-based
+push-to-deploy is connected too, verified via the Vercel API directly
+rather than the CLI's own success message (see
+[task-29-publish-mvp.md](./task-29-publish-mvp.md)) - every push to
+`main` now deploys automatically.
 
 ## What shipped
 

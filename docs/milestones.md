@@ -150,9 +150,13 @@ all 6 headers confirmed present via `curl -I`, zero console/CSP-violation
 errors, the service worker registers and activates, the manifest loads,
 and - the one path that specifically exercises the CSP's `blob:`
 allowance - Export PNG completes end-to-end (a real downloaded file, not
-just a click). Git-based push-to-deploy was not yet connected at
-deploy time (the Vercel account had no GitHub Login Connection) -
-being finished with the user as a follow-up.
+just a click). Git-based push-to-deploy is also connected now - a GitHub
+Login Connection alone wasn't sufficient (Vercel's separate GitHub App
+also needed repo access, installed via the dashboard's Connect Git
+Repository flow) - confirmed by querying the Vercel API directly for the
+project's `link` object rather than trusting the CLI's "already
+connected" message alone. Every push to `main` now triggers an automatic
+production deployment.
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that

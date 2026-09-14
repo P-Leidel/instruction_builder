@@ -84,14 +84,23 @@ assumed from a 200 response:
   locally (unchanged by this task - no source code changed, only
   `vercel.json` was added).
 
-## What's next
+### 3. Git-based push-to-deploy connected
 
-Git-based push-to-deploy: the user is connecting GitHub as a Login
-Connection on their Vercel account (Settings → Login Connections, per
-<https://vercel.com/docs/accounts/create-an-account#login-methods-and-connections>) -
-once that's done, `vercel git connect` finishes linking the repository so
-every push to `main` deploys automatically, without needing a manual
-`vercel deploy` each time.
+Connecting the GitHub Login Connection alone wasn't enough - the first
+`vercel git connect` retry still failed ("Make sure there aren't any
+typos and that you have access to the repository"), because Vercel's
+GitHub *App* (separate from the account-level Login Connection) still
+needed to be installed with access to this specific repo. Done via the
+dashboard (Project → Settings → Git → Connect Git Repository, which
+drives the GitHub App installation/permission screen directly), after
+which `vercel git connect` reported "already connected." Verified
+independently, not just from that CLI message: queried the Vercel API
+directly (`GET /v9/projects/:id`) and confirmed the project's `link`
+object shows `type: "github"`, the correct repo, and
+`productionBranch: "main"` - every future push to `main` now triggers an
+automatic production deployment, no manual `vercel deploy` needed.
+
+## What's next
 
 See [README.md](./README.md) for Phase 3's overall status. Task 30 (Test
 Real Users) is next.
