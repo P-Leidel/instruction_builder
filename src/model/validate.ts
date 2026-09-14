@@ -8,7 +8,7 @@ export interface StepValidationResult {
 
 /**
  * Phase 1 stub implementing only the single domain-agnostic rule from
- * docs/phase-1/Architecture.md section 2.4 (a step needs at least one action
+ * docs/phase-1/architecture.md section 2.4 (a step needs at least one action
  * token) so StepList can show basic progress in the prototype. The full
  * rule set (quantity metadata checks, etc.) lands in Phase 2 task 14
  * (Implement Visual Validation).

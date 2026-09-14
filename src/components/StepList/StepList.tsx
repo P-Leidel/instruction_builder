@@ -9,10 +9,9 @@ import {
 } from "../../state/document";
 import { validateStep } from "../../model/validate";
 import { dragGhost } from "../../state/drag";
-import { beginPointerDrag } from "../../lib/pointer-drag";
+import { beginPointerDrag, createClickAfterDragGuard } from "../../lib/pointer-drag";
 
-// See TokenPicker.tsx for why this suppression is needed alongside onClick.
-let justDragged = false;
+const dragGuard = createClickAfterDragGuard();
 
 /** Finds the index a step dropped at clientY should land at, among `[data-step-index]` items. */
 function resolveDropIndex(clientY: number, container: HTMLElement): number {
@@ -30,8 +29,14 @@ function resolveDropIndex(clientY: number, container: HTMLElement): number {
  * Lists all steps in the document and lets the user select/add/remove/
  * reorder one. Reordering (task 9) is a drag on the step button itself,
  * sharing the same Pointer Events tracker as the canvas/picker; a quick tap
- * (no real movement) still just selects the step, same as Phase 1. The
- * keyboard move-up/move-down alternative for reordering is task 22.
+ * (no real movement) still just selects the step, same as Phase 1. Task 22
+ * adds Move up/down buttons as the keyboard-operable alternative to that
+ * drag - `reorderSteps(index, index - 1)` / `reorderSteps(index, index + 2)`
+ * land the step exactly one slot earlier/later (see reorderStepsCore's
+ * drop-before-removal semantics in state/document.ts); the `+ 2` (not `+ 1`)
+ * is because moving one slot forward means landing *after* the very next
+ * step, which - expressed as a pre-removal index - is two slots ahead, not
+ * one.
  */
 export function StepList() {
   const steps = document.value.steps;
@@ -53,10 +58,7 @@ export function StepList() {
                 aria-current={isSelected ? "step" : undefined}
                 aria-describedby={!result.isComplete ? issuesId : undefined}
                 onClick={() => {
-                  if (justDragged) {
-                    justDragged = false;
-                    return;
-                  }
+                  if (dragGuard.wasJustDragged()) return;
                   selectStep(step.id);
                 }}
                 onPointerDown={(event) => {
@@ -67,7 +69,7 @@ export function StepList() {
                     onDrop: (_x, y, wasDrag) => {
                       dragGhost.value = null;
                       if (!wasDrag || !listRef.current) return;
-                      justDragged = true;
+                      dragGuard.markDragged();
                       reorderSteps(index, resolveDropIndex(y, listRef.current));
                     },
                   });
@@ -86,6 +88,28 @@ export function StepList() {
                   </span>
                 )}
               </button>
+              {steps.length > 1 && (
+                <div class="step-list__reorder">
+                  <button
+                    type="button"
+                    class="step-list__move"
+                    aria-label={`Move step ${index + 1} up`}
+                    disabled={index === 0}
+                    onClick={() => reorderSteps(index, index - 1)}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    class="step-list__move"
+                    aria-label={`Move step ${index + 1} down`}
+                    disabled={index === steps.length - 1}
+                    onClick={() => reorderSteps(index, index + 2)}
+                  >
+                    ↓
+                  </button>
+                </div>
+              )}
               {steps.length > 1 && (
                 <button
                   type="button"

@@ -75,6 +75,34 @@ export interface TokenDropTarget {
 }
 
 /**
+ * A real drag ends with a `pointerup` that also fires the browser's
+ * compatibility `click` event right after - needed for keyboard/simple-tap
+ * activation, but not wanted a second time when `onDrop` already handled the
+ * drop. Call `markDragged()` from `onDrop` when `wasDrag` is true, and check
+ * `wasJustDragged()` at the top of the element's own `onClick` to swallow
+ * that one synthetic click. Plain module-scope state (not a hook) to match
+ * `beginPointerDrag`/`resolveTokenDropTarget` above - callers that need one
+ * of these keep exactly one instance for their component's lifetime, same
+ * as the `let` this replaces.
+ */
+export function createClickAfterDragGuard(): {
+  wasJustDragged: () => boolean;
+  markDragged: () => void;
+} {
+  let justDragged = false;
+  return {
+    wasJustDragged: () => {
+      if (!justDragged) return false;
+      justDragged = false;
+      return true;
+    },
+    markDragged: () => {
+      justDragged = true;
+    },
+  };
+}
+
+/**
  * Hit-tests the point under the pointer (via `elementFromPoint`, which
  * works regardless of SVG transforms) against `data-step-id`/
  * `data-token-index` attributes rendered by InstructionCanvas, to find

@@ -22,7 +22,11 @@
   --color-text: #1d1d1f;
   --color-text-muted: #6b6e76;
 
-  --color-accent: #4f6bff;
+  /* #4b66f2, not the more obvious #4f6bff - the more obvious shade's white
+     text/icons on it (buttons, active tabs) only reach a 4.3:1 contrast
+     ratio, short of WCAG AA's 4.5:1 minimum for normal-size text (task 22,
+     caught by an axe-core audit). This shade clears it at ~4.69:1. */
+  --color-accent: #4b66f2;
   --color-accent-soft: #eef1ff;
   --color-accent-contrast: #ffffff;
 
@@ -128,8 +132,17 @@ button {
 
 .app__file-controls {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  flex-shrink: 0;
+  /* No flex-shrink: 0 here (unlike its sibling toolbar groups) and an
+     explicit min-width: 0: this group's own flex-wrap only ever gets a
+     chance to break its 5 buttons onto multiple rows if the outer
+     .app__toolbar is actually allowed to size this item narrower than its
+     un-wrapped content width (~550px) first - flex-shrink: 0 would pin it
+     at that full width forever, wrapping never triggering, which is what
+     pushed "Export PDF"/Import off the right edge of narrow viewports. */
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .app__file-button {
@@ -145,6 +158,65 @@ button {
 
 .app__file-button:hover {
   background: var(--color-app-bg);
+}
+
+/* Task 15 (SVG Export): a permanently-mounted, read-only InstructionCanvas
+   that exists purely so Export SVG always has a live, current SVG node to
+   serialize (lib/svg-export.ts) - never shown, never focusable, and never
+   affects page layout/scroll. `clamp(480px, 100%, 960px)` on
+   .instruction-canvas__svg still gives it a real internal width even inside
+   a 0x0 container, so it renders normally (just clipped from view) rather
+   than collapsing to nothing. */
+.app__export-canvas {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* Task 17 (Print/PDF Export), baseline tier: "Export PDF" is just
+   `window.print()` (lib/pdf-export.ts) - all the actual work is here.
+   Hide every other region of the page and turn the always-mounted,
+   read-only .app__export-canvas (see above) from a 0x0 clipped box back
+   into normal flow, so the print/"Save as PDF" output is just that one
+   clean canvas - no toolbar, no panels, no toasts/dialogs, and none of
+   the editor's editing-only affordances. */
+@media print {
+  .app__toolbar,
+  .app__persistence-warning,
+  .app__toast,
+  .app__main,
+  .drag-ghost,
+  .import-confirm-overlay {
+    display: none !important;
+  }
+
+  body,
+  .app {
+    background: #fff;
+  }
+
+  .app__export-canvas {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+  }
+
+  /* Panel chrome (shadow, background tint, rounded corners) reads as UI
+     chrome, not content - strip it so the printed page is just the
+     instructions. */
+  .app__export-canvas .instruction-canvas {
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .app__export-canvas .instruction-canvas__svg {
+    width: 100%;
+  }
 }
 
 .app__toast {
@@ -275,7 +347,16 @@ button {
   .app__main {
     max-width: none;
     display: grid;
-    grid-template-columns: 240px 1fr 280px;
+    /* Fluid, not fixed: at exactly 800px, fixed 240px/280px side columns left
+       only ~216px for the canvas - well under its own 480px minimum
+       (.instruction-canvas__svg's clamp below), forcing every document into
+       a cramped horizontal scroll immediately above the breakpoint instead
+       of only on genuinely narrow desktop windows. Shrinking the side
+       columns first reclaims real room for the canvas as the viewport
+       narrows; the vw-scaled middle of each clamp reaches its ceiling
+       (identical to the old fixed width) well before 1400px, so nothing
+       changes at typical desktop widths. */
+    grid-template-columns: clamp(200px, 24vw, 240px) minmax(280px, 1fr) clamp(210px, 30vw, 280px);
     grid-template-rows: auto auto minmax(0, 1fr);
     grid-template-areas:
       "panel-steps canvas panel-tokens"
@@ -399,6 +480,12 @@ button {
 
 .step-list__item {
   flex: 1;
+  /* Without this, a long, unbroken step title (.step-list__summary's
+     white-space: nowrap) sets this flex item's own automatic minimum width
+     to that title's full unwrapped size - overriding flex: 1 and refusing
+     to shrink below it, which both defeats the summary's own
+     overflow/text-overflow ellipsis and forces the whole page wider. */
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -444,6 +531,32 @@ button {
   min-width: 44px;
   min-height: 44px;
   border-radius: var(--radius-sm);
+}
+
+.step-list__reorder {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.step-list__move {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  line-height: 1;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.step-list__move:not(:disabled):hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.step-list__move:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .step-list__add {
@@ -518,12 +631,34 @@ button {
   gap: 0.5rem;
 }
 
-.step-details__token {
+.step-details__token-button {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  /* The label track was a plain `auto` - for a long user-typed token title,
+     that greedily claims space up to its own max-content width before the
+     description's `1fr` track gets anything, starving it down to an
+     unreadably narrow, one-word-per-line column. `minmax(0, ...)` on both
+     text tracks makes them share the row's actual available width instead. */
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.3fr);
   align-items: baseline;
   gap: 0.4rem;
+  width: 100%;
+  padding: 0.3rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
   font-size: 0.85rem;
+  text-align: left;
+}
+
+.step-details__token-button:hover {
+  background: var(--color-surface-sunken);
+}
+
+.step-details__token-button--selected {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 .step-details__token-label {

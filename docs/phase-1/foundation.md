@@ -2,10 +2,10 @@
 
 > 🗄️ **Doc status: HISTORICAL — superseded.** Frozen 2026-09-13 when Phase 1
 > closed out. Not edited further. For current status, see
-> [Milestones.md](../Milestones.md); see its "Documentation status
+> [milestones.md](../milestones.md); see its "Documentation status
 > conventions" section for what CURRENT/HISTORICAL mean.
 
-This document explains every file generated for Phase 1 (task 4, "Build Project Foundation") and why it exists, following the architecture approved in [Architecture.md](./Architecture.md). Planning and architecture documents live in this `docs/` folder (organized into per-phase subfolders), kept separate from the buildable project at the repo root so the root stays a clean, standard Vite/Preact project.
+This document explains every file generated for Phase 1 (task 4, "Build Project Foundation") and why it exists, following the architecture approved in [architecture.md](./architecture.md). Planning and architecture documents live in this `docs/` folder (organized into per-phase subfolders), kept separate from the buildable project at the repo root so the root stays a clean, standard Vite/Preact project.
 
 The project uses Node.js 20+ and is intended to deploy as a static Vite build on Vercel.
 
@@ -68,7 +68,7 @@ instruction-builder/
 ├── index.html, vite.config.ts, tsconfig*.json, package.json, eslint.config.js
 ```
 
-This is exactly the structure proposed in [Architecture.md § 4](./Architecture.md#4-folder-structure), so no reshuffling is needed when Phase 2 tasks (icon library, testing, canvas) start filling in the currently-empty `public/icons/` and `tests/` folders.
+This is exactly the structure proposed in [architecture.md § 4](./architecture.md#4-folder-structure), so no reshuffling is needed when Phase 2 tasks (icon library, testing, canvas) start filling in the currently-empty `public/icons/` and `tests/` folders.
 
 ### `src/model/`
 - **`instruction.ts`** — the `InstructionDocument`/`InstructionStep`/`InstructionToken` interfaces and `CURRENT_SCHEMA_VERSION`, exactly as specified in the architecture doc §2.2, plus small factory helpers (`createEmptyDocument`, `createEmptyStep`, `createToken`) used by `state/document.ts` and the components.
@@ -105,7 +105,7 @@ Per the project plan, full PWA conversion (installability, offline service worke
 ## Initial application shell
 
 **[`src/app.tsx`](../../src/app.tsx)**
-Renders `StepList`, `StepBuilder`, and `TokenPicker` in one static layout (a header plus a responsive grid). This is not the final "toolbar / canvas / side panel" shell from the architecture doc §5 — that's Phase 2 task 5 (Create UI Layout). Phase 1's shell exists only to host the three prototype components so the interaction model (task 2/3) can actually be clicked through and validated, per the Phase 1 exit criterion in [Architecture.md § 6](./Architecture.md#6-phased-implementation-roadmap).
+Renders `StepList`, `StepBuilder`, and `TokenPicker` in one static layout (a header plus a responsive grid). This is not the final "toolbar / canvas / side panel" shell from the architecture doc §5 — that's Phase 2 task 5 (Create UI Layout). Phase 1's shell exists only to host the three prototype components so the interaction model (task 2/3) can actually be clicked through and validated, per the Phase 1 exit criterion in [architecture.md § 6](./architecture.md#6-phased-implementation-roadmap).
 
 ---
 

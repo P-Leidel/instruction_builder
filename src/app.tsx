@@ -12,22 +12,77 @@ import { persistenceStatus } from "./state/persistence";
 import { document, undo, redo, canUndo, canRedo } from "./state/document";
 import { validateDocument } from "./model/validate";
 import { exportDocumentAsJson, parseImportedDocument } from "./lib/document-file";
+import { exportCanvasAsSvg } from "./lib/svg-export";
+import { exportCanvasAsPng } from "./lib/png-export";
+import { exportCanvasAsPdf } from "./lib/pdf-export";
 
 /**
- * Task 18 (JSON Export): downloads the current document, then - task 14's
- * link into export - shows a non-blocking warning toast if any step is
- * incomplete. The file downloads either way; this only informs, it never
- * gates the export.
+ * Task 14's link into every export format: a non-blocking warning toast
+ * naming how many steps are incomplete. The file has always already
+ * downloaded by the time this is called - it only informs, it never gates
+ * an export. Shared by JSON (18), SVG (15), and PNG (16) exports rather
+ * than repeated a third time verbatim.
  */
-function handleExport(): void {
+function warnAboutIncompleteSteps(): void {
   const issues = validateDocument(document.value).filter((result) => !result.isComplete);
-  exportDocumentAsJson(document.value);
   if (issues.length > 0) {
     toast.value = {
       text: `Exported with ${issues.length} incomplete step${issues.length === 1 ? "" : "s"} (missing an action, or empty).`,
       tone: "warning",
     };
   }
+}
+
+/** Task 18 (JSON Export): downloads the current document as pretty-printed JSON. */
+function handleExportJson(): void {
+  exportDocumentAsJson(document.value);
+  warnAboutIncompleteSteps();
+}
+
+/**
+ * Task 15 (SVG Export) / Task 16 (PNG Export): both serialize the hidden,
+ * always-mounted read-only `InstructionCanvas` kept in `exportCanvasRef`
+ * below - never the visible editor canvas, which carries editing-only
+ * affordances (remove buttons, selection outlines) that shouldn't end up in
+ * an exported file.
+ */
+function handleExportSvg(svgElement: SVGSVGElement | null): void {
+  if (!svgElement) return; // the hidden export canvas hasn't mounted yet - shouldn't happen once past first render
+  try {
+    exportCanvasAsSvg(svgElement, document.value.meta.title);
+    warnAboutIncompleteSteps();
+  } catch (err) {
+    toast.value = {
+      text: err instanceof Error ? err.message : "Could not export an SVG.",
+      tone: "error",
+    };
+  }
+}
+
+async function handleExportPng(svgElement: SVGSVGElement | null): Promise<void> {
+  if (!svgElement) return; // the hidden export canvas hasn't mounted yet - shouldn't happen once past first render
+  try {
+    await exportCanvasAsPng(svgElement, document.value.meta.title);
+    warnAboutIncompleteSteps();
+  } catch (err) {
+    toast.value = {
+      text: err instanceof Error ? err.message : "Could not export a PNG.",
+      tone: "error",
+    };
+  }
+}
+
+/**
+ * Task 17 (Print/PDF Export), baseline tier: opens the browser's print
+ * dialog - "Save as PDF" is one of its built-in destinations on every
+ * major browser/OS, which is what makes `window.print()` a legitimate
+ * MVP PDF export rather than just a printing feature. What's on the
+ * printed page is controlled entirely by the `@media print` rules in
+ * global.css, not by anything here.
+ */
+function handleExportPdf(): void {
+  exportCanvasAsPdf();
+  warnAboutIncompleteSteps();
 }
 
 /**
@@ -88,14 +143,14 @@ function useHistoryKeyboardShortcuts(): void {
 
 /**
  * Phase 2 task 5: the toolbar/canvas/panel regions from
- * docs/phase-1/Architecture.md section 5. Placement is driven entirely by
+ * docs/phase-1/architecture.md section 5. Placement is driven entirely by
  * grid-template-areas in global.css, so repositioning a region later (e.g.
  * moving StepList to the other side) is a CSS-only change - no markup here
  * needs to move.
  *
  * The canvas region now renders InstructionCanvas (task 6), replacing
  * Phase 1's StepBuilder HTML prototype now that the interaction model is
- * validated (docs/phase-1/UX-and-Wireframes.md).
+ * validated (docs/phase-1/ux-and-wireframes.md).
  *
  * Task 8 (Live Preview): toggling `previewMode` swaps the whole editor for
  * a read-only `InstructionCanvas` - the exact same SVG, just with every
@@ -105,10 +160,32 @@ function useHistoryKeyboardShortcuts(): void {
  * state/persistence.ts, invisibly, unless that fails (e.g. Safari private
  * browsing), in which case a banner here warns that changes won't survive
  * closing the tab rather than losing work silently.
+ *
+ * Task 15 (SVG Export) / Task 16 (PNG Export): a second `InstructionCanvas`
+ * (`readOnly`) is always mounted, hidden via `.app__export-canvas` in
+ * global.css - never shown, never interactive - purely so both export
+ * buttons always have a live, current SVG node to read from
+ * (`lib/svg-export.ts`, `lib/png-export.ts`) without re-rendering or
+ * recomputing layout of their own, and without exporting the visible
+ * editor's editing-only affordances (remove buttons, selection outlines).
+ * PNG export rasterizes that same node's serialized markup rather than
+ * re-deriving anything - see `lib/svg-export.ts`'s
+ * `rasterizeCanvasToPngBlob`.
+ *
+ * Task 17 (Print/PDF Export): that same hidden export canvas doubles as
+ * the print source - `global.css`'s `@media print` block hides everything
+ * else on the page (`.app__toolbar`, `.app__main`, toasts, dialogs) and
+ * un-hides `.app__export-canvas` for the duration of the print, so
+ * "Export PDF" (`window.print()`, `lib/pdf-export.ts`) prints the exact
+ * same read-only rendering SVG/PNG export already use, rather than
+ * whatever the editor happens to be showing.
  */
 export function App() {
   useHistoryKeyboardShortcuts();
   const importInputRef = useRef<HTMLInputElement>(null);
+  const exportCanvasRef = useRef<HTMLDivElement>(null);
+  const getExportSvgElement = () =>
+    exportCanvasRef.current?.querySelector<SVGSVGElement>(".instruction-canvas__svg") ?? null;
 
   return (
     <div class="app">
@@ -140,8 +217,17 @@ export function App() {
           </button>
         </div>
         <div class="app__file-controls">
-          <button type="button" class="app__file-button" onClick={handleExport}>
-            Export
+          <button type="button" class="app__file-button" onClick={handleExportJson}>
+            Export JSON
+          </button>
+          <button type="button" class="app__file-button" onClick={() => handleExportSvg(getExportSvgElement())}>
+            Export SVG
+          </button>
+          <button type="button" class="app__file-button" onClick={() => handleExportPng(getExportSvgElement())}>
+            Export PNG
+          </button>
+          <button type="button" class="app__file-button" onClick={handleExportPdf}>
+            Export PDF
           </button>
           <button type="button" class="app__file-button" onClick={() => importInputRef.current?.click()}>
             Import
@@ -150,6 +236,7 @@ export function App() {
             ref={importInputRef}
             type="file"
             accept="application/json,.json"
+            aria-label="Import instruction file"
             class="visually-hidden"
             onChange={handleImportFileChange}
           />
@@ -200,6 +287,9 @@ export function App() {
       </main>
       <DragGhost />
       <ImportConfirmDialog />
+      <div class="app__export-canvas" aria-hidden="true" ref={exportCanvasRef}>
+        <InstructionCanvas readOnly />
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * The instruction data model — see docs/phase-1/Architecture.md section 2
+ * The instruction data model — see docs/phase-1/architecture.md section 2
  * for the full design rationale. Every type here is plain, JSON-serializable
  * data with no behavior, so a document round-trips through JSON.stringify/
  * parse cleanly for the Phase 2 export/import tasks.
@@ -21,7 +21,7 @@ export type TokenCategory =
  * its own in a step's token list - e.g. a "2 cups" quantity or a "Sharp!"
  * warning attached to a "Chop" action. Deliberately lighter than
  * `InstructionToken`: it has no `id` (it isn't independently ordered,
- * dragged, or connector-line-endpointed - see docs/Planned-Additions.md #1,
+ * dragged, or connector-line-endpointed - see docs/planned-additions.md #1,
  * which this implements) and no `note`/`metadata` (nothing today needs a
  * user note on an attachment itself; add if that changes).
  */

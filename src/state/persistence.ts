@@ -1,7 +1,9 @@
 import { get, set } from "idb-keyval";
 import { signal, effect } from "@preact/signals";
 import { document, selectStep } from "./document";
-import { CURRENT_SCHEMA_VERSION, type InstructionDocument } from "../model/instruction";
+import type { InstructionDocument } from "../model/instruction";
+import { migrate } from "../model/migrate";
+import { toast } from "./ui";
 
 const STORAGE_KEY = "instruction-builder:document";
 const PROBE_KEY = "instruction-builder:probe";
@@ -28,6 +30,16 @@ export const persistenceStatus = signal<PersistenceStatus>("loading");
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let pendingDoc: InstructionDocument | undefined;
+/**
+ * Set for exactly one autosave cycle when a saved document existed but
+ * couldn't be loaded (see the `catch` in `initPersistence` below) - guards
+ * against the autosave `effect()` below immediately overwriting that
+ * still-present-but-unreadable record with the fallback empty document the
+ * instant it's wired up. The next *real* edit still saves normally; this
+ * only skips the one write that would otherwise happen before the user has
+ * done anything.
+ */
+let skipNextAutosave = false;
 
 /**
  * Writes whatever the most recent debounced change was, right now, bypassing
@@ -68,11 +80,16 @@ function flushPendingSave(): void {
  * would flash on screen and then get clobbered once the real saved
  * document loads a moment later.
  *
- * A saved document from a newer, incompatible schema version is discarded
- * in favor of the default empty document rather than crashing - see
- * docs/phase-1/Architecture.md section 2.3 for the full migration strategy,
- * which task 19 (Import System) implements; task 12 only needs to not lose
- * data or throw on an old/foreign document.
+ * Every saved document, same-version or not, is run through the same
+ * `migrate()` the JSON import flow (task 19) uses instead of being trusted
+ * with a bare cast - a same-version record can still be malformed (a
+ * crashed mid-write, a manual devtools edit) and `migrate` catches that too.
+ * If it upgrades/validates cleanly, that's what loads; if `migrate` rejects
+ * it (unreadable, corrupted, or from a newer app version than this one
+ * supports), the app falls back to the default empty document and warns via
+ * `toast` rather than silently discarding the save - see `skipNextAutosave`
+ * below for how it also avoids overwriting that still-present record on
+ * disk before the user has done anything.
  */
 export async function initPersistence(): Promise<void> {
   try {
@@ -82,14 +99,23 @@ export async function initPersistence(): Promise<void> {
     }
 
     const saved = await get<InstructionDocument>(STORAGE_KEY);
-    if (saved && saved.schemaVersion === CURRENT_SCHEMA_VERSION) {
-      document.value = saved;
-      // `selectedStepId` was already initialized (at module load, in
-      // document.ts) against the throwaway default document created before
-      // this async load resolved - it points at a step id that no longer
-      // exists once `saved` replaces it, so reselect the loaded doc's first
-      // step (also resets selectedTokenId via selectStep).
-      selectStep(saved.steps[0]?.id ?? null);
+    if (saved) {
+      try {
+        const loaded = migrate(saved);
+        document.value = loaded;
+        // `selectedStepId` was already initialized (at module load, in
+        // document.ts) against the throwaway default document created before
+        // this async load resolved - it points at a step id that no longer
+        // exists once `loaded` replaces it, so reselect the loaded doc's
+        // first step (also resets selectedTokenId via selectStep).
+        selectStep(loaded.steps[0]?.id ?? null);
+      } catch (err) {
+        skipNextAutosave = true;
+        toast.value = {
+          text: `Your saved instructions couldn't be loaded (${err instanceof Error ? err.message : "unknown error"}) - starting a new document instead. The old save has not been overwritten.`,
+          tone: "error",
+        };
+      }
     }
     persistenceStatus.value = "available";
   } catch {
@@ -99,6 +125,10 @@ export async function initPersistence(): Promise<void> {
 
   effect(() => {
     pendingDoc = document.value;
+    if (skipNextAutosave) {
+      skipNextAutosave = false;
+      return;
+    }
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(flushPendingSave, SAVE_DEBOUNCE_MS);
   });

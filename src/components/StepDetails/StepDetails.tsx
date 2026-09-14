@@ -1,14 +1,28 @@
-import { selectedStep, updateStepTitle, updateStepDescription, setStepTime } from "../../state/document";
+import {
+  selectedStep,
+  selectedTokenId,
+  selectToken,
+  updateStepTitle,
+  updateStepDescription,
+  setStepTime,
+} from "../../state/document";
 import { descriptionFor } from "../../data/sample-tokens";
 import { Icon } from "../Icon/Icon";
 import { DurationField } from "../DurationField/DurationField";
 
 /**
- * Editor for the selected step's user-authored title/details, plus a
- * read-only list of its tokens with the app-given description for each
- * (from sample-tokens.ts - becomes the icon library's data once task 7
- * lands). Lives below StepList in the same panel column (see the
- * "step-details" grid area in global.css).
+ * Editor for the selected step's user-authored title/details, plus a list
+ * of its tokens with the app-given description for each (from
+ * sample-tokens.ts - becomes the icon library's data once task 7 lands).
+ * Lives below StepList in the same panel column (see the "step-details"
+ * grid area in global.css).
+ *
+ * Task 22: each token in that list is also a button selecting it (this list
+ * only renders once a step is already selected, so the canvas's two-stage
+ * select rule - a token only selects once its step does - is automatically
+ * satisfied). This is the keyboard-operable path to a token's TokenDetails
+ * panel; the canvas's own SVG token chips remain pointer/touch-only, same as
+ * before.
  */
 export function StepDetails() {
   const step = selectedStep.value;
@@ -63,13 +77,23 @@ export function StepDetails() {
           <p class="step-details__empty">No tokens yet - add some from the panel on the right.</p>
         ) : (
           <ul class="step-details__token-list">
-            {step.tokens.map((token) => (
-              <li key={token.id} class="step-details__token">
-                <Icon iconId={token.iconId} size={18} />
-                <span class="step-details__token-label">{token.label ?? token.iconId}</span>
-                <span class="step-details__token-description">{descriptionFor(token.iconId)}</span>
-              </li>
-            ))}
+            {step.tokens.map((token) => {
+              const isSelected = token.id === selectedTokenId.value;
+              return (
+                <li key={token.id} class="step-details__token">
+                  <button
+                    type="button"
+                    class={`step-details__token-button${isSelected ? " step-details__token-button--selected" : ""}`}
+                    aria-current={isSelected ? "true" : undefined}
+                    onClick={() => selectToken(step.id, token.id)}
+                  >
+                    <Icon iconId={token.iconId} size={18} />
+                    <span class="step-details__token-label">{token.label ?? token.iconId}</span>
+                    <span class="step-details__token-description">{descriptionFor(token.iconId)}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

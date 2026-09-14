@@ -1,8 +1,9 @@
-import { signal, computed } from "@preact/signals";
+import { signal, computed, type Signal, type ReadonlySignal } from "@preact/signals";
 import {
   createEmptyDocument,
   createEmptyStep,
   type InstructionDocument,
+  type InstructionStep,
   type InstructionToken,
   type TokenAttachment,
   type DurationAttachment,
@@ -17,44 +18,7 @@ import {
  */
 export type AttachmentKind = "quantity" | "warning";
 
-/**
- * All mutable app state lives in signals rather than component state, so the
- * step list, step builder, and (from Phase 2 onward) the canvas stay in sync
- * without prop-drilling. Phase 1 holds this in memory only — no persistence,
- * no undo — matching the Phase 1 scope in docs/phase-1/Architecture.md.
- *
- * Note: the `document` signal below intentionally shadows the DOM's global
- * `document`. No file in src/ needs both in the same scope today, but if one
- * ever does, import this one under an alias (e.g. `import { document as doc }`).
- */
-export const document = signal<InstructionDocument>(createEmptyDocument());
-export const selectedStepId = signal<string | null>(
-  document.value.steps[0]?.id ?? null,
-);
-/**
- * A token is only ever considered "selected" alongside its (also-selected)
- * step - see InstructionCanvas's two-stage click behavior: the first click
- * on a step selects the step, and only a further click on one of its tokens
- * selects that token. Always go through selectStep/selectToken below rather
- * than assigning these two signals directly, so they can't drift out of sync
- * (e.g. a token staying "selected" after its step is deselected).
- */
-export const selectedTokenId = signal<string | null>(null);
-
-/**
- * Task 13 (Undo/Redo): `past`/`future` hold whole prior/subsequent document
- * snapshots rather than individual diffs - the document is small enough
- * (a handful of steps/tokens) that snapshotting is simpler and safer than a
- * command/diff log, and every mutator below already produces a fresh
- * immutable `InstructionDocument` via `setSteps`, so a snapshot is just
- * "the value `document` held right before this change."
- */
 const MAX_HISTORY = 100;
-export const past = signal<InstructionDocument[]>([]);
-export const future = signal<InstructionDocument[]>([]);
-export const canUndo = computed(() => past.value.length > 0);
-export const canRedo = computed(() => future.value.length > 0);
-
 /**
  * Free-text fields (step/token title and notes) call their mutator on every
  * keystroke (see StepDetails/TokenDetails - no local draft state, unlike
@@ -69,91 +33,125 @@ export const canRedo = computed(() => future.value.length > 0);
  * entry, since each already represents one discrete user action.
  */
 const COALESCE_WINDOW_MS = 700;
-let lastPushWasCoalesce = false;
-let lastPushAt = 0;
 
-function recordHistory(coalesce: boolean): void {
+/**
+ * A document session is a whole editable document plus its undo/redo history
+ * and selection - everything one instance of the app has open at a time.
+ * `createDocumentSession` is the module's seam: the app runs on exactly one
+ * session (the module-level default below, preserved for every existing
+ * caller), but a test - or a future second, embedded instance of the app -
+ * can construct its own, independent of the browser's single JS realm. See
+ * CONTEXT.md for this term and docs/known-issues.md for the module-level-
+ * singleton design debt this replaces.
+ *
+ * The `_lastPushWasCoalesce`/`_lastPushAt` fields are the coalescing clock
+ * (see `COALESCE_WINDOW_MS` above) - mutable bookkeeping private to
+ * `recordHistory`, carried on the session object itself (rather than as a
+ * closure variable) so every session gets its own clock instead of sharing
+ * one across instances.
+ */
+export interface DocumentSession {
+  readonly document: Signal<InstructionDocument>;
+  /**
+   * A token is only ever considered "selected" alongside its (also-selected)
+   * step - see InstructionCanvas's two-stage click behavior: the first click
+   * on a step selects the step, and only a further click on one of its
+   * tokens selects that token. Always go through selectStep/selectToken
+   * rather than assigning these two signals directly, so they can't drift
+   * out of sync (e.g. a token staying "selected" after its step is
+   * deselected).
+   */
+  readonly selectedStepId: Signal<string | null>;
+  readonly selectedTokenId: Signal<string | null>;
+  /**
+   * Task 13 (Undo/Redo): `past`/`future` hold whole prior/subsequent document
+   * snapshots rather than individual diffs - the document is small enough
+   * (a handful of steps/tokens) that snapshotting is simpler and safer than a
+   * command/diff log, and every mutator already produces a fresh immutable
+   * `InstructionDocument` via `setSteps`, so a snapshot is just "the value
+   * `document` held right before this change."
+   */
+  readonly past: Signal<InstructionDocument[]>;
+  readonly future: Signal<InstructionDocument[]>;
+  readonly canUndo: ReadonlySignal<boolean>;
+  readonly canRedo: ReadonlySignal<boolean>;
+  readonly selectedStep: ReadonlySignal<InstructionStep | null>;
+  readonly selectedToken: ReadonlySignal<InstructionToken | null>;
+  /** @internal coalescing clock - only recordHistory reads/writes these. */
+  _lastPushWasCoalesce: boolean;
+  _lastPushAt: number;
+}
+
+/**
+ * Constructs a fresh, independent document session - all mutable app state
+ * lives in signals rather than component state, so the step list, step
+ * builder, and canvas stay in sync without prop-drilling, but nothing here
+ * is bound to a module-level global: two sessions never share a signal.
+ */
+export function createDocumentSession(
+  initial: InstructionDocument = createEmptyDocument(),
+): DocumentSession {
+  const documentSignal = signal<InstructionDocument>(initial);
+  const selectedStepId = signal<string | null>(initial.steps[0]?.id ?? null);
+  const selectedTokenId = signal<string | null>(null);
+  const past = signal<InstructionDocument[]>([]);
+  const future = signal<InstructionDocument[]>([]);
+  const canUndo = computed(() => past.value.length > 0);
+  const canRedo = computed(() => future.value.length > 0);
+  const selectedStep = computed(
+    () => documentSignal.value.steps.find((s) => s.id === selectedStepId.value) ?? null,
+  );
+  const selectedToken = computed(
+    () => selectedStep.value?.tokens.find((t) => t.id === selectedTokenId.value) ?? null,
+  );
+
+  return {
+    document: documentSignal,
+    selectedStepId,
+    selectedTokenId,
+    past,
+    future,
+    canUndo,
+    canRedo,
+    selectedStep,
+    selectedToken,
+    _lastPushWasCoalesce: false,
+    _lastPushAt: 0,
+  };
+}
+
+function recordHistory(session: DocumentSession, coalesce: boolean): void {
   const now = Date.now();
-  const withinCoalesceWindow = coalesce && lastPushWasCoalesce && now - lastPushAt < COALESCE_WINDOW_MS;
+  const withinCoalesceWindow =
+    coalesce && session._lastPushWasCoalesce && now - session._lastPushAt < COALESCE_WINDOW_MS;
   if (!withinCoalesceWindow) {
-    const next = [...past.value, document.value];
-    past.value = next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next;
-    future.value = [];
+    const next = [...session.past.value, session.document.value];
+    session.past.value = next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next;
+    session.future.value = [];
   }
-  lastPushWasCoalesce = coalesce;
-  lastPushAt = now;
+  session._lastPushWasCoalesce = coalesce;
+  session._lastPushAt = now;
 }
 
 /**
  * Restores a history snapshot as the live document, re-resolving selection
  * against it rather than assigning `selectedStepId`/`selectedTokenId`
- * directly via `selectStep`/`selectToken` (see the note on those above) -
- * this is the one place that deliberately deviates, because undo/redo
- * should keep the current selection alive across a change that didn't
- * touch it (e.g. undoing an edit to a *different* step) instead of always
- * resetting to "no token selected" the way every other mutation does.
+ * directly via `selectStepCore`/`selectTokenCore` (see the note on those
+ * below) - this is the one place that deliberately deviates, because
+ * undo/redo should keep the current selection alive across a change that
+ * didn't touch it (e.g. undoing an edit to a *different* step) instead of
+ * always resetting to "no token selected" the way every other mutation does.
  */
-function restoreDocument(doc: InstructionDocument): void {
-  document.value = { ...doc, meta: { ...doc.meta, updatedAt: new Date().toISOString() } };
-  const stepId = doc.steps.some((s) => s.id === selectedStepId.value)
-    ? selectedStepId.value
+function restoreDocument(session: DocumentSession, doc: InstructionDocument): void {
+  session.document.value = { ...doc, meta: { ...doc.meta, updatedAt: new Date().toISOString() } };
+  const stepId = doc.steps.some((s) => s.id === session.selectedStepId.value)
+    ? session.selectedStepId.value
     : doc.steps[0]?.id ?? null;
-  selectedStepId.value = stepId;
+  session.selectedStepId.value = stepId;
   const step = doc.steps.find((s) => s.id === stepId);
-  selectedTokenId.value = step?.tokens.some((t) => t.id === selectedTokenId.value)
-    ? selectedTokenId.value
+  session.selectedTokenId.value = step?.tokens.some((t) => t.id === session.selectedTokenId.value)
+    ? session.selectedTokenId.value
     : null;
-}
-
-/** Reverts the most recent change (or coalesced run of changes) - a no-op if there's nothing to undo. */
-export function undo(): void {
-  if (past.value.length === 0) return;
-  const previous = past.value[past.value.length - 1];
-  past.value = past.value.slice(0, -1);
-  future.value = [document.value, ...future.value];
-  lastPushWasCoalesce = false;
-  restoreDocument(previous);
-}
-
-/** Reapplies the most recently undone change - a no-op if there's nothing to redo. */
-export function redo(): void {
-  if (future.value.length === 0) return;
-  const next = future.value[0];
-  future.value = future.value.slice(1);
-  past.value = [...past.value, document.value];
-  lastPushWasCoalesce = false;
-  restoreDocument(next);
-}
-
-/**
- * Replaces the entire document - the Import flow (task 19). Unlike
- * `setSteps` (which only ever replaces `steps` on the existing document),
- * this swaps `meta`/`schemaVersion` too, since an imported file brings its
- * own. Still goes through `recordHistory` like every other mutation, so an
- * accidental import is one `undo()` away from being reverted.
- */
-export function replaceDocument(doc: InstructionDocument): void {
-  recordHistory(false);
-  document.value = { ...doc, meta: { ...doc.meta, updatedAt: new Date().toISOString() } };
-  selectStep(doc.steps[0]?.id ?? null);
-}
-
-export const selectedStep = computed(
-  () => document.value.steps.find((s) => s.id === selectedStepId.value) ?? null,
-);
-
-export const selectedToken = computed(
-  () => selectedStep.value?.tokens.find((t) => t.id === selectedTokenId.value) ?? null,
-);
-
-export function selectStep(stepId: string | null): void {
-  selectedStepId.value = stepId;
-  selectedTokenId.value = null;
-}
-
-export function selectToken(stepId: string, tokenId: string): void {
-  selectedStepId.value = stepId;
-  selectedTokenId.value = tokenId;
 }
 
 /**
@@ -165,27 +163,32 @@ export function selectToken(stepId: string, tokenId: string): void {
  * typing) that should merge into the last history entry instead of pushing
  * its own - see the comment on `COALESCE_WINDOW_MS`.
  */
-function setSteps(steps: InstructionDocument["steps"], options?: { coalesce?: boolean }): void {
-  recordHistory(options?.coalesce ?? false);
-  document.value = {
-    ...document.value,
+function setSteps(
+  session: DocumentSession,
+  steps: InstructionDocument["steps"],
+  options?: { coalesce?: boolean },
+): void {
+  recordHistory(session, options?.coalesce ?? false);
+  session.document.value = {
+    ...session.document.value,
     steps,
-    meta: { ...document.value.meta, updatedAt: new Date().toISOString() },
+    meta: { ...session.document.value.meta, updatedAt: new Date().toISOString() },
   };
 }
 
-export function addStep(): void {
-  const step = createEmptyStep();
-  setSteps([...document.value.steps, step]);
-  selectStep(step.id);
-}
-
-export function removeStep(stepId: string): void {
-  const steps = document.value.steps.filter((s) => s.id !== stepId);
-  setSteps(steps);
-  if (selectedStepId.value === stepId) {
-    selectStep(steps[0]?.id ?? null);
-  }
+/**
+ * `index`/`toIndex` in `moveTokenCore`/`reorderStepsCore` is a drop-before
+ * position computed against the array *before* the dragged item is removed
+ * from it (see `resolveTokenDropTarget`/`resolveDropIndex`); removing that
+ * item first shifts everything after it back by one, so a forward move
+ * (`fromIndex < toIndexBeforeRemoval`) must adjust the target down by one to
+ * land where the user actually dropped it. Shared by both call sites below
+ * rather than hand-written twice - the same correction, not a coincidence.
+ */
+function adjustIndexForRemoval(fromIndex: number, toIndexBeforeRemoval: number): number {
+  return fromIndex !== -1 && fromIndex < toIndexBeforeRemoval
+    ? toIndexBeforeRemoval - 1
+    : toIndexBeforeRemoval;
 }
 
 /** Inserts `token` at `index` (clamped), or appends it when `index` is omitted. */
@@ -199,20 +202,119 @@ function insertToken(
   return [...tokens.slice(0, clamped), token, ...tokens.slice(clamped)];
 }
 
-/** Adds a token to a specific step - the drag-and-drop drop target (task 9). */
-export function addTokenToStep(stepId: string, token: InstructionToken, index?: number): void {
+/**
+ * Sets or clears one attachment kind on a token - at most one of each kind
+ * at a time, so setting one where a value already exists replaces it,
+ * rather than the token accumulating several of the same kind.
+ */
+function setTokenAttachment(
+  session: DocumentSession,
+  stepId: string,
+  tokenId: string,
+  kind: AttachmentKind,
+  attachment: TokenAttachment | undefined,
+): void {
   setSteps(
-    document.value.steps.map((step) =>
+    session,
+    session.document.value.steps.map((step) =>
+      step.id === stepId
+        ? {
+            ...step,
+            tokens: step.tokens.map((t) => (t.id === tokenId ? { ...t, [kind]: attachment } : t)),
+          }
+        : step,
+    ),
+  );
+}
+
+/**
+ * The functions below (suffixed `Core`) are every mutator/query's real
+ * implementation, taking a `DocumentSession` explicitly as their first
+ * argument - the module's actual, constructable interface. They're grouped
+ * into `sessionActions` for callers that construct their own session
+ * (chiefly tests - see document.test.ts). App code should use the
+ * zero-argument exports at the bottom of this file instead, which are these
+ * same functions bound to `defaultSession` - so every existing call site
+ * keeps working unchanged.
+ */
+
+/** Reverts the most recent change (or coalesced run of changes) - a no-op if there's nothing to undo. */
+function undoCore(session: DocumentSession): void {
+  if (session.past.value.length === 0) return;
+  const previous = session.past.value[session.past.value.length - 1];
+  session.past.value = session.past.value.slice(0, -1);
+  session.future.value = [session.document.value, ...session.future.value];
+  session._lastPushWasCoalesce = false;
+  restoreDocument(session, previous);
+}
+
+/** Reapplies the most recently undone change - a no-op if there's nothing to redo. */
+function redoCore(session: DocumentSession): void {
+  if (session.future.value.length === 0) return;
+  const next = session.future.value[0];
+  session.future.value = session.future.value.slice(1);
+  session.past.value = [...session.past.value, session.document.value];
+  session._lastPushWasCoalesce = false;
+  restoreDocument(session, next);
+}
+
+/**
+ * Replaces the entire document - the Import flow (task 19). Unlike
+ * `setSteps` (which only ever replaces `steps` on the existing document),
+ * this swaps `meta`/`schemaVersion` too, since an imported file brings its
+ * own. Still goes through `recordHistory` like every other mutation, so an
+ * accidental import is one `undo()` away from being reverted.
+ */
+function replaceDocumentCore(session: DocumentSession, doc: InstructionDocument): void {
+  recordHistory(session, false);
+  session.document.value = { ...doc, meta: { ...doc.meta, updatedAt: new Date().toISOString() } };
+  selectStepCore(session, doc.steps[0]?.id ?? null);
+}
+
+function selectStepCore(session: DocumentSession, stepId: string | null): void {
+  session.selectedStepId.value = stepId;
+  session.selectedTokenId.value = null;
+}
+
+function selectTokenCore(session: DocumentSession, stepId: string, tokenId: string): void {
+  session.selectedStepId.value = stepId;
+  session.selectedTokenId.value = tokenId;
+}
+
+function addStepCore(session: DocumentSession): void {
+  const step = createEmptyStep();
+  setSteps(session, [...session.document.value.steps, step]);
+  selectStepCore(session, step.id);
+}
+
+function removeStepCore(session: DocumentSession, stepId: string): void {
+  const steps = session.document.value.steps.filter((s) => s.id !== stepId);
+  setSteps(session, steps);
+  if (session.selectedStepId.value === stepId) {
+    selectStepCore(session, steps[0]?.id ?? null);
+  }
+}
+
+/** Adds a token to a specific step - the drag-and-drop drop target (task 9). */
+function addTokenToStepCore(
+  session: DocumentSession,
+  stepId: string,
+  token: InstructionToken,
+  index?: number,
+): void {
+  setSteps(
+    session,
+    session.document.value.steps.map((step) =>
       step.id === stepId ? { ...step, tokens: insertToken(step.tokens, token, index) } : step,
     ),
   );
 }
 
 /** Adds a token to whichever step is selected - the tap-to-insert path (task 11). */
-export function addTokenToSelectedStep(token: InstructionToken): void {
-  const stepId = selectedStepId.value;
+function addTokenToSelectedStepCore(session: DocumentSession, token: InstructionToken): void {
+  const stepId = session.selectedStepId.value;
   if (!stepId) return;
-  addTokenToStep(stepId, token);
+  addTokenToStepCore(session, stepId, token);
 }
 
 /**
@@ -220,26 +322,24 @@ export function addTokenToSelectedStep(token: InstructionToken): void {
  * `fromStepId` first - covers both reordering within a step (fromStepId ===
  * toStepId) and moving between steps, via a drag on the canvas (task 9).
  */
-export function moveToken(
+function moveTokenCore(
+  session: DocumentSession,
   fromStepId: string,
   tokenId: string,
   toStepId: string,
   index: number,
 ): void {
-  const fromStep = document.value.steps.find((s) => s.id === fromStepId);
+  const fromStep = session.document.value.steps.find((s) => s.id === fromStepId);
   const token = fromStep?.tokens.find((t) => t.id === tokenId);
   if (!token) return;
 
   setSteps(
-    document.value.steps.map((step) => {
+    session,
+    session.document.value.steps.map((step) => {
       if (step.id === fromStepId && step.id === toStepId) {
         const fromIndex = step.tokens.findIndex((t) => t.id === tokenId);
         const withoutToken = step.tokens.filter((t) => t.id !== tokenId);
-        // `index` is a drop-before position in the pre-removal array (see
-        // resolveTokenDropTarget); removing the dragged token first shifts
-        // everything after it back by one, so a forward move must adjust
-        // the target index down by one to land where the user dropped it.
-        const adjustedIndex = fromIndex !== -1 && fromIndex < index ? index - 1 : index;
+        const adjustedIndex = adjustIndexForRemoval(fromIndex, index);
         return { ...step, tokens: insertToken(withoutToken, token, adjustedIndex) };
       }
       if (step.id === fromStepId) {
@@ -254,51 +354,61 @@ export function moveToken(
 }
 
 /** Moves a step from `fromIndex` to `toIndex` - dragging a step in StepList (task 9). */
-export function reorderSteps(fromIndex: number, toIndex: number): void {
-  const steps = [...document.value.steps];
+function reorderStepsCore(session: DocumentSession, fromIndex: number, toIndex: number): void {
+  const steps = [...session.document.value.steps];
   if (fromIndex < 0 || fromIndex >= steps.length) return;
   const [moved] = steps.splice(fromIndex, 1);
-  // `toIndex` is a drop-before position in the pre-removal array (see
-  // resolveDropIndex); adjust down by one for a forward move since removing
-  // `moved` already shifted everything after it back by one.
-  const adjustedToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+  const adjustedToIndex = adjustIndexForRemoval(fromIndex, toIndex);
   const clamped = Math.max(0, Math.min(adjustedToIndex, steps.length));
   steps.splice(clamped, 0, moved);
-  setSteps(steps);
+  setSteps(session, steps);
 }
 
-export function removeTokenFromStep(stepId: string, tokenId: string): void {
+function removeTokenFromStepCore(session: DocumentSession, stepId: string, tokenId: string): void {
   setSteps(
-    document.value.steps.map((step) =>
+    session,
+    session.document.value.steps.map((step) =>
       step.id === stepId
         ? { ...step, tokens: step.tokens.filter((t) => t.id !== tokenId) }
         : step,
     ),
   );
-  if (selectedTokenId.value === tokenId) {
-    selectedTokenId.value = null;
+  if (session.selectedTokenId.value === tokenId) {
+    session.selectedTokenId.value = null;
   }
 }
 
-export function updateStepTitle(stepId: string, title: string): void {
+function updateStepTitleCore(session: DocumentSession, stepId: string, title: string): void {
   setSteps(
-    document.value.steps.map((step) => (step.id === stepId ? { ...step, title } : step)),
+    session,
+    session.document.value.steps.map((step) => (step.id === stepId ? { ...step, title } : step)),
     { coalesce: true },
   );
 }
 
-export function updateStepDescription(stepId: string, description: string): void {
+function updateStepDescriptionCore(
+  session: DocumentSession,
+  stepId: string,
+  description: string,
+): void {
   setSteps(
-    document.value.steps.map((step) =>
+    session,
+    session.document.value.steps.map((step) =>
       step.id === stepId ? { ...step, description } : step,
     ),
     { coalesce: true },
   );
 }
 
-export function updateTokenLabel(stepId: string, tokenId: string, label: string): void {
+function updateTokenLabelCore(
+  session: DocumentSession,
+  stepId: string,
+  tokenId: string,
+  label: string,
+): void {
   setSteps(
-    document.value.steps.map((step) =>
+    session,
+    session.document.value.steps.map((step) =>
       step.id === stepId
         ? { ...step, tokens: step.tokens.map((t) => (t.id === tokenId ? { ...t, label } : t)) }
         : step,
@@ -307,9 +417,15 @@ export function updateTokenLabel(stepId: string, tokenId: string, label: string)
   );
 }
 
-export function updateTokenNote(stepId: string, tokenId: string, note: string): void {
+function updateTokenNoteCore(
+  session: DocumentSession,
+  stepId: string,
+  tokenId: string,
+  note: string,
+): void {
   setSteps(
-    document.value.steps.map((step) =>
+    session,
+    session.document.value.steps.map((step) =>
       step.id === stepId
         ? { ...step, tokens: step.tokens.map((t) => (t.id === tokenId ? { ...t, note } : t)) }
         : step,
@@ -318,59 +434,48 @@ export function updateTokenNote(stepId: string, tokenId: string, note: string): 
   );
 }
 
-/**
- * Sets or clears one attachment kind on a token - at most one of each kind
- * at a time, so setting one where a value already exists replaces it,
- * rather than the token accumulating several of the same kind.
- */
-function setTokenAttachment(
-  stepId: string,
-  tokenId: string,
-  kind: AttachmentKind,
-  attachment: TokenAttachment | undefined,
-): void {
-  setSteps(
-    document.value.steps.map((step) =>
-      step.id === stepId
-        ? {
-            ...step,
-            tokens: step.tokens.map((t) => (t.id === tokenId ? { ...t, [kind]: attachment } : t)),
-          }
-        : step,
-    ),
-  );
-}
-
 /** Attaches `attachment` to a specific token - TokenAttachmentPicker's click-to-attach path. */
-export function attachToToken(
+function attachToTokenCore(
+  session: DocumentSession,
   stepId: string,
   tokenId: string,
   kind: AttachmentKind,
   attachment: TokenAttachment,
 ): void {
-  setTokenAttachment(stepId, tokenId, kind, attachment);
+  setTokenAttachment(session, stepId, tokenId, kind, attachment);
 }
 
 /** Attaches to whichever token is currently selected; a no-op if none is. */
-export function attachToSelectedToken(kind: AttachmentKind, attachment: TokenAttachment): void {
-  const stepId = selectedStepId.value;
-  const tokenId = selectedTokenId.value;
+function attachToSelectedTokenCore(
+  session: DocumentSession,
+  kind: AttachmentKind,
+  attachment: TokenAttachment,
+): void {
+  const stepId = session.selectedStepId.value;
+  const tokenId = session.selectedTokenId.value;
   if (!stepId || !tokenId) return;
-  attachToToken(stepId, tokenId, kind, attachment);
+  attachToTokenCore(session, stepId, tokenId, kind, attachment);
 }
 
-export function removeTokenAttachment(stepId: string, tokenId: string, kind: AttachmentKind): void {
-  setTokenAttachment(stepId, tokenId, kind, undefined);
+function removeTokenAttachmentCore(
+  session: DocumentSession,
+  stepId: string,
+  tokenId: string,
+  kind: AttachmentKind,
+): void {
+  setTokenAttachment(session, stepId, tokenId, kind, undefined);
 }
 
 /** Sets or clears a specific token's own duration - see InstructionToken.time. */
-export function setTokenTime(
+function setTokenTimeCore(
+  session: DocumentSession,
   stepId: string,
   tokenId: string,
   time: DurationAttachment | undefined,
 ): void {
   setSteps(
-    document.value.steps.map((step) =>
+    session,
+    session.document.value.steps.map((step) =>
       step.id === stepId
         ? { ...step, tokens: step.tokens.map((t) => (t.id === tokenId ? { ...t, time } : t)) }
         : step,
@@ -379,6 +484,105 @@ export function setTokenTime(
 }
 
 /** Sets or clears a step's own duration estimate - see InstructionStep.time. */
-export function setStepTime(stepId: string, time: DurationAttachment | undefined): void {
-  setSteps(document.value.steps.map((step) => (step.id === stepId ? { ...step, time } : step)));
+function setStepTimeCore(
+  session: DocumentSession,
+  stepId: string,
+  time: DurationAttachment | undefined,
+): void {
+  setSteps(
+    session,
+    session.document.value.steps.map((step) => (step.id === stepId ? { ...step, time } : step)),
+  );
 }
+
+export const sessionActions = {
+  undo: undoCore,
+  redo: redoCore,
+  replaceDocument: replaceDocumentCore,
+  selectStep: selectStepCore,
+  selectToken: selectTokenCore,
+  addStep: addStepCore,
+  removeStep: removeStepCore,
+  addTokenToStep: addTokenToStepCore,
+  addTokenToSelectedStep: addTokenToSelectedStepCore,
+  moveToken: moveTokenCore,
+  reorderSteps: reorderStepsCore,
+  removeTokenFromStep: removeTokenFromStepCore,
+  updateStepTitle: updateStepTitleCore,
+  updateStepDescription: updateStepDescriptionCore,
+  updateTokenLabel: updateTokenLabelCore,
+  updateTokenNote: updateTokenNoteCore,
+  attachToToken: attachToTokenCore,
+  attachToSelectedToken: attachToSelectedTokenCore,
+  removeTokenAttachment: removeTokenAttachmentCore,
+  setTokenTime: setTokenTimeCore,
+  setStepTime: setStepTimeCore,
+};
+
+type SessionAction = (session: DocumentSession, ...args: never[]) => unknown;
+type BoundSessionActions<T extends Record<string, SessionAction>> = {
+  [K in keyof T]: T[K] extends (session: DocumentSession, ...args: infer A) => infer R
+    ? (...args: A) => R
+    : never;
+};
+
+/** Binds every action in `actions` to `session` as its first argument. */
+function bindActionsToSession<T extends Record<string, SessionAction>>(
+  actions: T,
+  session: DocumentSession,
+): BoundSessionActions<T> {
+  const bound = {} as BoundSessionActions<T>;
+  for (const key in actions) {
+    const action = actions[key];
+    bound[key] = ((...args: unknown[]) =>
+      action(session, ...(args as never[]))) as BoundSessionActions<T>[typeof key];
+  }
+  return bound;
+}
+
+/**
+ * The app's one running document - see `docs/known-issues.md`'s former
+ * "document session tied to module-level singletons" entry (now resolved:
+ * this is the one adapter every existing caller keeps using unchanged; a
+ * test constructs a second, independent one via `createDocumentSession()`
+ * instead of sharing this one).
+ *
+ * Note: `document` below intentionally shadows the DOM's global `document`.
+ * No file in src/ needs both in the same scope today, but if one ever does,
+ * import this one under an alias (e.g. `import { document as doc }`).
+ */
+const defaultSession = createDocumentSession();
+
+export const document = defaultSession.document;
+export const selectedStepId = defaultSession.selectedStepId;
+export const selectedTokenId = defaultSession.selectedTokenId;
+export const past = defaultSession.past;
+export const future = defaultSession.future;
+export const canUndo = defaultSession.canUndo;
+export const canRedo = defaultSession.canRedo;
+export const selectedStep = defaultSession.selectedStep;
+export const selectedToken = defaultSession.selectedToken;
+
+export const {
+  undo,
+  redo,
+  replaceDocument,
+  selectStep,
+  selectToken,
+  addStep,
+  removeStep,
+  addTokenToStep,
+  addTokenToSelectedStep,
+  moveToken,
+  reorderSteps,
+  removeTokenFromStep,
+  updateStepTitle,
+  updateStepDescription,
+  updateTokenLabel,
+  updateTokenNote,
+  attachToToken,
+  attachToSelectedToken,
+  removeTokenAttachment,
+  setTokenTime,
+  setStepTime,
+} = bindActionsToSession(sessionActions, defaultSession);

@@ -3,7 +3,7 @@ import { createToken } from "../../model/instruction";
 import { addTokenToSelectedStep, addTokenToStep } from "../../state/document";
 import { dragGhost, dropTarget } from "../../state/drag";
 import { activeTokenCategory } from "../../state/ui";
-import { beginPointerDrag, resolveTokenDropTarget } from "../../lib/pointer-drag";
+import { beginPointerDrag, resolveTokenDropTarget, createClickAfterDragGuard } from "../../lib/pointer-drag";
 import { SAMPLE_TOKENS, CATEGORY_LABELS, type SampleToken } from "../../data/sample-tokens";
 import { Icon } from "../Icon/Icon";
 
@@ -16,10 +16,10 @@ const CATEGORIES_WITH_SAMPLES = STEP_TOKEN_CATEGORIES.filter((category) =>
   SAMPLE_TOKENS.some((t) => t.category === category),
 );
 
-// Set on drop when a real drag happened, so the browser's compatibility
-// `click` event (fired right after pointerup, needed for keyboard/simple-tap
-// activation) doesn't also add a second token via the old click behavior.
-let justDragged = false;
+// Suppresses the browser's compatibility `click` event (fired right after
+// pointerup, needed for keyboard/simple-tap activation) from also adding a
+// second token via the old click behavior once a real drag has happened.
+const dragGuard = createClickAfterDragGuard();
 
 /**
  * Token vocabulary, offered two ways: tap a button to add it to the
@@ -65,10 +65,7 @@ export function TokenPicker() {
             key={sample.iconId}
             class="token-picker__button"
             onClick={() => {
-              if (justDragged) {
-                justDragged = false;
-                return;
-              }
+              if (dragGuard.wasJustDragged()) return;
               addTokenToSelectedStep(createToken(sample.category, sample.iconId, sample.label));
             }}
             onPointerDown={(event) => {
@@ -81,7 +78,7 @@ export function TokenPicker() {
                   dragGhost.value = null;
                   dropTarget.value = null;
                   if (!wasDrag) return;
-                  justDragged = true;
+                  dragGuard.markDragged();
                   const target = resolveTokenDropTarget(x, y);
                   if (target) {
                     addTokenToStep(

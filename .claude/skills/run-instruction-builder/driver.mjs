@@ -6,6 +6,7 @@
 import { chromium } from "playwright";
 import path from "node:path";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const OUT = process.argv[2];
 const URL = process.argv[3] ?? "http://localhost:5173/";
@@ -22,9 +23,45 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 page.on("console", (msg) => { if (msg.type() === "error") errors.push(`[console] ${msg.text()}`); });
 page.on("pageerror", (err) => errors.push(`[pageerror] ${err.message}`));
 
+// Task 22 (Add Accessibility Features): an axe-core scan at a few
+// representative states, not just one at page load - a rule violation can
+// be specific to a state that only exists after some interaction (the
+// Import dialog, task 22's own color-contrast bug only showed up once a
+// token category tab was active). `axe.min.js` is read once and injected
+// fresh per scan via addScriptTag, matching how docs/fixed-issues/
+// accent-color-failed-contrast-minimum.md and
+// import-file-input-had-no-accessible-label.md were originally found.
+// `fileURLToPath`, not `new URL(..., import.meta.url)` - this file's own
+// top-level `URL` constant (the dev server URL, from argv) shadows the
+// global URL constructor throughout this whole module.
+const axeSource = fs.readFileSync(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../node_modules/axe-core/axe.min.js"),
+  "utf-8",
+);
+async function countAxeViolations(label) {
+  await page.addScriptTag({ content: axeSource });
+  const results = await page.evaluate(() => window.axe.run(document, { resultTypes: ["violations"] }));
+  if (results.violations.length > 0) {
+    errors.push(
+      `[a11y:${label}] ` + results.violations.map((v) => `${v.id} (${v.nodes.length} node(s))`).join(", "),
+    );
+  }
+  return results.violations.length;
+}
+
 await page.goto(URL, { waitUntil: "networkidle" });
 await page.waitForSelector(".instruction-canvas__svg");
 await page.screenshot({ path: path.join(OUT, "01-desktop-initial.png"), fullPage: true });
+
+// Task 15 (SVG Export) added a second, permanently-mounted, hidden,
+// read-only InstructionCanvas purely for export to serialize (`App`'s
+// `.app__export-canvas`) - every `.instruction-canvas__*` selector below
+// would otherwise match it too (it renders the same document), so anything
+// that isn't inherently unique to editing (drag insertion marker, editing
+// controls that only exist when NOT read-only) is scoped through
+// `editableCanvas` (`.app__main`, which the hidden export canvas lives
+// outside of) rather than queried from `page` directly.
+const editableCanvas = page.locator(".app__main");
 
 // Task 13 (Undo/Redo): both buttons start disabled - a fresh document has
 // nothing to undo and nothing has been undone yet to redo. Check this here,
@@ -62,7 +99,7 @@ await page.screenshot({ path: path.join(OUT, "02-desktop-after-edit.png"), fullP
 
 // Connector lines: a plain line between each pair of consecutive tokens
 // within a step (3 tokens in step 1 so far -> 2 connectors).
-const connectorCount = await page.locator(".instruction-canvas__connector").count();
+const connectorCount = await editableCanvas.locator(".instruction-canvas__connector").count();
 
 // Two-stage select: add a second (unselected) step, then click one of its
 // tokens - the FIRST click on an unselected step's token should select the
@@ -71,7 +108,7 @@ await page.locator(".step-list__add").click();
 await picker.getByRole("button", { name: "Bake", exact: true }).click();
 await page.locator(".step-list__item").first().click(); // reselect step 1 (still has tokens)
 
-const firstToken = page.locator(".instruction-canvas__token").first();
+const firstToken = editableCanvas.locator(".instruction-canvas__token").first();
 await firstToken.click(); // step 1 already selected -> should select the TOKEN
 const tokenTitleInput = page.locator(".token-details__field input");
 const tokenSelectedAfterFirstClick = (await tokenTitleInput.count()) > 0 && (await tokenTitleInput.inputValue()) !== "";
@@ -79,8 +116,26 @@ const tokenSelectedAfterFirstClick = (await tokenTitleInput.count()) > 0 && (awa
 await tokenTitleInput.fill("Chop finely");
 await page.locator(".token-details__field textarea").fill("Small, even dice.");
 await page.locator("body").click({ position: { x: 5, y: 5 } }); // blur
-const tokenLabelUpdated = (await page.locator(".instruction-canvas__chip-label").first().textContent()) === "Chop finely";
+const tokenLabelUpdated = (await editableCanvas.locator(".instruction-canvas__chip-label").first().textContent()) === "Chop finely";
 await page.screenshot({ path: path.join(OUT, "02b-token-details.png"), fullPage: true });
+
+// Task 22: the canvas's own SVG token chips stay pointer/touch-only (see
+// InstructionCanvas.tsx's doc comment) - StepDetails' "Tokens in this
+// step" list is the keyboard-operable path to the same TokenDetails panel
+// (it only renders once a step is already selected, so the canvas's
+// two-stage select rule is automatically satisfied). Step 1 is already
+// selected here, so its list is already showing; select its 2nd token
+// (Onion) via keyboard and confirm TokenDetails opens for it and the
+// button reflects `aria-current`, then click back to the 1st token
+// (pointer) so the rest of the flow below continues to operate on
+// `firstToken` as before.
+const secondStepDetailsTokenButton = page.locator(".step-details__token-button").nth(1);
+await secondStepDetailsTokenButton.focus();
+await secondStepDetailsTokenButton.press("Enter");
+const tokenSelectedViaKeyboard =
+  (await tokenTitleInput.count()) > 0 &&
+  (await secondStepDetailsTokenButton.getAttribute("aria-current")) === "true";
+await firstToken.click();
 
 // "Add to token": Quantity (a free amount+unit form) and Warning (a preset
 // grid) attach to the selected token (firstToken, already selected above) -
@@ -102,6 +157,8 @@ await attach.getByRole("button", { name: "Attach", exact: true }).click();
 const badgeCountAfterAttach = await firstToken.locator(".instruction-canvas__chip-badge").count();
 const attachmentListCountAfterAttach = await page.locator(".token-details__attachment").count();
 await page.screenshot({ path: path.join(OUT, "02c-token-attachments.png"), fullPage: true });
+
+const accessibilityViolationsMainEditor = await countAxeViolations("main editor");
 
 await page.locator(".token-details").getByRole("button", { name: "Remove Sharp!" }).click();
 const badgeCountAfterRemove = await firstToken.locator(".instruction-canvas__chip-badge").count();
@@ -127,7 +184,7 @@ const defaultQuantityUnit = await quantityUnitSelect.locator("option").first().g
 await quantityAmountInput.fill("42");
 await quantityUnitSelect.selectOption("kg");
 // step 1 already selected -> selects its 2nd token (declared as `secondToken` later, reused there)
-await page.locator(".instruction-canvas__token").nth(1).click();
+await editableCanvas.locator(".instruction-canvas__token").nth(1).click();
 const freshQuantityAmount = await quantityAmountInput.inputValue();
 const freshQuantityUnit = await quantityUnitSelect.inputValue();
 const quantityFormResetsPerToken = freshQuantityAmount === "1" && freshQuantityUnit === defaultQuantityUnit;
@@ -145,7 +202,7 @@ await tokenDurationInputs.nth(1).fill("1"); // 1 hour
 await tokenDurationInputs.nth(2).fill("30"); // 30 minutes
 await tokenDurationField.getByRole("button", { name: "Save token time", exact: true }).click();
 
-const stepTimeAfterTokenTime = await page.locator(".instruction-canvas__step-time").first().textContent();
+const stepTimeAfterTokenTime = await editableCanvas.locator(".instruction-canvas__step-time").first().textContent();
 const tokenTimeMatchesSum = stepTimeAfterTokenTime === "00d-01h-30m-00s";
 
 // Regression test for a bug found in manual testing: DurationField is the
@@ -156,7 +213,7 @@ const tokenTimeMatchesSum = stepTimeAfterTokenTime === "00d-01h-30m-00s";
 // editing form instead of the new token's own value.
 await tokenDurationField.getByRole("button", { name: "Edit token time", exact: true }).click();
 await tokenDurationInputs.nth(2).fill("59"); // change but deliberately don't save
-const secondToken = page.locator(".instruction-canvas__token").nth(1);
+const secondToken = editableCanvas.locator(".instruction-canvas__token").nth(1);
 await secondToken.click(); // step 1 already selected -> selects its 2nd token (no time of its own)
 const freshTokenDurationField = page.locator(".token-details").locator(".duration-field");
 const durationFieldResetsPerToken =
@@ -171,7 +228,7 @@ const stepDurationInputs = stepDurationField.locator(".duration-field__unit inpu
 await stepDurationInputs.nth(0).fill("2"); // 2 days - an explicit step estimate
 await stepDurationField.getByRole("button", { name: "Save step time", exact: true }).click();
 
-const stepTimeAfterStepTime = await page.locator(".instruction-canvas__step-time").first().textContent();
+const stepTimeAfterStepTime = await editableCanvas.locator(".instruction-canvas__step-time").first().textContent();
 const stepTimeOverridesTokenSum = stepTimeAfterStepTime === "02d-00h-00m-00s";
 
 // Same regression as above, for a step switch: edit step 1's time again
@@ -192,13 +249,13 @@ const timeWorkedEndToEnd = tokenTimeMatchesSum && stepTimeOverridesTokenSum;
 
 // Keyboard reachability check: Tab should be able to reach canvas controls
 // (regression test for the tabindex="0" vs tabIndex="0" SVG casing bug).
-const badge = page.locator(".instruction-canvas__badge").first();
+const badge = editableCanvas.locator(".instruction-canvas__badge").first();
 await badge.focus();
 const canvasControlFocused = await page.evaluate(
   () => document.activeElement?.getAttribute("role") === "button",
 );
 
-const chipRemoves = page.locator(".instruction-canvas__chip-remove");
+const chipRemoves = editableCanvas.locator(".instruction-canvas__chip-remove");
 if ((await chipRemoves.count()) > 0) {
   await chipRemoves.first().click();
   await page.screenshot({ path: path.join(OUT, "03-desktop-after-remove.png"), fullPage: true });
@@ -213,9 +270,9 @@ async function dragBoxToBox(fromBox, toBox) {
   await page.mouse.up();
 }
 
-const step1Tokens = page.locator(".instruction-canvas__tokens").nth(0).locator(".instruction-canvas__token");
-const step2Tokens = page.locator(".instruction-canvas__tokens").nth(1).locator(".instruction-canvas__token");
-const step2Bg = page.locator(".instruction-canvas__step-bg").nth(1);
+const step1Tokens = editableCanvas.locator(".instruction-canvas__tokens").nth(0).locator(".instruction-canvas__token");
+const step2Tokens = editableCanvas.locator(".instruction-canvas__tokens").nth(1).locator(".instruction-canvas__token");
+const step2Bg = editableCanvas.locator(".instruction-canvas__step-bg").nth(1);
 
 const step2CountBeforeAdd = await step2Tokens.count();
 await dragBoxToBox(
@@ -313,6 +370,40 @@ const forwardStepDragLandsAtDropPoint =
 await page.locator("[data-step-index='2']").locator(".step-list__remove").click();
 firstSummaryAfter = await page.locator(".step-list__item").first().locator(".step-list__summary").textContent();
 
+// Task 22: Move up/down buttons are the keyboard-operable alternative to
+// dragging a step in the list to reorder it (the project plan calls this
+// out by name specifically). Move step 1 down, confirm it swapped with
+// step 2, then move it back up - a net no-op, so `firstSummaryAfter`
+// above still matches the persistence check further below.
+const summariesBeforeKeyboardReorder = await page.locator(".step-list__summary").allTextContents();
+const step0MoveDown = page.locator("[data-step-index='0']").locator(".step-list__move").nth(1);
+await step0MoveDown.focus();
+await step0MoveDown.press("Enter");
+const summariesAfterKeyboardMoveDown = await page.locator(".step-list__summary").allTextContents();
+const step1MoveUp = page.locator("[data-step-index='1']").locator(".step-list__move").first();
+await step1MoveUp.focus();
+await step1MoveUp.press(" ");
+const summariesAfterKeyboardMoveUp = await page.locator(".step-list__summary").allTextContents();
+const stepReorderedViaKeyboard =
+  summariesAfterKeyboardMoveDown[0] === summariesBeforeKeyboardReorder[1] &&
+  summariesAfterKeyboardMoveDown[1] === summariesBeforeKeyboardReorder[0] &&
+  JSON.stringify(summariesAfterKeyboardMoveUp) === JSON.stringify(summariesBeforeKeyboardReorder);
+
+// Boundary check: the first step's Move up and the last step's Move down
+// must be disabled, not just unwired - there's nowhere for them to go.
+const firstStepMoveUpDisabled = await page
+  .locator("[data-step-index='0']")
+  .locator(".step-list__move")
+  .first()
+  .isDisabled();
+const lastStepIndex = (await page.locator(".step-list__item").count()) - 1;
+const lastStepMoveDownDisabled = await page
+  .locator(`[data-step-index='${lastStepIndex}']`)
+  .locator(".step-list__move")
+  .nth(1)
+  .isDisabled();
+const stepMoveButtonsDisabledAtBoundaries = firstStepMoveUpDisabled && lastStepMoveDownDisabled;
+
 // Task 13 (Undo/Redo): snapshot state first so this block can fully undo
 // itself afterward, leaving the step count/order exactly as the
 // persistence check below expects (it was captured just above, before this
@@ -370,10 +461,17 @@ const undoRedoWorkedEndToEnd =
   historyTestLeftStateUnchanged;
 
 // Task 8 (Live Preview): toggling it swaps the editor for a read-only canvas.
+// Waits for `.app__main--preview` specifically, not `.instruction-canvas--readonly`
+// - since Task 15 (SVG Export) added a second, permanently-mounted, hidden,
+// always-read-only InstructionCanvas (`App`'s `.app__export-canvas`), a
+// `.instruction-canvas--readonly` element exists in the DOM from the very
+// first page load, long before Preview mode is ever toggled, so waiting on
+// it here would resolve immediately and this check would never actually
+// wait for anything.
 await page.locator(".app__preview-toggle").click();
-await page.waitForSelector(".instruction-canvas--readonly");
+await page.waitForSelector(".app__main--preview");
 const previewHidesEditingControls =
-  (await page.locator(".instruction-canvas__chip-remove").count()) === 0 &&
+  (await editableCanvas.locator(".instruction-canvas__chip-remove").count()) === 0 &&
   (await page.locator(".step-list").count()) === 0;
 await page.screenshot({ path: path.join(OUT, "06-preview-mode.png"), fullPage: true });
 await page.locator(".app__preview-toggle").click();
@@ -398,18 +496,33 @@ const persistedAcrossReload =
 // Mobile viewport - canvas tokens must stay legible and single-row per step.
 await page.setViewportSize({ width: 390, height: 844 });
 await page.screenshot({ path: path.join(OUT, "04-mobile.png"), fullPage: true });
+const accessibilityViolationsMobile = await countAxeViolations("mobile 390px");
+
+// Task 21 (Build Responsive Layouts) regression check: nothing should ever
+// force the page wider than the viewport at mobile width. This bit twice
+// during that task's own audit (see docs/fixed-issues/README.md) - a
+// toolbar group with flex-shrink: 0 pinned at its full un-wrapped width,
+// and a step-list item with no min-width: 0 refusing to shrink below an
+// unbroken title's full length - both the same "flex item's automatic
+// minimum size defaults to its content's un-wrapped size" pattern, caught
+// only by actually measuring scrollWidth, not by looking at a screenshot
+// of the default (short-title) document.
+const mobileOverflow = await page.evaluate(
+  () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+);
+const noHorizontalOverflowAtMobileWidth = mobileOverflow === 0;
 
 // Task 18 (JSON Export): add a temporary empty step so there's something for
 // task 14's validation to flag, then export and confirm the downloaded file
 // is the current document plus a non-blocking warning toast (the export
 // itself must still succeed either way - "non-blocking" per
-// docs/Fixed-Issues.md's design intent, not enforced there but this is where
+// docs/fixed-issues/README.md's design intent, not enforced there but this is where
 // it's actually exercised).
 await page.locator(".step-list__add").click();
 const flagCountBeforeExport = await page.locator(".step-list__flag").count();
 const [download] = await Promise.all([
   page.waitForEvent("download"),
-  page.getByRole("button", { name: "Export", exact: true }).click(),
+  page.getByRole("button", { name: "Export JSON", exact: true }).click(),
 ]);
 const exportSuggestedFilename = download.suggestedFilename();
 const exportPath = path.join(OUT, "exported-document.json");
@@ -427,6 +540,135 @@ await page.screenshot({ path: path.join(OUT, "07-export-warning-toast.png"), ful
 await page.locator(".app__toast-dismiss").click();
 const toastGoneAfterDismiss = (await page.locator(".app__toast").count()) === 0;
 
+// Task 15 (SVG Export): same temp incomplete step still in place, so this
+// also re-exercises the task 14 warning-toast link for a second export
+// format. Regression test for a real gap found while building this: a
+// plain `XMLSerializer` dump of the canvas's `<svg>` node captures markup
+// only, never the CSS classes (global.css) that give it any color/font at
+// all - so the file would open as unstyled/invisible shapes anywhere but
+// this app's own page. `exportCanvasAsSvg` (lib/svg-export.ts) bakes
+// computed styles into inline `style` attributes on a clone before
+// serializing - confirmed here by checking the downloaded file's raw text
+// for `rgb(245, 246, 249)`, the computed value of the chip fill design
+// token (--color-surface-sunken: #f5f6f9), which could only appear if the
+// baking step actually ran.
+const [svgDownload] = await Promise.all([
+  page.waitForEvent("download"),
+  page.getByRole("button", { name: "Export SVG", exact: true }).click(),
+]);
+const svgSuggestedFilename = svgDownload.suggestedFilename();
+const svgExportPath = path.join(OUT, "exported-canvas.svg");
+await svgDownload.saveAs(svgExportPath);
+const svgContent = fs.readFileSync(svgExportPath, "utf8");
+const svgToastText = await page.locator(".app__toast").textContent();
+const svgExportWarnedAboutIncompleteSteps =
+  flagCountBeforeExport > 0 &&
+  (await page.locator(".app__toast--warning").count()) === 1 &&
+  svgToastText.includes(String(flagCountBeforeExport));
+const svgExportIsSelfContainedAndStyled =
+  svgSuggestedFilename === "untitled-instructions.svg" &&
+  svgContent.startsWith('<?xml version="1.0" encoding="UTF-8"?>') &&
+  svgContent.includes("<svg") &&
+  svgContent.includes("rgb(245, 246, 249)") && // baked chip fill (--color-surface-sunken)
+  !svgContent.includes("instruction-canvas__chip-remove"); // exported from the read-only canvas, not the editable one
+await page.screenshot({ path: path.join(OUT, "09-svg-export-toast.png"), fullPage: true });
+await page.locator(".app__toast-dismiss").click();
+
+// Task 16 (PNG Export): same temp incomplete step still in place, so this
+// re-exercises the task 14 warning-toast link a third time. The real thing
+// worth confirming isn't just "a PNG downloaded" - it's that rasterization
+// actually happened *at the declared pixel density* (2x), not at the SVG's
+// own 1x design-unit size. Reads the PNG's IHDR chunk directly (bytes 16-23
+// are width/height as big-endian uint32, right after the 8-byte PNG
+// signature + 4-byte length + 4-byte "IHDR" tag) rather than pulling in an
+// image-decoding dependency just for this, and compares against the width/
+// height this same SVG export just reported for the identical document -
+// a genuine 2x-vs-1x check, not a guess at what the number "should" be.
+const svgWidthMatch = svgContent.match(/<svg[^>]*\swidth="([\d.]+)"/);
+const svgHeightMatch = svgContent.match(/<svg[^>]*\sheight="([\d.]+)"/);
+const expectedSvgWidth = svgWidthMatch ? Number(svgWidthMatch[1]) : null;
+const expectedSvgHeight = svgHeightMatch ? Number(svgHeightMatch[1]) : null;
+
+const [pngDownload] = await Promise.all([
+  page.waitForEvent("download"),
+  page.getByRole("button", { name: "Export PNG", exact: true }).click(),
+]);
+const pngSuggestedFilename = pngDownload.suggestedFilename();
+const pngExportPath = path.join(OUT, "exported-canvas.png");
+await pngDownload.saveAs(pngExportPath);
+const pngBuffer = fs.readFileSync(pngExportPath);
+const pngToastText = await page.locator(".app__toast").textContent();
+const pngExportWarnedAboutIncompleteSteps =
+  flagCountBeforeExport > 0 &&
+  (await page.locator(".app__toast--warning").count()) === 1 &&
+  pngToastText.includes(String(flagCountBeforeExport));
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PIXEL_DENSITY = 2; // must match lib/png-export.ts's PIXEL_DENSITY
+const isPngSignatureValid = pngBuffer.subarray(0, 8).equals(PNG_SIGNATURE);
+const pngWidth = pngBuffer.readUInt32BE(16);
+const pngHeight = pngBuffer.readUInt32BE(20);
+const pngExportIsRasterizedAtPixelDensity =
+  pngSuggestedFilename === "untitled-instructions.png" &&
+  isPngSignatureValid &&
+  expectedSvgWidth !== null &&
+  expectedSvgHeight !== null &&
+  pngWidth === Math.round(expectedSvgWidth * PIXEL_DENSITY) &&
+  pngHeight === Math.round(expectedSvgHeight * PIXEL_DENSITY);
+await page.screenshot({ path: path.join(OUT, "10-png-export-toast.png"), fullPage: true });
+await page.locator(".app__toast-dismiss").click();
+
+// Task 17 (Print/PDF Export): the baseline tier is just `window.print()`
+// (lib/pdf-export.ts) plus the @media print rules in global.css - no file
+// downloads, so there's nothing to save/inspect the way SVG/PNG have.
+// Two things worth confirming separately:
+//  (a) the button actually invokes `window.print()` - checked via the
+//      `beforeprint` event every browser fires around a real print, with
+//      no native OS print dialog to contend with in headless Chromium
+//      (Playwright's `dialog` event only covers alert/confirm/prompt/
+//      beforeunload, never `window.print()`'s native dialog).
+//  (b) the @media print rules produce the intended page - checked via
+//      Playwright's `emulateMedia`, which applies the same CSS a real
+//      print/"Save as PDF" would without opening any dialog: the toolbar
+//      and the whole editor grid hidden, and the hidden, always-mounted,
+//      read-only export canvas (the same one SVG/PNG export read from)
+//      switched from a 0x0 clipped box back into normal, visible flow.
+await page.evaluate(() => {
+  window.__printFired = false;
+  window.addEventListener("beforeprint", () => { window.__printFired = true; }, { once: true });
+});
+await page.getByRole("button", { name: "Export PDF", exact: true }).click();
+const pdfExportInvokedWindowPrint = await page.evaluate(() => window.__printFired);
+const pdfToastText = await page.locator(".app__toast").textContent();
+const pdfExportWarnedAboutIncompleteSteps =
+  flagCountBeforeExport > 0 &&
+  (await page.locator(".app__toast--warning").count()) === 1 &&
+  pdfToastText.includes(String(flagCountBeforeExport));
+await page.locator(".app__toast-dismiss").click();
+
+await page.emulateMedia({ media: "print" });
+const printLayout = await page.evaluate(() => {
+  const toolbar = document.querySelector(".app__toolbar");
+  const main = document.querySelector(".app__main");
+  const exportCanvas = document.querySelector(".app__export-canvas");
+  const svg = exportCanvas?.querySelector(".instruction-canvas__svg") ?? null;
+  return {
+    toolbarHidden: getComputedStyle(toolbar).display === "none",
+    mainHidden: getComputedStyle(main).display === "none",
+    exportCanvasVisible: !!exportCanvas && getComputedStyle(exportCanvas).display !== "none" && exportCanvas.getBoundingClientRect().width > 0,
+    svgStepCount: svg ? svg.querySelectorAll(".instruction-canvas__step-bg").length : 0,
+    svgHasNoRemoveButtons: svg ? svg.querySelectorAll(".instruction-canvas__chip-remove").length === 0 : false,
+  };
+});
+await page.screenshot({ path: path.join(OUT, "11-print-preview.png"), fullPage: true });
+await page.emulateMedia({ media: "screen" }); // restore normal rendering before the rest of the driver continues
+const printStylesheetIsolatesReadOnlyCanvas =
+  printLayout.toolbarHidden &&
+  printLayout.mainHidden &&
+  printLayout.exportCanvasVisible &&
+  printLayout.svgStepCount > 0 &&
+  printLayout.svgHasNoRemoveButtons;
+
 // Remove the temporary empty step so the step count is back to what it was.
 await page.locator("[data-step-index='2']").locator(".step-list__remove").click();
 
@@ -443,6 +685,41 @@ const validImportDoc = {
     { id: "import-step-1", title: "Imported step", tokens: [{ id: "import-token-1", category: "action", iconId: "chop", label: "Chop" }] },
   ],
 };
+// Task 22 (Add Accessibility Features): an `alertdialog` needs to actually
+// behave like a modal for keyboard/screen-reader users, not just carry the
+// role - focus should land on Cancel (the safer default for a "replace
+// everything" action) the instant it opens, Tab should stay trapped
+// between its two buttons rather than escaping to whatever's underneath,
+// and Escape should cancel exactly like clicking Cancel does. Exercised
+// with a throwaway import first, so this cycle leaves the document
+// untouched either way - the real Replace flow right after is unaffected.
+await importFileInput.setInputFiles({
+  name: "keyboard-test-import.json",
+  mimeType: "application/json",
+  buffer: Buffer.from(JSON.stringify(validImportDoc)),
+});
+await page.locator(".import-confirm-dialog").waitFor();
+const accessibilityViolationsImportDialog = await countAxeViolations("import dialog");
+const dialogFocusedCancelOnOpen = await page.evaluate(
+  () => document.activeElement?.className === "import-confirm-cancel",
+);
+await page.keyboard.press("Tab");
+const focusedReplaceAfterOneTab = await page.evaluate(() => document.activeElement?.className);
+await page.keyboard.press("Tab");
+const focusWrappedBackToCancel = await page.evaluate(
+  () => document.activeElement?.className === "import-confirm-cancel",
+);
+await page.keyboard.press("Escape");
+const escapeClosedDialogWithNoChange =
+  (await page.locator(".import-confirm-dialog").count()) === 0 &&
+  JSON.stringify(await page.locator(".step-list__summary").allTextContents()) ===
+    JSON.stringify(summariesBeforeImportTest);
+const importDialogTrapsFocusAndEscapeCloses =
+  dialogFocusedCancelOnOpen &&
+  focusedReplaceAfterOneTab === "import-confirm-replace" &&
+  focusWrappedBackToCancel &&
+  escapeClosedDialogWithNoChange;
+
 await importFileInput.setInputFiles({
   name: "import.json",
   mimeType: "application/json",
@@ -527,6 +804,73 @@ const importCancelLeavesDocumentUnchanged =
   (await page.locator(".import-confirm-dialog").count()) === 0 &&
   JSON.stringify(summariesAfterCancelingImport) === JSON.stringify(summariesBeforeImportTest);
 
+// Regression test for a live bug found in an external architecture audit
+// (see docs/fixed-issues/README.md): a saved
+// document whose schemaVersion didn't match CURRENT_SCHEMA_VERSION used to
+// be silently discarded on load (state/persistence.ts previously did
+// `saved.schemaVersion === CURRENT_SCHEMA_VERSION` with no `else`), and the
+// autosave effect then overwrote it with the empty default ~200ms later -
+// permanently destroying the old save with no warning, the moment the app
+// loaded. Seed IndexedDB directly (bypassing the app, since there's no UI
+// path that produces a mismatched-version record) with a document claiming a
+// newer schema version, reload, and confirm: (1) an error toast explains the
+// load failure, (2) the original record is still intact on disk immediately
+// after reload - not yet clobbered - and (3) the very next real edit still
+// autosaves normally, proving the fix only skips the one at-risk write
+// rather than breaking autosave for the rest of the session.
+async function readStoredDocument() {
+  return page.evaluate(() => {
+    return new Promise((resolve, reject) => {
+      const openReq = indexedDB.open("keyval-store");
+      openReq.onsuccess = () => {
+        const db = openReq.result;
+        const tx = db.transaction("keyval", "readonly");
+        const getReq = tx.objectStore("keyval").get("instruction-builder:document");
+        getReq.onsuccess = () => { db.close(); resolve(getReq.result); };
+        getReq.onerror = () => reject(getReq.error);
+      };
+      openReq.onerror = () => reject(openReq.error);
+    });
+  });
+}
+
+const corruptedSaveDoc = {
+  schemaVersion: 2,
+  meta: { title: "From the future", domain: "recipe", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  steps: [{ id: "future-step", title: "Future step", tokens: [] }],
+};
+await page.evaluate((doc) => {
+  return new Promise((resolve, reject) => {
+    const openReq = indexedDB.open("keyval-store");
+    openReq.onsuccess = () => {
+      const db = openReq.result;
+      const tx = db.transaction("keyval", "readwrite");
+      tx.objectStore("keyval").put(doc, "instruction-builder:document");
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => reject(tx.error);
+    };
+    openReq.onerror = () => reject(openReq.error);
+  });
+}, corruptedSaveDoc);
+
+await page.reload({ waitUntil: "networkidle" });
+await page.waitForSelector(".instruction-canvas__svg");
+await page.locator(".app__toast").waitFor();
+const versionMismatchShowsErrorToast = (await page.locator(".app__toast--error").count()) === 1;
+
+const storedRightAfterReload = await readStoredDocument();
+const oldSaveNotClobberedOnLoad = storedRightAfterReload?.schemaVersion === 2;
+
+await page.locator(".app__toast-dismiss").click();
+await page.locator(".step-list__add").click(); // a real edit - should autosave normally
+await page.waitForTimeout(300);
+const storedAfterRealEdit = await readStoredDocument();
+const autosaveResumesAfterRealEdit =
+  storedAfterRealEdit?.schemaVersion === 1 && storedAfterRealEdit?.steps?.length === 2;
+
+const versionMismatchHandledSafely =
+  versionMismatchShowsErrorToast && oldSaveNotClobberedOnLoad && autosaveResumesAfterRealEdit;
+
 await browser.close();
 
 console.log("SCREENSHOTS_DIR=" + OUT);
@@ -549,13 +893,29 @@ console.log("UNDO_REDO_WORKED_END_TO_END=" + undoRedoWorkedEndToEnd);
 console.log("FORWARD_STEP_DRAG_LANDS_AT_DROP_POINT=" + forwardStepDragLandsAtDropPoint);
 console.log("PREVIEW_HIDES_EDITING_CONTROLS=" + previewHidesEditingControls);
 console.log("PERSISTED_ACROSS_RELOAD=" + persistedAcrossReload);
+console.log("NO_HORIZONTAL_OVERFLOW_AT_MOBILE_WIDTH=" + noHorizontalOverflowAtMobileWidth);
 console.log("CANVAS_KEYBOARD_FOCUSABLE=" + canvasControlFocused);
 console.log("JSON_EXPORT_DOWNLOADS_CURRENT_DOCUMENT=" + jsonExportDownloadsCurrentDocument);
 console.log("JSON_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + exportWarnedAboutIncompleteSteps);
 console.log("TOAST_DISMISSIBLE=" + toastGoneAfterDismiss);
+console.log("SVG_EXPORT_IS_SELF_CONTAINED_AND_STYLED=" + svgExportIsSelfContainedAndStyled);
+console.log("SVG_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + svgExportWarnedAboutIncompleteSteps);
+console.log("PNG_EXPORT_IS_RASTERIZED_AT_PIXEL_DENSITY=" + pngExportIsRasterizedAtPixelDensity);
+console.log("PNG_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + pngExportWarnedAboutIncompleteSteps);
+console.log("PDF_EXPORT_INVOKED_WINDOW_PRINT=" + pdfExportInvokedWindowPrint);
+console.log("PDF_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + pdfExportWarnedAboutIncompleteSteps);
+console.log("PRINT_STYLESHEET_ISOLATES_READONLY_CANVAS=" + printStylesheetIsolatesReadOnlyCanvas);
 console.log("IMPORT_DIALOG_MENTIONS_STEP_COUNT=" + importDialogMentionsStepCount);
 console.log("IMPORT_UNDO_REDO_WORKED=" + importUndoRedoWorked);
 console.log("IMPORT_REJECTS_INVALID_FILE=" + importRejectsInvalidFile);
 console.log("IMPORT_CANCEL_LEAVES_DOCUMENT_UNCHANGED=" + importCancelLeavesDocumentUnchanged);
+console.log("VERSION_MISMATCH_HANDLED_SAFELY=" + versionMismatchHandledSafely);
+console.log("STEP_REORDERED_VIA_KEYBOARD=" + stepReorderedViaKeyboard);
+console.log("STEP_MOVE_BUTTONS_DISABLED_AT_BOUNDARIES=" + stepMoveButtonsDisabledAtBoundaries);
+console.log("TOKEN_SELECTED_VIA_KEYBOARD=" + tokenSelectedViaKeyboard);
+console.log("IMPORT_DIALOG_TRAPS_FOCUS_AND_ESCAPE_CLOSES=" + importDialogTrapsFocusAndEscapeCloses);
+console.log("ACCESSIBILITY_VIOLATIONS_MAIN_EDITOR=" + accessibilityViolationsMainEditor);
+console.log("ACCESSIBILITY_VIOLATIONS_IMPORT_DIALOG=" + accessibilityViolationsImportDialog);
+console.log("ACCESSIBILITY_VIOLATIONS_MOBILE=" + accessibilityViolationsMobile);
 console.log("CONSOLE_ERRORS_COUNT=" + errors.length);
 for (const e of errors) console.log(e);

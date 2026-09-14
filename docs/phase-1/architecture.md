@@ -4,11 +4,11 @@
 > closed out. Not edited further; several decisions below (e.g. the SVG
 > canvas being deferred, the component list in section 5) have since been
 > superseded by the actual Phase 2 implementation — check
-> [phase-2/Progress-Log.md](../phase-2/Progress-Log.md) for what's actually
-> built, and [Milestones.md](../Milestones.md) for current status. See
+> [phase-2/progress/README.md](../phase-2/progress/README.md) for what's actually
+> built, and [milestones.md](../milestones.md) for current status. See
 > "Documentation status conventions" there for what CURRENT/HISTORICAL mean.
 
-Source: [`../Visual-Instruction-Builder-Project-Plan.md`](../Visual-Instruction-Builder-Project-Plan.md)
+Source: [`../project-plan.md`](../project-plan.md)
 
 ---
 

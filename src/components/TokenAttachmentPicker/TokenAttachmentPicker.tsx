@@ -10,7 +10,7 @@ import { Icon } from "../Icon/Icon";
 // Time is deliberately not here - it attaches to a step as well as a token,
 // needs its own day/hour/minute/second input rather than a picked value,
 // and lives in Step/Token details' DurationField instead (see
-// docs/phase-2/Progress-Log.md for why it was factored out of this picker).
+// docs/phase-2/progress/README.md for why it was factored out of this picker).
 const ATTACHMENT_CATEGORIES: TokenCategory[] = ["quantity", "warning"];
 
 const MIN_QUANTITY = 1;

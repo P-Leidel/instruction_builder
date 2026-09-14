@@ -2,7 +2,7 @@
  * Common EU food-measurement units for the Quantity attachment. Deliberately
  * a plain, swappable list rather than baked into the model or a component -
  * when Phase 3's content-pack system lands (see
- * docs/Visual-Instruction-Builder-Project-Plan.md), a non-food domain (e.g.
+ * docs/project-plan.md), a non-food domain (e.g.
  * assembly instructions) can offer a different unit list without this
  * file's shape - or the Quantity attachment's own shape - needing to change.
  */

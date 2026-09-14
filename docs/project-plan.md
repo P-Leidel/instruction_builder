@@ -2,18 +2,18 @@
 
 > 📌 **Doc status: CURRENT (reference).** Defines project scope and the
 > original task list; not updated per-task. For live task status, see
-> [Milestones.md](./Milestones.md#documentation-status-conventions).
+> [milestones.md](./milestones.md#documentation-status-conventions).
 
 > **Status (2026-09-13): Phase 2 (MVP) is in progress.** Phase 1 (Concept
 > Validation) is complete; Phase 2 tasks 5–14, 18, and 19 are done (18/19,
 > JSON Export/Import, were deliberately pulled ahead of 15–17 on request) and
 > task 15 (SVG Export) is next. This is well past the "planning" stage - see
-> [Milestones.md](./Milestones.md) for the current task-by-task breakdown
-> and [phase-2/Progress-Log.md](./phase-2/Progress-Log.md) for what's
+> [milestones.md](./milestones.md) for the current task-by-task breakdown
+> and [phase-2/progress/README.md](./phase-2/progress/README.md) for what's
 > actually been built. Historical, phase-specific docs live under
 > [phase-1/](./phase-1/) and [phase-2/](./phase-2/); some of their content
 > (especially phase-1/'s) has since been superseded by the real
-> implementation - Milestones.md is the doc to trust for current status.
+> implementation - milestones.md is the doc to trust for current status.
 
 ## Short Summary
 
@@ -116,7 +116,7 @@ This reduces what was previously three loosely-specified export tasks into one p
 
 # Step-by-Step Project Tasks
 
-**Progress tracker:** see [Milestones.md](./Milestones.md) for current phase/task status, kept there as the single source of truth rather than duplicated here.
+**Progress tracker:** see [milestones.md](./milestones.md) for current phase/task status, kept there as the single source of truth rather than duplicated here.
 
 ## Phase 1: Concept Validation
 1. Define Instruction Model - Create a reusable data structure for instructions, including a schema version field from day one so later JSON exports can be migrated instead of breaking on import.

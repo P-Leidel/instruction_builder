@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review — instruction_builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose", flowchart: { curve: "basis" } });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 5 5; }
+      .deep { background: linear-gradient(135deg, #0f172a, #273449); }
+      .hatch {
+        background-image: repeating-linear-gradient(45deg, rgba(100,116,139,.14) 0 6px, transparent 6px 12px);
+      }
+      .label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+      article { scroll-margin-top: 1.5rem; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans antialiased">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
+
+      <header class="space-y-5">
+        <div class="flex items-baseline justify-between flex-wrap gap-3">
+          <h1 class="font-serif text-4xl tracking-tight">Architecture review</h1>
+          <p class="font-mono text-xs text-slate-500">instruction_builder · main · 2026-09-13</p>
+        </div>
+
+        <div class="grid sm:grid-cols-3 gap-3 text-sm">
+          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <p class="label text-slate-400">Scope</p>
+            <p class="mt-1 text-slate-700">21 files, 2,411 LOC in <span class="font-mono text-xs">src/</span></p>
+          </div>
+          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <p class="label text-slate-400">Phase</p>
+            <p class="mt-1 text-slate-700">2 of 4 · task 15 next</p>
+          </div>
+          <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+            <p class="label text-red-500">Test surface</p>
+            <p class="mt-1 text-red-800">0 unit tests · 1 browser script</p>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600 space-y-2">
+          <p>
+            No <span class="font-mono text-xs">CONTEXT.md</span> and no ADRs exist in this repo. Domain terms below —
+            <em>document, step, token, category, attachment, canvas, connector, insertion marker, drop target, history</em> —
+            are taken from <span class="font-mono text-xs">docs/phase-1/Architecture.md</span>,
+            <span class="font-mono text-xs">docs/Milestones.md</span> and
+            <span class="font-mono text-xs">docs/Planned-Additions.md</span>.
+          </p>
+          <p class="flex flex-wrap gap-x-5 gap-y-1 pt-1 text-xs text-slate-500">
+            <span><span class="inline-block w-3 h-3 align-[-1px] border border-slate-400 bg-white"></span> module</span>
+            <span><svg class="inline align-[-2px]" width="26" height="10"><line class="seam" x1="0" y1="5" x2="26" y2="5" stroke="#64748b" stroke-width="1.5"/></svg> seam</span>
+            <span><svg class="inline align-[-2px]" width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#dc2626" stroke-width="2"/></svg> leakage</span>
+            <span><span class="inline-block w-3 h-3 align-[-1px] deep"></span> deep module</span>
+            <span><span class="inline-block w-3 h-3 align-[-1px] hatch border border-slate-300"></span> untestable without a browser</span>
+          </p>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-12">
+
+        <!-- ============ CANDIDATE 1 ============ -->
+        <article id="c1" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-200 px-6 py-5">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <h2 class="font-serif text-2xl">1 · Make the document session constructable</h2>
+              <div class="flex gap-2 shrink-0">
+                <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs font-medium px-3 py-1">Strong</span>
+                <span class="rounded-full bg-slate-100 text-slate-600 text-xs font-medium px-3 py-1">in-process</span>
+              </div>
+            </div>
+            <p class="mt-3 font-mono text-xs text-slate-500 leading-relaxed">
+              src/state/document.ts · src/state/persistence.ts · tests/ (empty) ·
+              .claude/skills/run-instruction-builder/driver.mjs · .github/workflows/ci.yml
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-px bg-slate-200">
+            <div class="bg-white p-5">
+              <p class="label text-slate-400 mb-3">Before — the test surface is the browser</p>
+              <svg viewBox="0 0 360 300" class="w-full" style="max-height:300px">
+                <text x="8" y="14" class="label" fill="#dc2626">driver.mjs · 561 lines</text>
+                <path d="M64 22 L64 250" stroke="#dc2626" stroke-width="2"/>
+                <path d="M58 244 L64 254 L70 244 Z" fill="#dc2626"/>
+                <g font-size="11" fill="#334155">
+                  <rect x="86" y="24" width="266" height="34" fill="#f1f5f9" stroke="#cbd5e1"/>
+                  <text x="98" y="45">Chromium</text>
+                  <rect x="86" y="64" width="266" height="34" fill="#f1f5f9" stroke="#cbd5e1"/>
+                  <text x="98" y="85">Vite dev server :5173</text>
+                  <rect x="86" y="104" width="266" height="34" fill="#f1f5f9" stroke="#cbd5e1"/>
+                  <text x="98" y="125">rendered DOM · CSS selectors</text>
+                  <rect x="86" y="144" width="266" height="34" fill="#f1f5f9" stroke="#cbd5e1"/>
+                  <text x="98" y="165">Preact components · 9 read globals</text>
+                  <rect x="86" y="184" width="266" height="34" fill="#f1f5f9" stroke="#cbd5e1"/>
+                  <text x="98" y="205">module-level signals</text>
+                  <rect x="86" y="224" width="266" height="48" fill="#fff" stroke="#0f172a" stroke-width="2"/>
+                  <text x="98" y="245" font-weight="600">document.ts — 24 mutators, history</text>
+                  <text x="98" y="262" fill="#64748b">pure in-process computation</text>
+                </g>
+                <text x="8" y="292" font-size="10" fill="#dc2626">5 layers crossed to assert on array arithmetic</text>
+              </svg>
+            </div>
+
+            <div class="bg-white p-5">
+              <p class="label text-slate-400 mb-3">After — the interface is the test surface</p>
+              <svg viewBox="0 0 360 300" class="w-full" style="max-height:300px">
+                <text x="8" y="14" class="label" fill="#059669">unit tests</text>
+                <path d="M64 22 L64 132" stroke="#059669" stroke-width="2"/>
+                <path d="M58 126 L64 136 L70 126 Z" fill="#059669"/>
+                <g font-size="11">
+                  <rect x="86" y="106" width="266" height="60" rx="3" class="" fill="#0f172a"/>
+                  <text x="98" y="128" fill="#fff" font-weight="600">document session</text>
+                  <text x="98" y="145" fill="#94a3b8">state + history + clock, passed in</text>
+                  <text x="98" y="160" fill="#94a3b8">one interface, no globals</text>
+                  <line class="seam" x1="86" y1="186" x2="352" y2="186" stroke="#64748b" stroke-width="1.5"/>
+                  <text x="86" y="200" class="label" fill="#64748b">seam</text>
+                  <rect x="86" y="212" width="126" height="40" fill="#f1f5f9" stroke="#cbd5e1"/>
+                  <text x="97" y="236" fill="#334155">signals adapter</text>
+                  <rect x="226" y="212" width="126" height="40" fill="#f1f5f9" stroke="#cbd5e1"/>
+                  <text x="237" y="236" fill="#334155">test adapter</text>
+                </g>
+                <text x="8" y="292" font-size="10" fill="#059669">two adapters justify the seam</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="px-6 py-5 space-y-4 text-sm">
+            <p><span class="label text-slate-400 mr-2">Problem</span>
+              Every document rule — 24 mutators, snapshot history, the 700 ms coalesce window — is pure in-process
+              computation, but it is bound to module-level singletons plus module-level
+              <span class="font-mono text-xs">lastPushWasCoalesce</span> /
+              <span class="font-mono text-xs">lastPushAt</span> and <span class="font-mono text-xs">Date.now()</span>,
+              so nothing can construct a second document and the interface can only be exercised through a live browser.</p>
+
+            <p><span class="label text-slate-400 mr-2">Solution</span>
+              Make the document session something you create, with its state, history and clock handed in; keep the
+              module-level signals as one thin adapter over it so no caller changes today.</p>
+
+            <div class="rounded-md bg-slate-50 border border-slate-200 p-4">
+              <p class="label text-slate-400 mb-2">Deletion test</p>
+              <p class="text-slate-700">Delete the singletons and complexity <em>concentrates</em> — one session module owns
+              history, coalescing and selection repair. It does not move: today that complexity is already spread across
+              <span class="font-mono text-xs">document.ts</span>, <span class="font-mono text-xs">persistence.ts</span>
+              and the canvas's two-stage selection rule.</p>
+            </div>
+
+            <div>
+              <p class="label text-slate-400 mb-2">Wins</p>
+              <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-1 text-slate-700 list-disc pl-5">
+                <li>leverage: one interface, 24 mutators</li>
+                <li>coalescing testable without typing</li>
+                <li>tests run in CI, not in Chromium</li>
+                <li>locality: selection repair in one module</li>
+                <li>opens Phase 2 task 20</li>
+                <li>ends the <span class="font-mono text-xs">window.document</span> shadowing</li>
+              </ul>
+            </div>
+
+            <div class="rounded-md bg-amber-50 border border-amber-200 p-3 text-amber-900 text-xs">
+              Also under this seam: <span class="font-mono">restoreDocument</span> re-stamps
+              <span class="font-mono">meta.updatedAt</span>, so undo is not a pure inverse — a fact no caller can learn
+              from the interface.
+            </div>
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE 2 ============ -->
+        <article id="c2" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-200 px-6 py-5">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <h2 class="font-serif text-2xl">2 · One module owns where a drop lands</h2>
+              <div class="flex gap-2 shrink-0">
+                <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs font-medium px-3 py-1">Strong</span>
+                <span class="rounded-full bg-slate-100 text-slate-600 text-xs font-medium px-3 py-1">in-process</span>
+              </div>
+            </div>
+            <p class="mt-3 font-mono text-xs text-slate-500 leading-relaxed">
+              src/lib/pointer-drag.ts:71–102 · src/state/drag.ts:16–28 · src/components/StepList/StepList.tsx:15–27 ·
+              src/components/InstructionCanvas/InstructionCanvas.tsx:484–511 · src/components/TokenPicker/TokenPicker.tsx:22,74–95 ·
+              src/state/document.ts:223–268
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-px bg-slate-200">
+            <div class="bg-white p-5">
+              <p class="label text-slate-400 mb-3">Before — a protocol split four ways</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-2">
+                <pre class="mermaid">
+flowchart TB
+  subgraph L["lib/"]
+    A["resolveTokenDropTarget<br/>elementFromPoint + data-*"]
+  end
+  subgraph C["components/"]
+    B["resolveDropIndex<br/>midpoint scan, private"]
+  end
+  subgraph S["state/document.ts"]
+    D["moveToken<br/>index - 1 if forward"]
+    E["reorderSteps<br/>index - 1 if forward"]
+  end
+  A -. "drop-before index" .-> D
+  B -. "drop-before index" .-> E
+  A -.-> X["DropTarget<br/>duplicate type"]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#7f1d1d;
+  class A,B,X leak
+                </pre>
+              </div>
+              <p class="mt-2 text-xs text-slate-500">Two resolvers, two algorithms, two consumers re-deriving one rule.</p>
+            </div>
+
+            <div class="bg-white p-5">
+              <p class="label text-slate-400 mb-3">After — one deep module, three callers</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-2">
+                <pre class="mermaid">
+flowchart TB
+  P["TokenPicker"] --> Z
+  I["InstructionCanvas"] --> Z
+  T["StepList"] --> Z
+  Z["drag module<br/>gesture · resolve · suppress · commit"]
+  Z --> M["document mutators"]
+  classDef deep fill:#0f172a,stroke:#0f172a,color:#ffffff;
+  class Z deep
+                </pre>
+              </div>
+              <p class="mt-2 text-xs text-slate-500">Callers say what is being dragged. The module says where it lands.</p>
+            </div>
+          </div>
+
+          <div class="px-6 py-5 space-y-4 text-sm">
+            <p><span class="label text-slate-400 mr-2">Problem</span>
+              &ldquo;Drop-before index in the pre-removal array&rdquo; is a fact a caller must know, and it is spread across four
+              modules: two resolvers with different algorithms, one in <span class="font-mono text-xs">lib/</span> and one
+              private inside a component, plus two consumers that each re-derive the same forward-move adjustment. The same
+              off-by-one shipped in both consumers. <span class="font-mono text-xs">DropTarget</span> and
+              <span class="font-mono text-xs">TokenDropTarget</span> are duplicate types with the same comment copied verbatim,
+              and <span class="font-mono text-xs">justDragged</span> is a module-level flag declared twice.</p>
+
+            <p><span class="label text-slate-400 mr-2">Solution</span>
+              One module owns the whole gesture — ghost, drop resolution, click suppression, commit — so a caller names the thing
+              being dragged and nothing else; the index convention stops being public.</p>
+
+            <div class="rounded-md bg-slate-50 border border-slate-200 p-4">
+              <p class="label text-slate-400 mb-2">Deletion test</p>
+              <p class="text-slate-700">Delete <span class="font-mono text-xs">beginPointerDrag</span> alone and complexity merely
+              moves — each call site grows its own listeners. Delete it <em>and</em> absorb the six-step protocol its three call
+              sites repeat, and complexity concentrates: one place where an index convention can be wrong.</p>
+            </div>
+
+            <div>
+              <p class="label text-slate-400 mb-2">Wins</p>
+              <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-1 text-slate-700 list-disc pl-5">
+                <li>locality: one off-by-one, not two</li>
+                <li>interface shrinks; implementation absorbs it</li>
+                <li>drop resolution testable as arithmetic</li>
+                <li>drops two duplicate types</li>
+                <li>drops the duplicated suppression flag</li>
+                <li>step reorder can gain an insertion marker</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE 3 ============ -->
+        <article id="c3" class="rounded-xl border-2 border-indigo-300 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-200 px-6 py-5 bg-indigo-50/40">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <h2 class="font-serif text-2xl">3 · Lift the canvas layout out of the component</h2>
+              <div class="flex gap-2 shrink-0">
+                <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs font-medium px-3 py-1">Strong</span>
+                <span class="rounded-full bg-slate-100 text-slate-600 text-xs font-medium px-3 py-1">in-process</span>
+                <span class="rounded-full bg-indigo-600 text-white text-xs font-medium px-3 py-1">top pick</span>
+              </div>
+            </div>
+            <p class="mt-3 font-mono text-xs text-slate-500 leading-relaxed">
+              src/components/InstructionCanvas/InstructionCanvas.tsx:18–268 (geometry) · :323–591 (render) ·
+              src/lib/pointer-drag.ts:84–102
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-px bg-slate-200">
+            <div class="bg-white p-5">
+              <p class="label text-slate-400 mb-3">Before — geometry sealed inside the render</p>
+              <svg viewBox="0 0 360 300" class="w-full" style="max-height:300px">
+                <rect x="14" y="20" width="332" height="238" fill="#fff" stroke="#334155" stroke-width="1.5"/>
+                <text x="26" y="40" font-size="11" font-weight="600" fill="#0f172a">InstructionCanvas.tsx — 591 lines</text>
+                <defs><pattern id="hatchp" width="12" height="12" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="12" height="12" fill="#f8fafc"/><line x1="0" y1="0" x2="0" y2="12" stroke="#cbd5e1" stroke-width="5"/></pattern></defs>
+                <rect x="26" y="52" width="308" height="104" fill="url(#hatchp)" stroke="#94a3b8" stroke-dasharray="3 3"/>
+                <g font-size="10" fill="#334155">
+                  <text x="38" y="70" font-weight="600">≈250 lines pure geometry · none exported</text>
+                  <text x="38" y="88">chipPosition · stepHeight · widestRowWidth</text>
+                  <text x="38" y="104">buildConnectors — 40 lines of SVG paths</text>
+                  <text x="38" y="120">insertionMarkerPosition · desktopChipsPerRow</text>
+                  <text x="38" y="140" fill="#64748b">reachable only by rendering</text>
+                </g>
+                <rect x="26" y="168" width="308" height="76" fill="#f1f5f9" stroke="#cbd5e1"/>
+                <text x="38" y="188" font-size="10" fill="#334155">render → data-step-id / data-token-index</text>
+                <path d="M300 196 C 338 208, 338 232, 300 232" stroke="#dc2626" stroke-width="2" fill="none"/>
+                <path d="M306 227 L297 233 L306 238 Z" fill="#dc2626"/>
+                <text x="38" y="228" font-size="10" fill="#dc2626">elementFromPoint reads the position back</text>
+                <text x="14" y="280" font-size="10" fill="#dc2626">the module already knew where every chip was</text>
+              </svg>
+            </div>
+
+            <div class="bg-white p-5">
+              <p class="label text-slate-400 mb-3">After — one layout module, three consumers</p>
+              <svg viewBox="0 0 360 300" class="w-full" style="max-height:300px">
+                <rect x="60" y="26" width="240" height="60" rx="3" fill="#0f172a"/>
+                <text x="74" y="48" font-size="11" fill="#fff" font-weight="600">canvas layout</text>
+                <text x="74" y="65" font-size="10" fill="#94a3b8">document + width in</text>
+                <text x="74" y="79" font-size="10" fill="#94a3b8">positioned geometry out</text>
+                <line class="seam" x1="20" y1="108" x2="340" y2="108" stroke="#64748b" stroke-width="1.5"/>
+                <text x="20" y="122" class="label" fill="#64748b">seam</text>
+                <g font-size="10" fill="#334155">
+                  <path d="M140 88 L60 148" stroke="#94a3b8"/><path d="M180 88 L180 148" stroke="#94a3b8"/><path d="M220 88 L300 148" stroke="#94a3b8"/>
+                  <rect x="14" y="152" width="100" height="46" fill="#f1f5f9" stroke="#cbd5e1"/>
+                  <text x="26" y="172">canvas</text><text x="26" y="187" fill="#64748b">renders it</text>
+                  <rect x="130" y="152" width="100" height="46" fill="#f1f5f9" stroke="#cbd5e1"/>
+                  <text x="142" y="172">hit-test</text><text x="142" y="187" fill="#64748b">queries it</text>
+                  <rect x="246" y="152" width="100" height="46" fill="#ecfdf5" stroke="#10b981"/>
+                  <text x="258" y="172">SVG export</text><text x="258" y="187" fill="#059669">task 15</text>
+                  <rect x="90" y="218" width="180" height="40" fill="#fff" stroke="#94a3b8" stroke-dasharray="4 4"/>
+                  <text x="102" y="236">radial layout</text>
+                  <text x="102" y="250" fill="#64748b">Planned-Additions #2 — 2nd adapter</text>
+                </g>
+                <text x="14" y="286" font-size="10" fill="#059669">layout becomes pluggable, as the doc asks</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="px-6 py-5 space-y-4 text-sm">
+            <p><span class="label text-slate-400 mr-2">Problem</span>
+              About 250 of the canvas's 591 lines — 42% — are pure geometry with no framework in them, and none of it is exported.
+              <span class="font-mono text-xs">buildConnectors</span> emits 40 lines of exact SVG path strings verifiable only by
+              eye. The component computes each chip's position and then recovers that same position from the DOM through
+              <span class="font-mono text-xs">elementFromPoint</span> and <span class="font-mono text-xs">data-*</span> attributes.</p>
+
+            <p><span class="label text-slate-400 mr-2">Solution</span>
+              Move the geometry into its own module — document and width in, positioned geometry out. The canvas renders it,
+              hit-testing queries it instead of the DOM, and the export pipeline renders from it instead of scraping markup.</p>
+
+            <div class="rounded-md bg-slate-50 border border-slate-200 p-4">
+              <p class="label text-slate-400 mb-2">Deletion test</p>
+              <p class="text-slate-700">Delete the layout module and its geometry reappears in three places — the canvas,
+              the hit-test, and the export renderer. It is earning its keep before it exists.</p>
+            </div>
+
+            <div>
+              <p class="label text-slate-400 mb-2">Wins</p>
+              <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-1 text-slate-700 list-disc pl-5">
+                <li>connector paths testable as strings</li>
+                <li>the full-row append edge case pinned down</li>
+                <li>export stops scraping rendered DOM</li>
+                <li>hit-test stops round-tripping the DOM</li>
+                <li>leverage: one layout, three consumers</li>
+                <li>canvas drops to roughly render-only</li>
+              </ul>
+            </div>
+
+            <div class="rounded-md bg-emerald-50 border border-emerald-200 p-3 text-emerald-900 text-xs">
+              Supported by the project's own note —
+              <span class="font-mono">docs/Planned-Additions.md</span> #2 says to watch for
+              &ldquo;code outside <span class="font-mono">InstructionCanvas</span> (e.g. the export pipeline, tasks 15–17) that
+              assumes there is exactly one canvas layout shape, rather than treating layout as a pluggable renderer.&rdquo;
+              Task 15 is next. No ADR exists to conflict with.
+            </div>
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE 4 ============ -->
+        <article id="c4" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-200 px-6 py-5">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <h2 class="font-serif text-2xl">4 · One way into the document</h2>
+              <div class="flex gap-2 shrink-0">
+                <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs font-medium px-3 py-1">Strong</span>
+                <span class="rounded-full bg-slate-100 text-slate-600 text-xs font-medium px-3 py-1">local-substitutable</span>
+              </div>
+            </div>
+            <p class="mt-3 font-mono text-xs text-slate-500 leading-relaxed">
+              src/state/persistence.ts:84–93 · src/lib/document-file.ts · src/model/migrate.ts · src/app.tsx:22–58 ·
+              src/state/ui.ts:42–53 · src/components/ImportConfirmDialog/ImportConfirmDialog.tsx
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-px bg-slate-200">
+            <div class="bg-white p-5">
+              <p class="label text-slate-400 mb-3">Before — two intakes, one guarded</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-2">
+                <pre class="mermaid">
+flowchart TB
+  F["JSON file"] --> P["parseImportedDocument<br/>lib/"]
+  P --> MG["migrate<br/>shape + version check"]
+  MG --> A["app.tsx stages pendingImport"]
+  A --> DG["ImportConfirmDialog<br/>replaceDocument"]
+  K["IndexedDB record"] --> L["initPersistence<br/>bare cast, no migrate"]
+  L --> W["document.value = saved"]
+  L -. "version mismatch<br/>discarded, then overwritten" .-> X["work lost"]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#7f1d1d;
+  class L,W,X leak
+                </pre>
+              </div>
+            </div>
+
+            <div class="bg-white p-5">
+              <p class="label text-slate-400 mb-3">After — one intake, two sources</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-2">
+                <pre class="mermaid">
+flowchart TB
+  F["JSON file"] --> Z
+  K["IndexedDB record"] --> Z
+  Z["document intake<br/>parse · migrate · validate · confirm"]
+  Z --> D["document session"]
+  classDef deep fill:#0f172a,stroke:#0f172a,color:#ffffff;
+  class Z deep
+                </pre>
+              </div>
+              <p class="mt-2 text-xs text-slate-500">Two adapters — a file and a store — justify the seam.</p>
+            </div>
+          </div>
+
+          <div class="px-6 py-5 space-y-4 text-sm">
+            <p><span class="label text-slate-400 mr-2">Problem</span>
+              A document enters the app two ways with different rules. The file path parses, migrates, validates, stages and
+              confirms across four modules with no single entry point. The IndexedDB path casts the stored record straight
+              into the signal, never calls <span class="font-mono text-xs">migrate</span>, and on a version mismatch discards
+              the saved document — which the save effect then overwrites with the empty default about 200 ms later.</p>
+
+            <p><span class="label text-slate-400 mr-2">Solution</span>
+              One intake module both sources go through, so migration, shape checking and the replace decision are stated once
+              and the store is just another source.</p>
+
+            <div class="rounded-md bg-slate-50 border border-slate-200 p-4">
+              <p class="label text-slate-400 mb-2">Deletion test</p>
+              <p class="text-slate-700">Delete it and the four-step sequence reappears at both call sites — which is exactly the
+              state today, and exactly why one of them is missing a step.</p>
+            </div>
+
+            <div>
+              <p class="label text-slate-400 mb-2">Wins</p>
+              <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-1 text-slate-700 list-disc pl-5">
+                <li>locality: one place a version is judged</li>
+                <li>closes a silent data-loss path</li>
+                <li>round-trip testable against a fake store</li>
+                <li>selection repair after load stops being a caller rule</li>
+              </ul>
+            </div>
+
+            <div class="rounded-md bg-red-50 border border-red-200 p-3 text-red-900 text-xs">
+              Live defect, independent of whether this deepening is taken: a saved document whose
+              <span class="font-mono">schemaVersion</span> does not match is dropped and then overwritten, with no prompt.
+              <span class="font-mono">migrate()</span> already handles this case; the load path just never calls it.
+            </div>
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE 5 ============ -->
+        <article id="c5" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="border-b border-slate-200 px-6 py-5">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <h2 class="font-serif text-2xl">5 · Give attachments a module</h2>
+              <div class="flex gap-2 shrink-0">
+                <span class="rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1">Worth exploring</span>
+                <span class="rounded-full bg-slate-100 text-slate-600 text-xs font-medium px-3 py-1">in-process</span>
+              </div>
+            </div>
+            <p class="mt-3 font-mono text-xs text-slate-500 leading-relaxed">
+              src/model/instruction.ts:11 · src/model/migrate.ts:9 · src/state/document.ts:18 ·
+              src/data/sample-tokens.ts:21 · src/components/TokenPicker/TokenPicker.tsx:13 ·
+              src/components/TokenAttachmentPicker/TokenAttachmentPicker.tsx:14 · src/components/TokenDetails/TokenDetails.tsx:14
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-px bg-slate-200">
+            <div class="bg-white p-5">
+              <p class="label text-slate-400 mb-3">Before — the vocabulary in seven places</p>
+              <div class="grid grid-cols-2 gap-2 text-[11px]">
+                <div class="border border-slate-300 bg-slate-50 px-2 py-2 font-mono">TokenCategory</div>
+                <div class="border border-red-300 bg-red-50 px-2 py-2 font-mono">TOKEN_CATEGORIES</div>
+                <div class="border border-slate-300 bg-slate-50 px-2 py-2 font-mono">AttachmentKind</div>
+                <div class="border border-slate-300 bg-slate-50 px-2 py-2 font-mono">CATEGORY_LABELS</div>
+                <div class="border border-slate-300 bg-slate-50 px-2 py-2 font-mono">STEP_TOKEN_CATEGORIES</div>
+                <div class="border border-red-300 bg-red-50 px-2 py-2 font-mono">ATTACHMENT_CATEGORIES</div>
+                <div class="border border-red-300 bg-red-50 px-2 py-2 font-mono col-span-2">ATTACHMENT_KINDS — reversed order</div>
+              </div>
+              <p class="mt-3 text-xs text-red-700">Red: hand-maintained copies that already disagree.</p>
+              <div class="mt-3 border border-slate-300 bg-white p-3 text-[11px] text-slate-600">
+                <p class="font-mono">quantity: { label: "250 g" }</p>
+                <p class="mt-1">amount and unit fused into one string — <span class="font-mono">data/units.ts</span> can never
+                be re-applied to an existing attachment.</p>
+              </div>
+            </div>
+
+            <div class="bg-white p-5">
+              <p class="label text-slate-400 mb-3">After — one module, one vocabulary</p>
+              <svg viewBox="0 0 360 230" class="w-full" style="max-height:230px">
+                <rect x="46" y="24" width="268" height="72" rx="3" fill="#0f172a"/>
+                <text x="62" y="48" font-size="11" fill="#fff" font-weight="600">attachments</text>
+                <text x="62" y="66" font-size="10" fill="#94a3b8">kinds · ordering · labels · parse &amp; format</text>
+                <text x="62" y="81" font-size="10" fill="#94a3b8">amount and unit kept apart</text>
+                <line class="seam" x1="20" y1="116" x2="340" y2="116" stroke="#64748b" stroke-width="1.5"/>
+                <g font-size="10" fill="#334155">
+                  <rect x="20" y="140" width="96" height="42" fill="#f1f5f9" stroke="#cbd5e1"/>
+                  <text x="32" y="166">picker tabs</text>
+                  <rect x="132" y="140" width="96" height="42" fill="#f1f5f9" stroke="#cbd5e1"/>
+                  <text x="144" y="166">canvas badges</text>
+                  <rect x="244" y="140" width="96" height="42" fill="#f1f5f9" stroke="#cbd5e1"/>
+                  <text x="256" y="166">details list</text>
+                </g>
+                <text x="20" y="214" font-size="10" fill="#059669">one order, one label rule, one place to extend</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="px-6 py-5 space-y-4 text-sm">
+            <p><span class="label text-slate-400 mr-2">Problem</span>
+              The token category and attachment vocabulary is enumerated in seven modules, two of them hand-maintained copies that
+              already disagree on ordering. A quantity's amount and unit are fused into a display string at the point of entry, and
+              a duration's label is precomputed and persisted next to its seconds, so the model carries derived state that nothing
+              reconciles.</p>
+
+            <p><span class="label text-slate-400 mr-2">Solution</span>
+              One module owns what an attachment is — the kinds, their order, how one is built from input and how it is shown —
+              so the picker, the canvas badges and the details list all read the same source.</p>
+
+            <div class="rounded-md bg-slate-50 border border-slate-200 p-4">
+              <p class="label text-slate-400 mb-2">Deletion test</p>
+              <p class="text-slate-700">Weaker than the candidates above: delete it and the complexity mostly <em>moves</em> back
+              into three render sites rather than vanishing. It earns its keep at Phase 3, when content packs supply the vocabulary
+              as data — at which point seven enumerations become seven migration sites.</p>
+            </div>
+
+            <div>
+              <p class="label text-slate-400 mb-2">Wins</p>
+              <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-1 text-slate-700 list-disc pl-5">
+                <li>locality: one vocabulary, one order</li>
+                <li>quantity stays editable after attaching</li>
+                <li>derived labels stop being persisted</li>
+                <li>Phase 3 content packs get one seam</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+      </section>
+
+      <!-- ============ TOP RECOMMENDATION ============ -->
+      <section id="top-recommendation">
+        <div class="rounded-xl deep text-white p-8 shadow-lg">
+          <p class="label text-indigo-300">Top recommendation</p>
+          <h2 class="font-serif text-3xl mt-2">Lift the canvas layout out of the component</h2>
+          <p class="mt-4 text-slate-300 leading-relaxed max-w-3xl">
+            Task 15 is next, and it is the task that decides where this seam goes. Built against the component as it stands,
+            the export pipeline serializes rendered DOM and the layout is locked inside the canvas for good. Built against a
+            layout module, the same geometry serves the canvas, the hit-test and the export — and the radial layout the project
+            already wrote down becomes a second adapter rather than a second canvas.
+          </p>
+          <p class="mt-4 text-slate-300 leading-relaxed max-w-3xl">
+            It is also the cheapest first test target in the repo: roughly 250 lines that are already pure and already
+            framework-free. <a href="#c1" class="text-indigo-300 underline underline-offset-2">Candidate 1</a> is the deeper win
+            and should follow it — but it touches every component, and nothing needs to wait for it.
+          </p>
+          <p class="mt-6 text-sm text-amber-200">
+            Independent of all of this: <a href="#c4" class="underline underline-offset-2">candidate 4</a> describes a live
+            data-loss path on load. Worth closing on its own, now.
+          </p>
+          <div class="mt-6 flex gap-3 flex-wrap text-xs">
+            <a href="#c3" class="rounded-full bg-white/10 hover:bg-white/20 px-4 py-2">Go to candidate 3</a>
+            <a href="#c1" class="rounded-full bg-white/10 hover:bg-white/20 px-4 py-2">Candidate 1</a>
+            <a href="#c4" class="rounded-full bg-white/10 hover:bg-white/20 px-4 py-2">Candidate 4</a>
+          </div>
+        </div>
+      </section>
+
+      <footer class="text-xs text-slate-400 pt-4 border-t border-slate-200">
+        No interfaces proposed — these are candidates, not designs. Pick one and we will walk its design tree.
+      </footer>
+
+    </main>
+  </body>
+</html>

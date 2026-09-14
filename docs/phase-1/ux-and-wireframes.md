@@ -2,7 +2,7 @@
 
 > 🗄️ **Doc status: HISTORICAL — superseded.** Frozen 2026-09-13 when Phase 1
 > closed out. Not edited further. For current status, see
-> [Milestones.md](../Milestones.md); see its "Documentation status
+> [milestones.md](../milestones.md); see its "Documentation status
 > conventions" section for what CURRENT/HISTORICAL mean.
 
 This document intentionally describes only the in-memory prototype. Projects,

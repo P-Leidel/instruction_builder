@@ -18,9 +18,9 @@ npm run build     # typecheck + production build
 
 Planning and architecture docs live in [docs/](docs/):
 
-- [docs/Visual-Instruction-Builder-Project-Plan.md](docs/Visual-Instruction-Builder-Project-Plan.md) — the approved project plan (goals, stack, phased task list, risks, success criteria).
-- [docs/Phase1-Architecture.md](docs/Phase1-Architecture.md) — the Phase 1 architecture blueprint (data model, app architecture, folder structure, component responsibilities, roadmap, risks).
-- [docs/Phase1-Foundation.md](docs/Phase1-Foundation.md) — explains every file in this scaffold and why it exists.
+- [docs/project-plan.md](docs/project-plan.md) — the approved project plan (goals, stack, phased task list, risks, success criteria).
+- [docs/phase-1/architecture.md](docs/phase-1/architecture.md) — the Phase 1 architecture blueprint (data model, app architecture, folder structure, component responsibilities, roadmap, risks).
+- [docs/phase-1/foundation.md](docs/phase-1/foundation.md) — explains every file in this scaffold and why it exists.
 
 ## Deployment
 

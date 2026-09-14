@@ -1,6 +1,6 @@
 ---
 name: run-instruction-builder
-description: Build, start, and drive the Visual Instruction Builder Preact/Vite dev app in a real browser to check a UI change - screenshots the canvas/step-list/token-picker, exercises step/token select, category tabs in "Add to step"/"Add to token", attaching a Quantity or Warning to a token and removing it, setting an independent duration on a token and a step via DurationField (and the step/token-switch-while-editing regression it once had), drag-and-drop (adding, moving, and reordering, including the live insertion-point marker), undo/redo (buttons and keyboard shortcuts, including that continuous typing coalesces into one undo step), JSON export/import (including the incomplete-steps warning, the confirm-before-replace dialog, invalid-file rejection, and that import goes through undo/redo too), the token connector lines, the read-only preview toggle, and IndexedDB persistence across a reload, and checks the console for errors. Use for "run the app," "screenshot the instruction builder," "check this UI change works," "does drag-and-drop work," "does token attachment work," "does step/token time work," "does undo/redo work," "does export/import work," or "does the canvas render correctly."
+description: Build, start, and drive the Visual Instruction Builder Preact/Vite dev app in a real browser to check a UI change - screenshots the canvas/step-list/token-picker, exercises step/token select, category tabs in "Add to step"/"Add to token", attaching a Quantity or Warning to a token and removing it, setting an independent duration on a token and a step via DurationField (and the step/token-switch-while-editing regression it once had), drag-and-drop (adding, moving, and reordering, including the live insertion-point marker), undo/redo (buttons and keyboard shortcuts, including that continuous typing coalesces into one undo step), JSON/SVG/PNG/PDF export and JSON import (including the incomplete-steps warning, the confirm-before-replace dialog, invalid-file rejection, that import goes through undo/redo too, that the downloaded SVG is self-contained with real colors baked in rather than just CSS classes, that the downloaded PNG is actually rasterized at its declared pixel density, and that Export PDF's print stylesheet isolates the hidden read-only canvas via `emulateMedia`), IndexedDB persistence across a reload (including a saved document with a mismatched schema version, seeded directly into IndexedDB), the token connector lines, the read-only preview toggle, an axe-core accessibility scan at several app states, keyboard-only step reordering and token selection, and the Import dialog's focus trap/Escape handling, and checks the console for errors. Also runs `npm test`, the Vitest unit suite covering the instruction model, the document session's undo/redo, and pure lib/ logic. Use for "run the app," "screenshot the instruction builder," "check this UI change works," "does drag-and-drop work," "does token attachment work," "does step/token time work," "does undo/redo work," "does export/import work," "does SVG export look right," "does PNG export look right," "does print/PDF export work," "does persistence handle a bad/old save," "does the canvas render correctly," "does keyboard access/accessibility work," or "run the unit tests."
 ---
 
 Paths below are relative to the project root (`instruction_builder/`).
@@ -33,12 +33,26 @@ npx playwright install chromium
 ```bash
 npm run lint
 npm run typecheck
+npm test
 npm run build
 ```
 
-There is no automated test suite yet (Vitest is planned for Phase 2
-task 20, not implemented) - `lint`/`typecheck`/`build` are the only
-checks that exist today.
+`npm test` (Vitest, task 20) runs the unit suite - colocated
+`src/**/*.test.ts` files covering the instruction model (`model/
+instruction.ts`, `model/migrate.ts`, `model/validate.ts`), the
+document session (`state/document.ts`'s `sessionActions`, via
+`createDocumentSession()` - undo/redo, coalescing, selection-repair,
+every mutator), and pure logic in `lib/` (`canvas-layout.ts`,
+`duration.ts`, `document-file.ts`'s `slugify`/`parseImportedDocument`,
+`pointer-drag.ts`'s `createClickAfterDragGuard`). It deliberately does
+NOT cover the export pipeline's DOM-touching parts
+(`svg-export.ts`/`png-export.ts`/`pdf-export.ts`), `state/
+persistence.ts`, or any component - those need a real browser to mean
+anything and are already covered end-to-end by the driver below; see
+`docs/phase-2/plans/task-20-automated-testing-plan.md` for the full scope
+reasoning. All four of `lint`/`typecheck`/`test`/`build` are one-shot,
+exit-code-driven checks with no browser involved - the driver below is
+the only one that needs the steps under "Run (agent path)".
 
 ## Run (agent path)
 
@@ -83,7 +97,7 @@ checks that exist today.
    canvas chip grows two corner badges and Token details lists two
    attachments, removes one via Token details, and confirms both drop
    to one. It also reproduces a real bug found in code review (see
-   docs/Fixed-Issues.md): typing a draft amount/unit into the Quantity form
+   docs/fixed-issues/README.md): typing a draft amount/unit into the Quantity form
    and switching to a *different* token without attaching must not leave
    the new token's form showing the old token's unsaved draft. It then
    exercises Time - set independently on a token *and*
@@ -92,7 +106,7 @@ checks that exist today.
    centered duration header above the step shows the token's time
    first, then the step's own explicit time once set (which takes
    precedence). It also reproduces a real bug found in manual testing
-   (see docs/Fixed-Issues.md): starting an edit on one token's (or
+   (see docs/fixed-issues/README.md): starting an edit on one token's (or
    step's) time and switching to a different one *without* saving must
    not leave the new selection showing the old one's stale, unsaved
    editing form. It removes a token via the canvas's own remove
@@ -103,7 +117,7 @@ checks that exist today.
    token from one step to another (checking the live insertion-point
    marker is visible mid-drag, before release), and dragging a step in
    the list to reorder it. Both the token-within-step and step-list drags
-   include a forward-direction regression check (see docs/Fixed-Issues.md):
+   include a forward-direction regression check (see docs/fixed-issues/README.md):
    dropping into a slot strictly between two other items used to overshoot
    by one position when dragging forward, a bug the driver's own
    backward-only reorder tests had never caught. It also exercises task 13
@@ -118,13 +132,44 @@ checks that exist today.
    checks editing controls disappear, reloads the page (after a short
    pause past the persistence debounce) and confirms the document
    survived via IndexedDB, then reduces the viewport to 390px wide
-   (mobile) and screenshots that too. Finally it exercises tasks 18/19
-   (JSON Export/Import): adds a temporary empty step, clicks Export, and
-   confirms the downloaded file (captured via `page.waitForEvent("download")`)
-   is the current document under a filename derived from `meta.title`, and
-   that a non-blocking warning toast names the number of incomplete steps
-   (task 14's link into export) without the download itself being blocked;
-   removes the temporary step again afterward. It then imports a small valid
+   (mobile), screenshots that too, and asserts the page never grows wider
+   than the viewport there (task 21's own regression check - see Gotchas).
+   Next it exercises tasks
+   15/16/17/18/19 (SVG/PNG/PDF/JSON Export, Import): adds a temporary
+   empty step, clicks
+   Export JSON, and confirms the downloaded file (captured via
+   `page.waitForEvent("download")`) is the current document under a
+   filename derived from `meta.title`, and that a non-blocking warning
+   toast names the number of incomplete steps (task 14's link into export)
+   without the download itself being blocked; then clicks Export SVG (same
+   temporary incomplete step, so the warning-toast link is re-exercised for
+   a second format) and confirms the downloaded file is well-formed
+   (`<?xml ...?>` header, a valid `<svg>` root), came from the hidden
+   *read-only* export canvas specifically (no `instruction-canvas__chip-remove`
+   markup in it - see Gotchas for why a second, hidden canvas exists at
+   all), and - the actual point of task 15's style-baking step, see
+   Gotchas - contains a real `rgb(...)` color value, not just CSS class
+   names that would be meaningless without this app's stylesheet; then
+   clicks Export PNG (same temp step, third format, third warning-toast
+   check) and confirms the downloaded file has a valid PNG signature and -
+   read straight out of its `IHDR` chunk, see Gotchas - pixel dimensions
+   that are exactly the exported SVG's own width/height times the declared
+   pixel density, confirming actual rasterization at that density rather
+   than just "some PNG downloaded"; then clicks Export PDF (same temp
+   step, fourth format, fourth warning-toast check, dismissed
+   immediately since there's no file to inspect) and confirms two
+   things separately: a `beforeprint` listener attached before the
+   click fires (proving the button actually calls `window.print()` -
+   there's no downloaded file and no scriptable dialog for
+   `window.print()`'s native print dialog, unlike `alert`/`confirm`),
+   and, via `page.emulateMedia({ media: "print" })` (which applies the
+   same CSS a real print/"Save as PDF" would, no dialog involved), that
+   the toolbar and the whole editor grid are hidden while the hidden
+   export canvas is switched back into visible flow with its step
+   cards rendered and none of the editable canvas's remove-button
+   markup - screenshotted under that print-media emulation, then
+   restored to screen media before continuing. It removes the
+   temporary step again afterward. It then imports a small valid
    document via the hidden file input (`setInputFiles`, which fires the same
    `change` event a real file picker would), confirms the confirm-before-
    replace dialog names the right step count, clicking Replace swaps the
@@ -137,7 +182,25 @@ checks that exist today.
    validation - see Gotchas) through the same input, confirming both show an
    error toast with no confirm dialog and leave the document untouched, and
    a final valid import that gets Canceled instead of Replaced, confirming
-   the dialog closes with nothing changed. It prints `SCREENSHOTS_DIR=...`,
+   the dialog closes with nothing changed. Finally it exercises a fix for a
+   live data-loss bug (see docs/fixed-issues/README.md): seeds IndexedDB directly
+   (bypassing the app - there's no UI path that produces this) with a
+   document whose `schemaVersion` doesn't match, reloads, and confirms an
+   error toast explains the load failure, the original record is still
+   intact on disk immediately after reload (not yet overwritten), and a
+   subsequent real edit autosaves normally. Task 22 (Add Accessibility
+   Features) adds three more things: an axe-core scan (WCAG rule
+   violations) at three states - the populated main editor, the Import
+   confirm dialog open, and the 390px mobile viewport - each expected to
+   report zero; a keyboard-only reorder of a step via its new Move
+   up/down buttons (confirming both the swap and that they're disabled at
+   the list's first/last position); and a keyboard-only token selection
+   via `StepDetails`' "Tokens in this step" list (the canvas's own SVG
+   token chips stay pointer/touch-only - see Gotchas), confirming Token
+   Details opens for it. It also confirms the Import dialog behaves like a
+   real modal: focus lands on Cancel the instant it opens, Tab is trapped
+   between its two buttons, and Escape cancels with the document left
+   untouched. It prints `SCREENSHOTS_DIR=...`,
    `TABS_FILTER_TOKENS=...`, `TOKEN_SELECTED_AFTER_FIRST_CLICK=...`,
    `TOKEN_LABEL_UPDATED=...`, `ATTACHMENTS_WORKED_END_TO_END=...`,
    `QUANTITY_FORM_RESETS_PER_TOKEN=...`,
@@ -152,12 +215,28 @@ checks that exist today.
    `HISTORY_BUTTONS_DISABLED_INITIALLY=...`,
    `UNDO_REDO_WORKED_END_TO_END=...`,
    `PREVIEW_HIDES_EDITING_CONTROLS=...`,
-   `PERSISTED_ACROSS_RELOAD=...`, `CANVAS_KEYBOARD_FOCUSABLE=...`,
+   `PERSISTED_ACROSS_RELOAD=...`,
+   `NO_HORIZONTAL_OVERFLOW_AT_MOBILE_WIDTH=...`, `CANVAS_KEYBOARD_FOCUSABLE=...`,
    `JSON_EXPORT_DOWNLOADS_CURRENT_DOCUMENT=...`,
    `JSON_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=...`, `TOAST_DISMISSIBLE=...`,
+   `SVG_EXPORT_IS_SELF_CONTAINED_AND_STYLED=...`,
+   `SVG_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=...`,
+   `PNG_EXPORT_IS_RASTERIZED_AT_PIXEL_DENSITY=...`,
+   `PNG_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=...`,
+   `PDF_EXPORT_INVOKED_WINDOW_PRINT=...`,
+   `PDF_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=...`,
+   `PRINT_STYLESHEET_ISOLATES_READONLY_CANVAS=...`,
    `IMPORT_DIALOG_MENTIONS_STEP_COUNT=...`, `IMPORT_UNDO_REDO_WORKED=...`,
    `IMPORT_REJECTS_INVALID_FILE=...`,
-   `IMPORT_CANCEL_LEAVES_DOCUMENT_UNCHANGED=...`, and any console errors it
+   `IMPORT_CANCEL_LEAVES_DOCUMENT_UNCHANGED=...`,
+   `VERSION_MISMATCH_HANDLED_SAFELY=...`,
+   `STEP_REORDERED_VIA_KEYBOARD=...`,
+   `STEP_MOVE_BUTTONS_DISABLED_AT_BOUNDARIES=...`,
+   `TOKEN_SELECTED_VIA_KEYBOARD=...`,
+   `IMPORT_DIALOG_TRAPS_FOCUS_AND_ESCAPE_CLOSES=...`,
+   `ACCESSIBILITY_VIOLATIONS_MAIN_EDITOR=...`,
+   `ACCESSIBILITY_VIOLATIONS_IMPORT_DIALOG=...`,
+   `ACCESSIBILITY_VIOLATIONS_MOBILE=...`, and any console errors it
    captured. **Read the screenshots** (e.g. with the Read tool) - don't just
    check the exit code.
 
@@ -187,6 +266,24 @@ taken - watch the terminal output for the actual URL).
   `msedge.exe` in it - just a stub/manifest). Don't try to fix Edge;
   `npx playwright install chromium` works with no admin rights and is
   what the driver uses.
+- **A screenshot alone won't catch "this flex/grid item silently refuses to
+  shrink" - check `document.documentElement.scrollWidth` vs. `clientWidth`
+  too.** Task 21's audit found the same bug twice under different symptoms:
+  `.app__file-controls` (`flex-shrink: 0`) and `.step-list__item` (no
+  `min-width: 0`) both had their automatic minimum width pinned to their
+  un-wrapped content size, so their own `flex-wrap`/ellipsis styling never
+  got a chance to do anything - the page just silently grew wider than the
+  viewport instead. A screenshot at a *short-content* viewport width looks
+  completely fine either way; it only shows up with content long enough to
+  hit the un-wrapped minimum (a 5-button toolbar group, an ~80-character
+  step title) *and* only if something actually checks for the resulting
+  overflow, which nothing did before `NO_HORIZONTAL_OVERFLOW_AT_MOBILE_WIDTH`
+  was added. See `docs/fixed-issues/README.md`'s two matching entries for
+  the full root cause and fix (`flex-shrink: 1` + `min-width: 0`, and
+  `min-width: 0` alone, respectively) - the general lesson: any flex item
+  or grid track that's supposed to let its own content wrap or truncate
+  needs an explicit `min-width: 0` (flex) or `minmax(0, ...)` (grid) too,
+  or it never actually gets narrow enough for that styling to trigger.
 - **`.step-list__remove` is a sibling of `.step-list__item`, not a
   descendant of it** - the class names suggest nesting, but `StepList.tsx`
   puts them as two sibling `<button>`s under the same `<li
@@ -240,7 +337,7 @@ taken - watch the terminal output for the actual URL).
   realm tears down before the debounce timer fires, and a
   `pagehide`/`visibilitychange` flush doesn't reliably survive a
   same-tab `reload()` in Chromium either (see
-  `docs/Known-Issues.md`). `page.waitForTimeout(300)` before reload is
+  `docs/known-issues.md`). `page.waitForTimeout(300)` before reload is
   enough, matching how a real user actually closes tabs.
 - **`locator.count()` doesn't auto-wait - `setInputFiles` on the Import
   file input does, but the app's reaction to it doesn't.** `setInputFiles`
@@ -269,6 +366,109 @@ taken - watch the terminal output for the actual URL).
   garbage-shaped token - so only `migrate`'s `isValidToken` check stands
   between it and the confirm dialog. Confirmed by breaking exactly that
   check (and no other) and watching the test fail.
+
+- **Seeding IndexedDB directly (bypassing the app) needs `idb-keyval`'s
+  actual db/store names, not guesses.** There's no UI path that produces a
+  document with a mismatched `schemaVersion` (only two intakes exist: the
+  IndexedDB load path and the JSON import path, and import always runs the
+  current app's own `migrate`/`CURRENT_SCHEMA_VERSION`) - the only way to
+  test the load path's handling of one is to write directly into IndexedDB
+  via `page.evaluate` before `page.reload()`. `idb-keyval`'s default store
+  (`get`/`set` with no explicit store argument, which is how
+  `state/persistence.ts` calls it) lives at IndexedDB database
+  `"keyval-store"`, object store `"keyval"`, keyed by the string passed to
+  `get`/`set` (e.g. `"instruction-builder:document"`) - confirmed by reading
+  `node_modules/idb-keyval/dist/index.js`'s `createStore` call, not
+  documented anywhere in this project. Reading it back the same way
+  afterward (rather than trusting a UI signal) is what lets the
+  `VERSION_MISMATCH_HANDLED_SAFELY` check confirm the old record survived
+  the reload untouched, not just that a toast happened to appear.
+
+- **Task 15 added a second, permanently-mounted, hidden canvas - every bare
+  `page.locator(".instruction-canvas__*")` now risks matching both.** `App`
+  keeps an always-rendered, hidden `InstructionCanvas readOnly` around
+  (`.app__export-canvas`, `position: absolute; width: 0; height: 0;
+  overflow: hidden` - not `display: none`, so it still renders normally,
+  just clipped from view) purely so Export SVG always has a live node to
+  serialize. It renders the same document as the visible editor, so
+  `.instruction-canvas__token`/`__chip-label`/`__tokens`/`__connector`/
+  `__step-bg`/`__step-time`/`__badge` etc. now match twice. Most `.first()`/
+  `.nth(k)` uses in this driver happen to still resolve correctly purely by
+  DOM order (the hidden canvas is mounted after `.app__main` in the JSX
+  tree, so it always comes *after* the real ones) - but relying on that
+  coincidence is fragile and `.count()`-based checks like `CONNECTOR_COUNT`
+  would silently double-count. Fixed by scoping every editor-specific
+  locator through a driver-level `editableCanvas` (`page.locator(".app__main")`)
+  instead of querying `page` directly. The one bug this actually caused,
+  not just risked: `.instruction-canvas--readonly` is a class the hidden
+  canvas *always* has, so `page.waitForSelector(".instruction-canvas--readonly")`
+  (meant to wait for Preview mode) resolved instantly from the very first
+  page load, long before Preview was ever toggled - the check downstream
+  happened to still pass (Preview mode was already active in practice by
+  the time it ran), so this would have stayed silently broken. Fixed by
+  waiting on `.app__main--preview` instead, the one class that's actually
+  unique to Preview mode being on.
+
+- **A plain `XMLSerializer` dump of the canvas loses every color and font -
+  confirm the *content* of an exported file, not just that a download
+  happened.** The canvas's appearance comes entirely from CSS classes in
+  `global.css`; `XMLSerializer` only serializes DOM markup, never the
+  stylesheet. `SVG_EXPORT_IS_SELF_CONTAINED_AND_STYLED` checks the
+  downloaded file's raw text for `rgb(245, 246, 249)` (the resolved value
+  of a design token used for every chip's fill) specifically because a
+  naive implementation would produce a file that still has the right
+  shapes and passes a shallow "did a `.svg` file download" check, while
+  actually being useless - confirmed by testing the naive `XMLSerializer`-
+  only approach directly before the style-baking fix existed and seeing
+  exactly this (correct markup, no color).
+
+- **A PNG's pixel dimensions are readable straight out of the file, no
+  image-decoding library needed.** The PNG signature (8 bytes) is always
+  immediately followed by the `IHDR` chunk's 4-byte length + 4-byte type,
+  then width and height as big-endian `uint32`s - so
+  `buffer.readUInt32BE(16)`/`readUInt32BE(20)` on the raw downloaded file
+  gives exact pixel dimensions with nothing but Node's built-in `Buffer`.
+  `PNG_EXPORT_IS_RASTERIZED_AT_PIXEL_DENSITY` uses this to confirm the
+  file's actual size is the exported SVG's own width/height × the declared
+  `pixelDensity` - a check that "did a `.png` download" alone can't catch:
+  a rasterization bug that silently fell back to 1x (or any other wrong
+  scale) would still produce a valid, openable PNG, just the wrong size.
+
+- **`window.print()` has no downloaded file and no scriptable dialog to
+  wait on - test the CSS and the call separately.** Playwright's `dialog`
+  event only fires for `alert`/`confirm`/`prompt`/`beforeunload`, never
+  for `window.print()`'s native, OS-level print dialog, and headless
+  Chromium never actually shows that dialog at all. Two independent
+  checks stand in for it: attach a one-shot `beforeprint` listener via
+  `page.evaluate` *before* clicking "Export PDF" (every browser fires
+  `beforeprint`/`afterprint` around a real print call, dialog or not) to
+  confirm the button really invokes `window.print()`, and separately use
+  `page.emulateMedia({ media: "print" })` to apply the exact `@media
+  print` CSS a real print/"Save as PDF" would, with no dialog involved,
+  to confirm the *page* it would produce is correct. Don't forget to
+  `page.emulateMedia({ media: "screen" })` back afterward - a run that
+  skips this leaves every later screenshot rendered under print rules,
+  making everything past that point look broken.
+
+- **This file's own top-level `const URL = ...` (the dev server URL, from
+  argv) shadows the global `URL` constructor for the rest of the module.**
+  `new URL("../../../node_modules/axe-core/axe.min.js", import.meta.url)`
+  fails with `TypeError: URL is not a constructor` here specifically
+  because of that shadowing - it isn't a Node version issue or a typo.
+  Resolve module-relative paths with `path.join(path.dirname(fileURLToPath(import.meta.url)), ...)`
+  (`node:url`'s `fileURLToPath` + `node:path`) instead, never `new URL(...)`,
+  anywhere in this file.
+- **The canvas's SVG token chips are deliberately pointer/touch-only, even
+  after task 22 - token *selection* has a keyboard path, but it's a
+  different element.** `StepDetails.tsx`'s "Tokens in this step" list
+  (`.step-details__token-button`) is the keyboard-operable way to select a
+  token, not the canvas chip itself - it only renders once a step is
+  already selected, which is exactly when the canvas's two-stage select
+  rule would allow a token click anyway. `TOKEN_SELECTED_VIA_KEYBOARD`
+  drives that list, not `.instruction-canvas__token`. Don't add `.focus()`/
+  keyboard-press assertions against the canvas token chips expecting them
+  to select anything - they won't; only the badge (step select) and
+  chip-remove (token remove) are keyboard-interactive inside the SVG.
 
 ## Troubleshooting
 
