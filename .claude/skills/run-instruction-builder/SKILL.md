@@ -1,6 +1,6 @@
 ---
 name: run-instruction-builder
-description: Build, start, and drive the Visual Instruction Builder Preact/Vite dev app in a real browser to check a UI change - screenshots the canvas/token-picker, exercises step/token select, category tabs in "Add to step"/"Add to token", attaching a Quantity or Warning to a token and removing it, setting an independent duration on a token and a step via DurationField (and the step/token-switch-while-editing regression it once had), drag-and-drop (adding, moving, and reordering, including the live insertion-point marker), undo/redo (buttons and keyboard shortcuts, including that continuous typing coalesces into one undo step), JSON/SVG/PNG/PDF export and JSON import (including the incomplete-steps warning, the confirm-before-replace dialog, invalid-file rejection, that import goes through undo/redo too, that the downloaded SVG is self-contained with real colors baked in rather than just CSS classes, that the downloaded PNG is actually rasterized at its declared pixel density, and that Export PDF's print stylesheet isolates the hidden read-only canvas via `emulateMedia`), IndexedDB persistence across a reload (including a saved document with a mismatched schema version, seeded directly into IndexedDB), the token connector lines, the read-only preview toggle, an axe-core accessibility scan at several app states, keyboard-only step reordering and token selection, and the Import dialog's focus trap/Escape handling, and checks the console for errors. Also runs `npm test`, the Vitest unit suite covering the instruction model, the document session's undo/redo, and pure lib/ logic - and, via a separate `pwa-check.mjs` script against a real production build (not the dev server), the offline service worker: registration, runtime caching, and that the app actually still loads with no network at all. Use for "run the app," "screenshot the instruction builder," "check this UI change works," "does drag-and-drop work," "does token attachment work," "does step/token time work," "does undo/redo work," "does export/import work," "does SVG export look right," "does PNG export look right," "does print/PDF export work," "does persistence handle a bad/old save," "does the canvas render correctly," "does keyboard access/accessibility work," "does offline/PWA support work," or "run the unit tests."
+description: Build, start, and drive the Visual Instruction Builder Preact/Vite dev app in a real browser to check a UI change - screenshots the canvas/token-picker, exercises step/token select, category tabs in "Add to step", attaching a Quantity or Warning to a token via Token details' own fields and removing it (Quantity mirrors DurationField's collapsed/edit-toggle interaction, pre-filling from the current value on Edit and select-on-focus in its amount input; Warning stays an always-visible preset grid), changing an already-attached Quantity directly without removing it first, setting an independent duration on a token and a step via DurationField (and the step/token-switch-while-editing regression it once had), drag-and-drop (adding, moving, and reordering, including the live insertion-point marker), undo/redo (buttons and keyboard shortcuts, including that continuous typing coalesces into one undo step), JSON/SVG/PNG/PDF export and JSON import (including the incomplete-steps warning, the confirm-before-replace dialog, invalid-file rejection, that import goes through undo/redo too, that the downloaded SVG is self-contained with real colors baked in rather than just CSS classes, that the downloaded PNG is actually rasterized at its declared pixel density, and that Export PDF's print stylesheet isolates the hidden read-only canvas via `emulateMedia`), IndexedDB persistence across a reload (including a saved document with a mismatched schema version, seeded directly into IndexedDB), the token connector lines, the read-only preview toggle, an axe-core accessibility scan at several app states, keyboard-only step reordering and token selection, and the Import dialog's focus trap/Escape handling, and checks the console for errors. Also runs `npm test`, the Vitest unit suite covering the instruction model, the document session's undo/redo, and pure lib/ logic - and, via a separate `pwa-check.mjs` script against a real production build (not the dev server), the offline service worker: registration, runtime caching, and that the app actually still loads with no network at all. Use for "run the app," "screenshot the instruction builder," "check this UI change works," "does drag-and-drop work," "does token attachment work," "does step/token time work," "does undo/redo work," "does export/import work," "does SVG export look right," "does PNG export look right," "does print/PDF export work," "does persistence handle a bad/old save," "does the canvas render correctly," "does keyboard access/accessibility work," "does offline/PWA support work," or "run the unit tests."
 ---
 
 Paths below are relative to the project root (`instruction_builder/`).
@@ -90,19 +90,29 @@ the only one that needs the steps under "Run (agent path)".
    and only a further click on a token of the *already-selected* step
    selects the token itself (surfaced in the Token details panel). It
    types into that panel's title/notes fields and checks the change
-   lands on the canvas chip's label, then exercises "Add to token":
-   switches that picker's own category tabs to attach a Warning (a
-   preset button) and a Quantity (a validated amount+unit form - Time
-   is not offered here, see below) to the selected token, confirms the
-   canvas chip grows two corner badges and Token details lists two
-   attachments, removes one via Token details, and confirms both drop
-   to one. It also reproduces a real bug found in code review (see
-   docs/fixed-issues/README.md): typing a draft amount/unit into the Quantity form
-   and switching to a *different* token without attaching must not leave
-   the new token's form showing the old token's unsaved draft. It then
-   exercises Time - set independently on a token *and*
-   a step via the `DurationField` control inline in Token/Step
-   details (day/hour/minute/second boxes) - confirming the canvas's
+   lands on the canvas chip's label, then exercises Token details' own
+   Quantity and Warning fields: attaches a Warning (one of two
+   always-visible preset buttons - no tab switch needed) and a Quantity
+   (clicking "+ Quantity" opens a validated amount+unit form with
+   Save/Cancel, mirroring DurationField's "Token time" above it - Time
+   itself is not offered here, see below) to the selected token, confirms
+   the canvas chip grows two corner badges and Token details reflects
+   both, removes the Warning via Token details, and confirms the badge
+   count drops to one while the Quantity stays attached. It also confirms
+   clicking Edit on an already-attached Quantity pre-fills the form from
+   its current value, that focusing the amount input selects its full
+   contents (so retyping doesn't need a manual clear first), and that
+   changing the value and clicking Save replaces it in place (one
+   attachment, not two) rather than requiring a Remove first. It also
+   reproduces a real bug found in code review (see
+   docs/fixed-issues/README.md): opening an edit on the Quantity field
+   and switching to a *different* token without saving must not leave the
+   new token's Quantity field stuck in the old token's unsaved editing
+   form (the same bug class DurationField's own regression check below
+   guards against). It then exercises Time - set independently on a token
+   *and* a step via the `DurationField` control inline in Token/Step
+   details (day/hour/minute/second boxes, also confirming focusing one
+   selects its full contents) - confirming the canvas's
    centered duration header above the step shows the token's time
    first, then the step's own explicit time once set (which takes
    precedence). It also reproduces a real bug found in manual testing
@@ -205,7 +215,11 @@ the only one that needs the steps under "Run (agent path)".
    untouched. It prints `SCREENSHOTS_DIR=...`,
    `TABS_FILTER_TOKENS=...`, `TOKEN_SELECTED_AFTER_FIRST_CLICK=...`,
    `TOKEN_LABEL_UPDATED=...`, `ATTACHMENTS_WORKED_END_TO_END=...`,
+   `QUANTITY_EDIT_PREFILLS_FROM_CURRENT_VALUE=...`,
+   `QUANTITY_SELECTS_VALUE_ON_FOCUS=...`,
    `QUANTITY_FORM_RESETS_PER_TOKEN=...`,
+   `ATTACHED_VALUE_CHANGEABLE_WITHOUT_REMOVING=...`,
+   `DURATION_SELECTS_VALUE_ON_FOCUS=...`,
    `TIME_WORKED_END_TO_END=...`, `DURATION_FIELD_RESETS_PER_TOKEN=...`,
    `DURATION_FIELD_RESETS_PER_STEP=...`, `CONNECTOR_COUNT=...`,
    `DRAG_ADDED_TOKEN_VIA_PICKER=...`,
@@ -333,6 +347,29 @@ taken - watch the terminal output for the actual URL).
   `<button>` elements, so their disabled-at-a-boundary state is
   `aria-disabled="true"`, not Playwright's `.isDisabled()` (which only
   understands native form controls).
+- **"Add to token" is gone - Quantity/Warning attach from inside Token
+  details now, with no tabs, and Quantity itself later became a
+  collapsed/edit-toggle field like Time rather than an always-visible
+  form.** The old standalone `TokenAttachmentPicker` panel (right column,
+  its own category tabs) was first folded into `TokenDetails` as two
+  always-visible rows, then Quantity specifically was reworked again to
+  mirror `DurationField`'s own interaction: `.token-details__quantity-add`
+  ("+ Quantity", shown when unset), `.token-details__quantity-display` +
+  `.token-details__quantity-value` + `.token-details__quantity-edit`/
+  `.token-details__quantity-remove` (shown once attached), and
+  `.token-details__quantity-form` + `.token-details__quantity-save`/
+  `.token-details__quantity-cancel` (the committed edit mode, opened by
+  either Add or Edit) - there is no more "Attach" button or always-visible
+  form. Warning is unchanged: still an always-visible preset grid, its
+  attached value still rendered as `.token-details__attachment` (the one
+  remaining use of that class - Quantity no longer uses it). Edit/Remove's
+  aria-labels stay dynamic (e.g. `"Remove 3 kg"`), unlike DurationField's
+  static `"Remove token time"`, so locate them by class
+  (`.token-details__quantity-edit`/`-remove`/`-save`) rather than
+  `getByRole` with a guessed name. Locate everything by scoping through
+  `page.locator(".token-details")`, not `.token-attachment-picker`
+  (deleted) or a `getByRole("tab", ...)` call (no tabs exist here anymore -
+  `TokenPicker`'s own "Add to step" tabs are unrelated and still tabbed).
 - **`netstat`'s state column is localized** ("ABHÖREN" instead of
   "LISTENING" on this German-Windows install), so `grep LISTENING`
   silently finds nothing. Use PowerShell's `Get-NetTCPConnection

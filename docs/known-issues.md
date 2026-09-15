@@ -102,23 +102,37 @@ five files actually touched. See
 [phase-2/progress/architecture-drag-drop-protocol-collapse.md](./phase-2/progress/architecture-drag-drop-protocol-collapse.md) for the full file list.
 The remaining item is still deliberately deferred:
 
-- **Token/attachment vocabulary enumerated in seven places, two of them
-  already disagreeing** - `TokenCategory` (`model/instruction.ts`) is
-  hand-copied into `TOKEN_CATEGORIES` (`model/migrate.ts`), and
-  `ATTACHMENT_CATEGORIES` (`TokenAttachmentPicker.tsx`, `["quantity",
-  "warning"]`) and `ATTACHMENT_KINDS` (`TokenDetails.tsx`, `["warning",
-  "quantity"]`) already list the same two values in reversed order - not yet
-  user-visible since both drive tab-set membership, not tab order, but a
-  live drift, not a hypothetical one. Separately, a Quantity's amount and
-  unit are fused into one display string at attach time
-  (`` `${amount} ${unit}` `` in `TokenAttachmentPicker.tsx`) with nothing
-  that decomposes it back apart, so a quantity can never be re-edited as a
-  number+unit once attached. Deferred - the audit's own assessment is that
-  this is weaker than the other candidates (deleting it moves the complexity
-  back into three render sites rather than removing it) and it earns its
-  keep more clearly once a real content-pack system needs one place to
-  extend the vocabulary - now Phase 4 task 32 (Formalize the Content-Pack
-  Shape), per the 2026-09-14 Phase 3/4 reprioritization (see
+- **Token/attachment vocabulary enumerated in several places** -
+  `TokenCategory` (`model/instruction.ts`) is hand-copied into
+  `TOKEN_CATEGORIES` (`model/migrate.ts`) and `STEP_TOKEN_CATEGORIES`
+  (`TokenPicker.tsx`), and `AttachmentKind` (`state/document.ts`) is a
+  separate, narrower type covering just the two attachable categories. (A
+  2026-09-15 rework that folded "Add to token" into `TokenDetails` resolved
+  one sub-instance of this: an `ATTACHMENT_CATEGORIES` array in the
+  now-deleted `TokenAttachmentPicker.tsx` and an `ATTACHMENT_KINDS` array in
+  `TokenDetails.tsx` used to list the same two values in reversed order -
+  both arrays are gone now, since `TokenDetails`' Quantity/Warning rows are
+  two fixed, hardcoded rows rather than a mapped list, so that particular
+  drift can't recur.) Separately, a Quantity's amount and unit are still
+  fused into one display string at attach time
+  (`` `${amount} ${unit}` `` in `TokenDetails.tsx`'s `QuantityRow`), stored
+  only in that joined form - not as separate `amount`/`unit` fields on
+  `TokenAttachment`. A later 2026-09-15 rework made `QuantityRow` mirror
+  `DurationField`'s collapsed/edit-toggle interaction, which closed the two
+  concrete gaps this used to describe (editing an attached value now
+  pre-fills the form via a `splitQuantity` helper that re-parses the joined
+  label, and Save replaces the old value in place without a remove first),
+  but the underlying representation gap remains: `splitQuantity` is a
+  best-effort re-parse of a display string, not a real inverse of a
+  structured value, and silently falls back to defaults for anything it
+  doesn't recognize (e.g. a value from an older schema or a future unit
+  list change). Deferred - the
+  audit's own assessment is that this is weaker than the other candidates
+  (deleting it moves the complexity back into several render sites rather
+  than removing it) and it earns its keep more clearly once a real
+  content-pack system needs one place to extend the vocabulary - now Phase
+  4 task 32 (Formalize the Content-Pack Shape), per the 2026-09-14 Phase
+  3/4 reprioritization (see
   [project-plan.md](./project-plan.md#implementation-plan)), not Phase 3.
   A 2026-09-14 internal architecture review (see
   [phase-3/audits/2026-09-14-architecture-review.html](./phase-3/audits/2026-09-14-architecture-review.html))
@@ -127,41 +141,11 @@ The remaining item is still deliberately deferred:
   shape needing to change," "kept generic so Phase 4 content packs can
   extend it without changing this interface") are each accurate about
   their own narrow scope, but neither warns that `TokenCategory` itself,
-  or any of its four hand-copied arrays above, are *not* part of that
-  swappable surface - a real domain swap touches code in at least four
-  places, not just a data file. Worth keeping in mind when task 32 is
-  scoped, so it doesn't start from a rosier picture than what's actually
-  there.
+  or any of its hand-copied arrays above, are *not* part of that swappable
+  surface - a real domain swap touches code in several places, not just a
+  data file. Worth keeping in mind when task 32 is scoped, so it doesn't
+  start from a rosier picture than what's actually there.
 - **First noted:** 2026-09-13.
-
-## Category tab-strip duplicated between `TokenPicker` and `TokenAttachmentPicker`
-
-- **What it is:** the `role="tablist"` block - markup, classes
-  (`token-picker__tab`/`token-picker__grid`), `aria-selected`/
-  `aria-controls` wiring, and active-class toggling - is hand-copied
-  between `TokenPicker.tsx` (lines ~46-60) and `TokenAttachmentPicker.tsx`
-  (lines ~89-103), differing only in the category array, the active-
-  category signal, and the tab list's `aria-label`. Two real adapters of
-  the same shape, not sharing a seam. Flagged as the "Strong" candidate in
-  the 2026-09-14 internal architecture review (see
-  [phase-3/audits/2026-09-14-architecture-review.html](./phase-3/audits/2026-09-14-architecture-review.html)) -
-  it directly increases the cost of the roving-tabindex/arrow-key fix
-  already deferred above ("Two accessibility gaps"), since that fix would
-  currently need to be hand-applied twice, in sync.
-- **Why it's not fixed now:** purely an internal-cohesion issue with zero
-  user-facing effect - real users in task 30 (Test Real Users) can't
-  perceive whether these two pickers share a module. Deferring costs
-  nothing extra (the duplication is stable and well-understood, not
-  actively drifting further), while fixing it now would mean touching two
-  components right before publish for no product benefit, and its main
-  payoff (cheaper roving-tabindex fix) is itself prep for another deferred
-  item with no scheduled date.
-- **Revisit when:** Phase 4 task 32 (Formalize the Content-Pack Shape)
-  actually starts - that work will very plausibly touch both components
-  anyway when generalizing the category vocabulary, so the tab-strip
-  extraction should be shaped by real content-pack requirements at that
-  point rather than guessed now and possibly redesigned later.
-- **First noted:** 2026-09-14.
 
 ## Two accessibility gaps deliberately left for a later pass
 
@@ -177,30 +161,35 @@ only - see
   called it out by name; token movement didn't, and doing it well (moving
   *to* a specific step, not just up/down within one) needs its own small
   design pass rather than reusing the step pattern as-is.
-- **`TokenPicker`/`TokenAttachmentPicker`'s category tabs (`role="tablist"`/
-  `role="tab"`) don't implement the WAI-ARIA APG Tabs pattern's roving
-  tabindex + arrow-key navigation** - every tab sits in the normal Tab
-  order and activates on Enter/Space like a plain button, so they're fully
-  keyboard-operable, just not via the idiomatic Left/Right-arrow-to-switch,
-  Tab-to-leave convention some screen reader users expect once they hear
-  `role="tab"` announced. Deferred as lower-impact than the two functional
-  gaps task 22 did fix (color contrast, the token/import-input keyboard
-  paths); worth revisiting if a real screen-reader user reports friction
-  with it.
+- **`TokenPicker`'s category tabs (`role="tablist"`/`role="tab"`) don't
+  implement the WAI-ARIA APG Tabs pattern's roving tabindex + arrow-key
+  navigation** - every tab sits in the normal Tab order and activates on
+  Enter/Space like a plain button, so they're fully keyboard-operable, just
+  not via the idiomatic Left/Right-arrow-to-switch, Tab-to-leave convention
+  some screen reader users expect once they hear `role="tab"` announced.
+  (`TokenAttachmentPicker` had the same gap on its own tabs until a
+  2026-09-15 rework folded it into `TokenDetails` and deleted it entirely -
+  `TokenPicker`'s are now the only tabs left in the app.) Deferred as
+  lower-impact than the two functional gaps task 22 did fix (color
+  contrast, the token/import-input keyboard paths); worth revisiting if a
+  real screen-reader user reports friction with it.
 - **First noted:** 2026-09-14.
 
-## Full canvas/step list re-render on any edit anywhere in the document
+## Full canvas re-render on any edit anywhere in the document
 
-- **What it is:** `InstructionCanvas.tsx` and `StepList.tsx` both read
-  `document.value.steps` directly in their component body, so editing one
-  step (typing a title, attaching a warning, moving a token) re-renders
-  the *entire* canvas/step list - every step, not just the one that
-  changed. This is the one place this app's `@preact/signals`-based
-  "fine-grained reactivity" (see
+- **What it is:** `InstructionCanvas.tsx` reads `document.value.steps`
+  directly in its component body, so editing one step (typing a title,
+  attaching a warning, moving a token) re-renders the *entire* canvas -
+  every step, not just the one that changed. This is the one place this
+  app's `@preact/signals`-based "fine-grained reactivity" (see
   [project-plan.md](./project-plan.md#technology-stack)) isn't actually
   exercised; `selectedStep`/`selectedToken` (`state/document.ts`) get this
-  right via `computed()` + referential stability, these two components
-  don't.
+  right via `computed()` + referential stability, `InstructionCanvas`
+  doesn't. (This used to also apply to a separate `StepList.tsx`; a
+  2026-09-15 rework deleted it and moved step management onto the canvas
+  itself - see
+  [phase-3/progress/step-management-moved-to-canvas.md](./phase-3/progress/step-management-moved-to-canvas.md) -
+  so the finding is now about one component, not two.)
 - **Why it's not fixed:** raised and investigated during task 24
   (Optimize Performance) - see
   [phase-2/progress/task-24-performance.md](./phase-2/progress/task-24-performance.md#investigated-not-fixed-whole-document-signal-subscription).

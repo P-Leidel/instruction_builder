@@ -60,9 +60,10 @@ export interface InstructionToken {
   /**
    * At most one of each kind, attached to this token (not standalone in the
    * step's token list) and rendered as a small badge on its chip rather than
-   * its own chip - see TokenAttachmentPicker and InstructionCanvas's
-   * chip-badge rendering. Adding a new one of the same kind replaces the
-   * old one, rather than allowing several of the same kind at once.
+   * its own chip - see TokenDetails' Quantity/Warning fields and
+   * InstructionCanvas's chip-badge rendering. Adding a new one of the same
+   * kind replaces the old one, rather than allowing several of the same
+   * kind at once.
    */
   quantity?: TokenAttachment;
   warning?: TokenAttachment;

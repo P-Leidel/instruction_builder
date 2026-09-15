@@ -18,12 +18,6 @@ export const previewMode = signal(false);
  */
 export const activeTokenCategory = signal<TokenCategory | null>(null);
 
-/** Same idea as `activeTokenCategory`, but for TokenAttachmentPicker's own,
- * separate set of tabs (quantity/warning/time) - kept as a second signal
- * rather than reusing the one above so switching tabs in one picker never
- * affects the other. */
-export const activeAttachmentCategory = signal<TokenCategory | null>(null);
-
 /**
  * A single dismissible status message shown below the toolbar (task 14's
  * link into tasks 18/19: a non-blocking warning when exporting/importing a

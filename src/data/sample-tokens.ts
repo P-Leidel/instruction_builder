@@ -96,7 +96,7 @@ export const SAMPLE_TOKENS: SampleToken[] = [
   { iconId: "warning.sharp", category: "warning", label: "Sharp!", description: "Caution: this step involves a sharp edge." },
 
   // Quantity and Time have no fixed presets - Quantity is a free amount+unit
-  // form (TokenAttachmentPicker) and Time is a free day/hour/minute/second
+  // form (TokenDetails' QuantityRow) and Time is a free day/hour/minute/second
   // form (DurationField), not a pick-from-a-list vocabulary like the
   // categories above.
 ];

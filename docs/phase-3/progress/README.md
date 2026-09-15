@@ -8,7 +8,8 @@
 
 Date: 2026-09-14, updated 2026-09-15 (tasks 25-29, an architecture review
 pass, a pre-launch file/docs and UI audit, a follow-up canvas-specific
-architecture deepening, and a step-management-onto-the-canvas UX rework)
+architecture deepening, a step-management-onto-the-canvas UX rework, and an
+"Add to token"-into-Token-details UX rework)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
 [../../project-plan.md](../../project-plan.md#implementation-plan)'s Phase 3
@@ -90,6 +91,13 @@ moved step management (select/add/remove/reorder) off the standalone
 step card gained a title, a left-edge drag-handle-plus-move-up/down reorder
 stack, a remove button, and a dashed "+ Add step" row inside the SVG - see
 [step-management-moved-to-canvas.md](./step-management-moved-to-canvas.md).
+A second same-day rework, via `/mattpocock-skills:grill-with-docs`, deleted
+the standalone `TokenAttachmentPicker` ("Add to token", right column) the
+same way, folding Quantity/Warning attaching into `TokenDetails`'s own
+"Attachments" section as two always-visible rows (no more tabs), each
+letting an already-attached value be changed directly without removing it
+first - see
+[token-attachments-folded-into-token-details.md](./token-attachments-folded-into-token-details.md).
 
 ## What shipped
 
@@ -106,6 +114,7 @@ One file per task (or per notable pass), in task-number order:
 | 29 | Publish MVP | [task-29-publish-mvp.md](./task-29-publish-mvp.md) |
 | — | Architecture: 2026-09-15 canvas deepening (`computeCanvasLayout` becomes `canvas-layout.ts`'s whole interface; `insertionMarkerPosition` kept as a separate seam) | [architecture-2026-09-15-canvas-deepening.md](./architecture-2026-09-15-canvas-deepening.md) |
 | — | UX: step management moved onto the canvas (StepList deleted; title, reorder stack, remove, add-step row now live in InstructionCanvas.tsx) | [step-management-moved-to-canvas.md](./step-management-moved-to-canvas.md) |
+| — | UX: "Add to token" folded into Token details (TokenAttachmentPicker deleted; Quantity/Warning are always-visible rows in TokenDetails.tsx, changeable without removing first) | [token-attachments-folded-into-token-details.md](./token-attachments-folded-into-token-details.md) |
 | 30 | Test Real Users | *not started* |
 | 31 | Refine UX | *not started* |
 
@@ -115,8 +124,10 @@ One file per task (or per notable pass), in task-number order:
   pre-launch audit only updated 3 existing `duration.test.ts` assertions'
   expected strings for the new human-readable format; the canvas deepening
   added 1 net new case to `canvas-layout.test.ts` while porting the rest
-  through `computeCanvasLayout`; the step-management rework added 2 more),
-  and `npm run build` all pass cleanly.
+  through `computeCanvasLayout`; the step-management rework added 2 more;
+  the "Add to token" rework added none - it moved already-tested state
+  mutators around without adding new logic), and `npm run build` all pass
+  cleanly.
 - See each task's own file above for full verification detail
   (browser-driven checks, bundle size deltas, and the decisions made along
   the way).

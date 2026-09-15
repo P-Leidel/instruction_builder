@@ -4,7 +4,6 @@ import { StepDetails } from "./components/StepDetails/StepDetails";
 import { TokenDetails } from "./components/TokenDetails/TokenDetails";
 import { InstructionCanvas } from "./components/InstructionCanvas/InstructionCanvas";
 import { TokenPicker } from "./components/TokenPicker/TokenPicker";
-import { TokenAttachmentPicker } from "./components/TokenAttachmentPicker/TokenAttachmentPicker";
 import { DragGhost } from "./components/DragGhost/DragGhost";
 import { ImportConfirmDialog } from "./components/ImportConfirmDialog/ImportConfirmDialog";
 import { NewDocumentConfirmDialog } from "./components/NewDocumentConfirmDialog/NewDocumentConfirmDialog";
@@ -143,16 +142,18 @@ function useHistoryKeyboardShortcuts(): void {
  * wrap each side's panel stack in its own independent flex column (task 28
  * UI polish follow-up) - each side's height now depends only on its own
  * panels' content, not on a shared grid row also spanning the *other*
- * side's stack, which previously left "Add to token" (the right column's
- * second panel) stranded below a large gap dictated by "Step details"/
- * "Token details" (the left column's own content) rather than anything in
- * its own column. Reordering a region within a side is still markup-only
+ * side's stack. Reordering a region within a side is still markup-only
  * within that side's `<div>`; swapping which side a whole stack sits on is
  * `grid-template-columns`'s column order plus this markup's element order.
  * The left column used to open with a standalone StepList panel (select/
  * add/remove/reorder steps); that functionality moved onto the canvas
  * itself, so the column now opens directly with `StepDetails` (see
  * InstructionCanvas.tsx's own doc comment for the canvas-native controls).
+ * The right column used to carry a second panel, TokenAttachmentPicker
+ * ("Add to token"), below `TokenPicker`; that functionality folded into two
+ * of `TokenDetails`'s own fields, Quantity and Warning, instead (see
+ * TokenDetails.tsx's doc comment), so the right column is now just
+ * `TokenPicker` on its own.
  *
  * The canvas region now renders InstructionCanvas (task 6), replacing
  * Phase 1's StepBuilder HTML prototype now that the interaction model is
@@ -306,7 +307,6 @@ export function App() {
             <InstructionCanvas />
             <div class="app__col-right">
               <TokenPicker />
-              <TokenAttachmentPicker />
             </div>
           </>
         )}

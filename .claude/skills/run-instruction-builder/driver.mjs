@@ -137,67 +137,106 @@ const tokenSelectedViaKeyboard =
   (await secondStepDetailsTokenButton.getAttribute("aria-current")) === "true";
 await firstToken.click();
 
-// "Add to token": Quantity (a free amount+unit form) and Warning (a preset
-// grid) attach to the selected token (firstToken, already selected above) -
-// a separate menu from "Add to step", click-only (no drag). Time is
-// deliberately not here - see the DurationField block below. Verify the
-// canvas chip grows the expected badges, Token details lists them, and
-// removing one via Token details drops it from both.
-const attach = page.locator(".token-attachment-picker");
-async function selectAttachTab(label) {
-  await attach.getByRole("tab", { name: label, exact: true }).click();
-}
-await selectAttachTab("Warnings");
-await attach.getByRole("button", { name: "Sharp!", exact: true }).click();
-await selectAttachTab("Quantities");
-await attach.locator(".token-attachment-picker__field input").fill("250");
-await attach.locator(".token-attachment-picker__field select").selectOption("g");
-await attach.getByRole("button", { name: "Attach", exact: true }).click();
+// "Attachments": Quantity and Warning attach to the selected token
+// (firstToken, already selected above) - folded into Token details itself
+// as two of its own fields, not a separate "Add to token" panel. Warning
+// keeps its original always-visible preset-grid interaction; Quantity was
+// later reworked to mirror DurationField's own collapsed/edit-toggle
+// interaction instead (a "+ Quantity" button, or a value with Edit/Remove,
+// expanding to a committed Save/Cancel form) - see TokenDetails.tsx's
+// QuantityRow. Time is deliberately not here - see the DurationField block
+// below. Verify the canvas chip grows the expected badges, Token details
+// reflects both, and removing one via Token details drops it from both.
+const tokenDetails = page.locator(".token-details");
+await tokenDetails.getByRole("button", { name: "Sharp!", exact: true }).click();
+await tokenDetails.getByRole("button", { name: "Add quantity", exact: true }).click();
+const quantityAmountInput = tokenDetails.locator(".token-details__quantity-field input");
+const quantityUnitSelect = tokenDetails.locator(".token-details__quantity-field select");
+await quantityAmountInput.fill("250");
+await quantityUnitSelect.selectOption("g");
+await tokenDetails.locator(".token-details__quantity-save").click();
 
 const badgeCountAfterAttach = await firstToken.locator(".instruction-canvas__chip-badge").count();
-const attachmentListCountAfterAttach = await page.locator(".token-details__attachment").count();
+const quantityAttachedAfterSave = (await tokenDetails.locator(".token-details__quantity-value").textContent()) === "250 g";
+const warningAttachmentCountAfterClick = await tokenDetails.locator(".token-details__attachment").count();
 await page.screenshot({ path: path.join(OUT, "02c-token-attachments.png"), fullPage: true });
 
 const accessibilityViolationsMainEditor = await countAxeViolations("main editor");
 
-await page.locator(".token-details").getByRole("button", { name: "Remove Sharp!" }).click();
+await tokenDetails.getByRole("button", { name: "Remove Sharp!" }).click();
 const badgeCountAfterRemove = await firstToken.locator(".instruction-canvas__chip-badge").count();
-const attachmentListCountAfterRemove = await page.locator(".token-details__attachment").count();
+const warningAttachmentCountAfterRemove = await tokenDetails.locator(".token-details__attachment").count();
+const quantityStillAttachedAfterWarningRemove =
+  (await tokenDetails.locator(".token-details__quantity-value").textContent()) === "250 g";
 
 const attachmentsWorkedEndToEnd =
   badgeCountAfterAttach === 2 &&
-  attachmentListCountAfterAttach === 2 &&
+  quantityAttachedAfterSave &&
+  warningAttachmentCountAfterClick === 1 &&
   badgeCountAfterRemove === 1 &&
-  attachmentListCountAfterRemove === 1;
+  warningAttachmentCountAfterRemove === 0 &&
+  quantityStillAttachedAfterWarningRemove;
 
-// Regression test for a review finding: QuantityForm is the same component
-// instance across a token switch (same position in the tree), so without a
-// `key={token.id}` on it, typing a draft amount/unit for one token and then
-// switching to a *different* token (without clicking Attach) left the new
-// token's Quantity form showing the old token's unsaved draft instead of
-// resetting to the default amount/unit - same bug class already found and
-// fixed for DurationField above.
-await selectAttachTab("Quantities");
-const quantityAmountInput = attach.locator(".token-attachment-picker__field input");
-const quantityUnitSelect = attach.locator(".token-attachment-picker__field select");
-const defaultQuantityUnit = await quantityUnitSelect.locator("option").first().getAttribute("value");
+// Regression test for the same bug class DurationField's `key={token.id}`
+// already guards against (see DURATION_FIELD_RESETS_PER_TOKEN below):
+// QuantityRow is the same component instance across a token switch (same
+// position in the tree), so without a `key={token.id}` on it, starting an
+// edit on one token (firstToken, which has "250 g" attached from above)
+// and then switching to a *different* token without saving/cancelling
+// would leave the new token's Quantity field stuck showing the old
+// token's unsaved editing form instead of its own actual value (here,
+// unset). Clicking Edit here also exercises the edit form pre-filling
+// from the current value ("250"/"g"), same as DurationField's own
+// `startEditing`.
+await tokenDetails.locator(".token-details__quantity-edit").click();
+const quantityEditPrefillsFromCurrentValue =
+  (await quantityAmountInput.inputValue()) === "250" && (await quantityUnitSelect.inputValue()) === "g";
+await quantityAmountInput.focus();
+const quantitySelectsValueOnFocus = await quantityAmountInput.evaluate(
+  (el) => el.selectionStart === 0 && el.selectionEnd === el.value.length && el.value.length > 0,
+);
 await quantityAmountInput.fill("42");
 await quantityUnitSelect.selectOption("kg");
 // step 1 already selected -> selects its 2nd token (declared as `secondToken` later, reused there)
 await editableCanvas.locator(".instruction-canvas__token").nth(1).click();
-const freshQuantityAmount = await quantityAmountInput.inputValue();
-const freshQuantityUnit = await quantityUnitSelect.inputValue();
-const quantityFormResetsPerToken = freshQuantityAmount === "1" && freshQuantityUnit === defaultQuantityUnit;
+const quantityFormResetsPerToken =
+  (await tokenDetails.locator(".token-details__quantity-form").count()) === 0 &&
+  (await tokenDetails.getByRole("button", { name: "Add quantity", exact: true }).count()) === 1;
 await firstToken.click(); // back to the first token for the rest of the flow
 
-// Time: factored out of "Add to token" entirely - set via DurationField
-// directly in Token details (a token's own time) and Step details (a
-// step's own estimate, which takes precedence over its tokens' summed time
-// when both are set - see stepDisplayedTime in InstructionCanvas.tsx).
-// Verify the canvas's step-level duration header reflects both in turn.
+// Editing an already-attached Quantity replaces it in place (no duplicate,
+// no need to Remove first) - the same "at most one of each kind, replacing
+// on re-attach" invariant InstructionToken.quantity has always had (see
+// model/instruction.ts), now expressed through the Edit/Save flow itself
+// rather than an always-visible form. firstToken currently has "250 g"
+// attached; the fresh QuantityRow mount just triggered by re-selecting it
+// (above) reset back to its collapsed display, same as the token-switch
+// check just above.
+await tokenDetails.locator(".token-details__quantity-edit").click();
+await quantityAmountInput.fill("3");
+await quantityUnitSelect.selectOption("kg");
+await tokenDetails.locator(".token-details__quantity-save").click();
+const quantityValueCountAfterReplace = await tokenDetails.locator(".token-details__quantity-value").count();
+const replacedQuantityLabel = await tokenDetails.locator(".token-details__quantity-value").textContent();
+const attachedValueChangeableWithoutRemoving =
+  quantityValueCountAfterReplace === 1 && // replaced in place, not a second attachment
+  replacedQuantityLabel === "3 kg";
+
+// Time: separate from Quantity/Warning - set via DurationField directly in
+// Token details (a token's own time) and Step details (a step's own
+// estimate, which takes precedence over its tokens' summed time when both
+// are set - see stepDisplayedTime in InstructionCanvas.tsx). Verify the
+// canvas's step-level duration header reflects both in turn.
 const tokenDurationField = page.locator(".token-details").locator(".duration-field");
 await tokenDurationField.getByRole("button", { name: "Add token time", exact: true }).click();
 const tokenDurationInputs = tokenDurationField.locator(".duration-field__unit input");
+// Select-on-focus: focusing a duration input should select its full
+// contents (so overtyping doesn't require manually clearing it first) -
+// checked on the still-zeroed "days" input before it's filled below.
+await tokenDurationInputs.nth(0).focus();
+const durationSelectsValueOnFocus = await tokenDurationInputs.nth(0).evaluate(
+  (el) => el.selectionStart === 0 && el.selectionEnd === el.value.length && el.value.length > 0,
+);
 await tokenDurationInputs.nth(1).fill("1"); // 1 hour
 await tokenDurationInputs.nth(2).fill("30"); // 30 minutes
 await tokenDurationField.getByRole("button", { name: "Save token time", exact: true }).click();
@@ -918,7 +957,11 @@ console.log("TABS_FILTER_TOKENS=" + tabsFilterTokens);
 console.log("TOKEN_SELECTED_AFTER_FIRST_CLICK=" + tokenSelectedAfterFirstClick);
 console.log("TOKEN_LABEL_UPDATED=" + tokenLabelUpdated);
 console.log("ATTACHMENTS_WORKED_END_TO_END=" + attachmentsWorkedEndToEnd);
+console.log("QUANTITY_EDIT_PREFILLS_FROM_CURRENT_VALUE=" + quantityEditPrefillsFromCurrentValue);
+console.log("QUANTITY_SELECTS_VALUE_ON_FOCUS=" + quantitySelectsValueOnFocus);
 console.log("QUANTITY_FORM_RESETS_PER_TOKEN=" + quantityFormResetsPerToken);
+console.log("ATTACHED_VALUE_CHANGEABLE_WITHOUT_REMOVING=" + attachedValueChangeableWithoutRemoving);
+console.log("DURATION_SELECTS_VALUE_ON_FOCUS=" + durationSelectsValueOnFocus);
 console.log("TIME_WORKED_END_TO_END=" + timeWorkedEndToEnd);
 console.log("DURATION_FIELD_RESETS_PER_TOKEN=" + durationFieldResetsPerToken);
 console.log("DURATION_FIELD_RESETS_PER_STEP=" + durationFieldResetsPerStep);

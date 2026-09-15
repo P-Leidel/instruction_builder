@@ -10,10 +10,11 @@ import {
 } from "../model/instruction";
 
 /**
- * The two generic attachment kinds a token can carry via TokenAttachmentPicker
- * - see TokenAttachment. Time is deliberately not one of these: it has its
- * own dedicated shape (DurationAttachment), its own input UI (DurationField,
- * not the picker), and can attach to a step as well as a token - see
+ * The two generic attachment kinds a token can carry via TokenDetails' own
+ * Quantity and Warning fields - see TokenAttachment. Time is deliberately
+ * not one of these: it has its own dedicated shape (DurationAttachment),
+ * its own input UI (DurationField, not TokenDetails' quantity/warning
+ * fields), and can attach to a step as well as a token - see
  * setTokenTime/setStepTime below.
  */
 export type AttachmentKind = "quantity" | "warning";
@@ -22,7 +23,7 @@ const MAX_HISTORY = 100;
 /**
  * Free-text fields (step/token title and notes) call their mutator on every
  * keystroke (see StepDetails/TokenDetails - no local draft state, unlike
- * DurationField/QuantityForm), so recording history on every call would
+ * DurationField/QuantityRow), so recording history on every call would
  * make undo revert one character at a time. Mutators for those fields pass
  * `coalesce: true` to `setSteps`, which merges a run of calls arriving
  * within `COALESCE_WINDOW_MS` of each other into the single history entry
@@ -491,7 +492,7 @@ function updateTokenNoteCore(
   );
 }
 
-/** Attaches `attachment` to a specific token - TokenAttachmentPicker's click-to-attach path. */
+/** Attaches `attachment` to a specific token - TokenDetails' click-to-attach path. */
 function attachToTokenCore(
   session: DocumentSession,
   stepId: string,

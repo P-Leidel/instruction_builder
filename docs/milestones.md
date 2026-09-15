@@ -177,6 +177,13 @@ left-edge drag-to-reorder handle plus click-only move up/down buttons, a
 remove button, and a dashed "+ Add step" row rendered inside the SVG past
 the last step. See
 [phase-3/progress/step-management-moved-to-canvas.md](./phase-3/progress/step-management-moved-to-canvas.md).
+A second same-day rework, via `/mattpocock-skills:grill-with-docs`, folded
+the standalone `TokenAttachmentPicker` ("Add to token", right column) into
+`TokenDetails`'s own "Attachments" section the same way: the panel is
+deleted, and Quantity/Warning now render as two always-visible rows (no
+tabs), each letting an already-attached value be changed directly without
+removing it first. See
+[phase-3/progress/token-attachments-folded-into-token-details.md](./phase-3/progress/token-attachments-folded-into-token-details.md).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that

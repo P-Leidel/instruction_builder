@@ -8,8 +8,8 @@ import { SAMPLE_TOKENS, CATEGORY_LABELS, type SampleToken } from "../../data/sam
 import { Icon } from "../Icon/Icon";
 
 // Quantity, Warning, and Time are attached *to* a token instead - see
-// TokenAttachmentPicker's "Add to token" menu - so they're excluded here
-// even though sample-tokens.ts still lists them.
+// TokenDetails' own Quantity/Warning/Token time fields - so they're
+// excluded here even though sample-tokens.ts still lists them.
 const STEP_TOKEN_CATEGORIES: TokenCategory[] = ["action", "object", "tool"];
 
 const CATEGORIES_WITH_SAMPLES = STEP_TOKEN_CATEGORIES.filter((category) =>

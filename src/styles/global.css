@@ -474,8 +474,7 @@ button {
 .step-details,
 .token-details,
 .instruction-canvas,
-.token-picker,
-.token-attachment-picker {
+.token-picker {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -689,17 +688,6 @@ button {
   background: var(--color-surface);
   color: var(--color-text);
   text-align: right;
-  /* The native up/down spinner ate a disproportionate share of these
-     already-narrow boxes and added visual noise without much benefit at
-     this size - typing (or the browser's own scroll-to-adjust) works fine
-     without it. */
-  -moz-appearance: textfield;
-}
-
-.duration-field__unit input::-webkit-outer-spin-button,
-.duration-field__unit input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
 }
 
 .duration-field__actions {
@@ -735,19 +723,6 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--color-text-muted);
-}
-
-.token-details__attachments {
-  margin-bottom: 0.75rem;
-}
-
-.token-details__attachment-list {
-  list-style: none;
-  margin: 0.4rem 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
 }
 
 .token-details__attachment {
@@ -1114,6 +1089,14 @@ button {
   border-color: var(--color-accent);
 }
 
+/* Marks the preset matching a token's currently-attached value - see
+   TokenDetails' WarningRow, the only caller that tracks an "active" preset
+   among a button grid like this. */
+.token-picker__button--active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
 .token-picker__label {
   display: flex;
   align-items: center;
@@ -1133,17 +1116,84 @@ button {
   hyphens: auto;
 }
 
-/* Quantity's own form (TokenAttachmentPicker) - replaces a button grid,
-   since Quantity is a free amount+unit value rather than a fixed vocabulary. */
+/* Quantity field (TokenDetails' QuantityRow) - a collapsed/edit-toggle
+   value editor mirroring DurationField's "Token time" look (a "+ Quantity"
+   button, or a value with Edit/Remove, expanding to a committed edit form
+   with Save/Cancel), but with its own amount+unit form and class names
+   rather than sharing DurationField's component or CSS. */
 
-.token-attachment-picker__form {
+.token-details__quantity-add {
+  align-self: flex-start;
+  border: 1px dashed var(--color-border-strong);
+  background: transparent;
+  border-radius: var(--radius-md);
+  padding: 0.35rem 0.75rem;
+  min-height: 36px;
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.token-details__quantity-add:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.token-details__quantity-display {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.token-details__quantity-display-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.token-details__quantity-value {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.token-details__quantity-edit,
+.token-details__quantity-remove,
+.token-details__quantity-save,
+.token-details__quantity-cancel {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.6rem;
+  min-height: 32px;
+  font-size: 0.8rem;
+  color: var(--color-text);
+}
+
+.token-details__quantity-remove:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.token-details__quantity-save {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.token-details__quantity-save:disabled {
+  background: var(--color-surface-sunken);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.token-details__quantity-form {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 0.6rem;
 }
 
-.token-attachment-picker__field {
+.token-details__quantity-field {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -1151,8 +1201,8 @@ button {
   color: var(--color-text-muted);
 }
 
-.token-attachment-picker__field input,
-.token-attachment-picker__field select {
+.token-details__quantity-field input,
+.token-details__quantity-field select {
   font: inherit;
   padding: 0.4rem 0.5rem;
   border: 1px solid var(--color-border);
@@ -1161,30 +1211,18 @@ button {
   color: var(--color-text);
 }
 
-.token-attachment-picker__field input {
+.token-details__quantity-field input {
   width: 5.5rem;
 }
 
-.token-attachment-picker__error {
+.token-details__quantity-error {
   flex-basis: 100%;
   margin: 0;
   font-size: 0.75rem;
   color: var(--color-danger);
 }
 
-.token-attachment-picker__attach {
-  border: none;
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
-  border-radius: var(--radius-md);
-  padding: 0.45rem 1rem;
-  min-height: 36px;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.token-attachment-picker__attach:disabled {
-  background: var(--color-surface-sunken);
-  color: var(--color-text-muted);
-  cursor: not-allowed;
+.token-details__quantity-actions {
+  display: flex;
+  gap: 0.5rem;
 }
