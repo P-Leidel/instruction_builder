@@ -1,7 +1,9 @@
 /**
  * Phase 2 task 9 (Drag-and-Drop) / task 10 (Touch Support): a small,
- * framework-agnostic Pointer Events drag tracker, shared by TokenPicker,
- * InstructionCanvas, and StepList. Pointer Events (rather than the HTML5
+ * framework-agnostic Pointer Events drag tracker, shared by TokenPicker and
+ * InstructionCanvas (which uses it for both token drag and, since the
+ * standalone StepList panel was folded into the canvas, step-reorder drag
+ * too). Pointer Events (rather than the HTML5
  * Drag-and-Drop API) unify mouse/touch/pen input into one code path per the
  * plan's task 9 note - task 10 is largely "verify this works on touch,"
  * not a separate implementation.
@@ -92,6 +94,28 @@ export function beginPointerDrag(event: PointerEvent, handlers: DragHandlers): v
   target.addEventListener("pointermove", onPointerMove as EventListener);
   target.addEventListener("pointerup", onPointerUp as EventListener);
   target.addEventListener("pointercancel", onPointerCancel as EventListener);
+}
+
+/**
+ * Finds the index a step dropped at clientY should land at, among
+ * `[data-step-index]` groups within `container` - shared by
+ * InstructionCanvas's step-reorder drag handle. Bounding-rect-based (not
+ * elementFromPoint, unlike resolveTokenDropTarget below) since step
+ * reordering only ever needs a position relative to a flat, fully-visible
+ * list of steps, including landing past the last one - elementFromPoint
+ * can't report a slot when the pointer is over empty canvas space below the
+ * last step, but a bounding-rect scan naturally falls through to
+ * `items.length` there.
+ */
+export function resolveStepDropIndex(clientY: number, container: Element): number {
+  const items = Array.from(container.querySelectorAll<Element>("[data-step-index]"));
+  for (const item of items) {
+    const rect = item.getBoundingClientRect();
+    if (clientY < rect.top + rect.height / 2) {
+      return Number(item.getAttribute("data-step-index"));
+    }
+  }
+  return items.length;
 }
 
 export interface TokenDropTarget {

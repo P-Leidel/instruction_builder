@@ -30,8 +30,8 @@ export function validateDocument(doc: InstructionDocument): StepValidationResult
 }
 
 /**
- * Whether a step's persistent incomplete-state indicator (the on-canvas/
- * step-list "!" badge) should actually render. A brand-new step with zero
+ * Whether a step's persistent incomplete-state indicator (the on-canvas "!"
+ * badge) should actually render. A brand-new step with zero
  * tokens is always technically incomplete (`validateStep`'s "Step is empty"
  * issue), but flagging that before the user has added anything reads as
  * "you've already done something wrong" rather than useful guidance - so

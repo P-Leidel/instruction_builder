@@ -1,6 +1,6 @@
 ---
 name: run-instruction-builder
-description: Build, start, and drive the Visual Instruction Builder Preact/Vite dev app in a real browser to check a UI change - screenshots the canvas/step-list/token-picker, exercises step/token select, category tabs in "Add to step"/"Add to token", attaching a Quantity or Warning to a token and removing it, setting an independent duration on a token and a step via DurationField (and the step/token-switch-while-editing regression it once had), drag-and-drop (adding, moving, and reordering, including the live insertion-point marker), undo/redo (buttons and keyboard shortcuts, including that continuous typing coalesces into one undo step), JSON/SVG/PNG/PDF export and JSON import (including the incomplete-steps warning, the confirm-before-replace dialog, invalid-file rejection, that import goes through undo/redo too, that the downloaded SVG is self-contained with real colors baked in rather than just CSS classes, that the downloaded PNG is actually rasterized at its declared pixel density, and that Export PDF's print stylesheet isolates the hidden read-only canvas via `emulateMedia`), IndexedDB persistence across a reload (including a saved document with a mismatched schema version, seeded directly into IndexedDB), the token connector lines, the read-only preview toggle, an axe-core accessibility scan at several app states, keyboard-only step reordering and token selection, and the Import dialog's focus trap/Escape handling, and checks the console for errors. Also runs `npm test`, the Vitest unit suite covering the instruction model, the document session's undo/redo, and pure lib/ logic - and, via a separate `pwa-check.mjs` script against a real production build (not the dev server), the offline service worker: registration, runtime caching, and that the app actually still loads with no network at all. Use for "run the app," "screenshot the instruction builder," "check this UI change works," "does drag-and-drop work," "does token attachment work," "does step/token time work," "does undo/redo work," "does export/import work," "does SVG export look right," "does PNG export look right," "does print/PDF export work," "does persistence handle a bad/old save," "does the canvas render correctly," "does keyboard access/accessibility work," "does offline/PWA support work," or "run the unit tests."
+description: Build, start, and drive the Visual Instruction Builder Preact/Vite dev app in a real browser to check a UI change - screenshots the canvas/token-picker, exercises step/token select, category tabs in "Add to step"/"Add to token", attaching a Quantity or Warning to a token and removing it, setting an independent duration on a token and a step via DurationField (and the step/token-switch-while-editing regression it once had), drag-and-drop (adding, moving, and reordering, including the live insertion-point marker), undo/redo (buttons and keyboard shortcuts, including that continuous typing coalesces into one undo step), JSON/SVG/PNG/PDF export and JSON import (including the incomplete-steps warning, the confirm-before-replace dialog, invalid-file rejection, that import goes through undo/redo too, that the downloaded SVG is self-contained with real colors baked in rather than just CSS classes, that the downloaded PNG is actually rasterized at its declared pixel density, and that Export PDF's print stylesheet isolates the hidden read-only canvas via `emulateMedia`), IndexedDB persistence across a reload (including a saved document with a mismatched schema version, seeded directly into IndexedDB), the token connector lines, the read-only preview toggle, an axe-core accessibility scan at several app states, keyboard-only step reordering and token selection, and the Import dialog's focus trap/Escape handling, and checks the console for errors. Also runs `npm test`, the Vitest unit suite covering the instruction model, the document session's undo/redo, and pure lib/ logic - and, via a separate `pwa-check.mjs` script against a real production build (not the dev server), the offline service worker: registration, runtime caching, and that the app actually still loads with no network at all. Use for "run the app," "screenshot the instruction builder," "check this UI change works," "does drag-and-drop work," "does token attachment work," "does step/token time work," "does undo/redo work," "does export/import work," "does SVG export look right," "does PNG export look right," "does print/PDF export work," "does persistence handle a bad/old save," "does the canvas render correctly," "does keyboard access/accessibility work," "does offline/PWA support work," or "run the unit tests."
 ---
 
 Paths below are relative to the project root (`instruction_builder/`).
@@ -115,8 +115,10 @@ the only one that needs the steps under "Run (agent path)".
    exercises drag-and-drop with real `page.mouse` drags: dragging a
    picker token onto a step's canvas area, dragging an existing canvas
    token from one step to another (checking the live insertion-point
-   marker is visible mid-drag, before release), and dragging a step in
-   the list to reorder it. Both the token-within-step and step-list drags
+   marker is visible mid-drag, before release), and dragging a step's own
+   canvas drag handle to reorder it (step management - select, add, remove,
+   reorder - lives on the canvas itself, not a separate panel). Both the
+   token-within-step and step-reorder drags
    include a forward-direction regression check (see docs/fixed-issues/README.md):
    dropping into a slot strictly between two other items used to overshoot
    by one position when dragging forward, a bug the driver's own
@@ -317,18 +319,20 @@ taken - watch the terminal output for the actual URL).
   or grid track that's supposed to let its own content wrap or truncate
   needs an explicit `min-width: 0` (flex) or `minmax(0, ...)` (grid) too,
   or it never actually gets narrow enough for that styling to trigger.
-- **`.step-list__remove` is a sibling of `.step-list__item`, not a
-  descendant of it** - the class names suggest nesting, but `StepList.tsx`
-  puts them as two sibling `<button>`s under the same `<li
-  data-step-index>`. `page.locator(".step-list__item").nth(n).locator(".step-list__remove")`
-  times out (no such descendant exists) even though the remove button is
-  right there in the DOM. Scope to the shared `<li>` instead, e.g.
-  `page.locator("[data-step-index='n']").locator(".step-list__remove")`.
-- **`getByRole('button', { name: 'Chop' })` matches two elements** -
-  the token picker's "Chop" button and the step-list item once a step
-  is titled "Chop the onion" (Playwright's role-name matching is
-  substring-based, so "Chop the onion" matches "Chop"). Scope the
-  locator to `.token-picker` or pass `exact: true`.
+- **Step management (select/add/remove/reorder) lives on the canvas now, not
+  a separate StepList panel.** A step's outer `<g>` carries both
+  `data-step-id` and `data-step-index` (the latter unique to a step group -
+  token `<g>`s only carry `data-step-id` - so `[data-step-index='n']` always
+  resolves to the step, not one of its tokens); its drag handle
+  (`.instruction-canvas__step-drag-handle`), remove button
+  (`.instruction-canvas__step-remove`), and move up/down buttons
+  (`.instruction-canvas__step-move--up`/`--down`) are real descendants of
+  that same `<g>`, not siblings - so
+  `editableCanvas.locator("[data-step-index='n']").locator(".instruction-canvas__step-remove")`
+  works directly. The move buttons are SVG `<g role="button">`, not real
+  `<button>` elements, so their disabled-at-a-boundary state is
+  `aria-disabled="true"`, not Playwright's `.isDisabled()` (which only
+  understands native form controls).
 - **`netstat`'s state column is localized** ("ABHÖREN" instead of
   "LISTENING" on this German-Windows install), so `grep LISTENING`
   silently finds nothing. Use PowerShell's `Get-NetTCPConnection
@@ -347,11 +351,12 @@ taken - watch the terminal output for the actual URL).
   on this machine - always `export PATH="/c/Program
   Files/nodejs:$PATH"` first, or `node`/`npm`/`npx` won't resolve.
 - **Testing drag-and-drop with `page.mouse.move/down/up` needs a real
-  drop point, not a boundary tie.** The StepList reorder drop index is
-  computed by comparing the drop `clientY` against each item's
-  vertical midpoint; dropping exactly on an item's center is a genuine
+  drop point, not a boundary tie.** The step-reorder drop index
+  (`resolveStepDropIndex`, `lib/pointer-drag.ts`) is
+  computed by comparing the drop `clientY` against each step's
+  vertical midpoint; dropping exactly on a step's center is a genuine
   tie (the app then treats it as "same position," a no-op) rather than
-  a bug - drop near an item's top/bottom edge instead, the way a real
+  a bug - drop near a step's top/bottom edge instead, the way a real
   drag gesture would.
 - **A correctly-rendered SVG element can still be visually invisible.**
   The token connector lines initially had valid `d` coordinates and a
@@ -425,7 +430,10 @@ taken - watch the terminal output for the actual URL).
   just clipped from view) purely so Export SVG always has a live node to
   serialize. It renders the same document as the visible editor, so
   `.instruction-canvas__token`/`__chip-label`/`__tokens`/`__connector`/
-  `__step-bg`/`__step-time`/`__badge` etc. now match twice. Most `.first()`/
+  `__step-bg`/`__step-time`/`__badge`/`__step-title`/`[data-step-index]` etc.
+  now match twice - this includes the step management controls (drag
+  handle, remove, move up/down, add-step row) that moved onto the canvas
+  from the old StepList panel, none of which are exempt from this. Most `.first()`/
   `.nth(k)` uses in this driver happen to still resolve correctly purely by
   DOM order (the hidden canvas is mounted after `.app__main` in the JSX
   tree, so it always comes *after* the real ones) - but relying on that

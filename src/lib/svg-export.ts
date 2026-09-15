@@ -28,6 +28,7 @@ export const BAKED_STYLE_PROPS = [
   "font-size",
   "font-weight",
   "font-variant-numeric",
+  "opacity", // .instruction-canvas__step-move--disabled's dimmed circle
 ] as const;
 
 /**

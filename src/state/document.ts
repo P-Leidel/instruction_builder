@@ -354,13 +354,15 @@ function moveTokenCore(
 }
 
 /**
- * Moves a step from `fromIndex` to `toIndex` - dragging a step in StepList
- * (task 9). `toIndex` is a pre-removal splice target (see
- * `adjustIndexForRemoval`'s comment), not "the index it should end up at" -
- * a fact `moveStepUpCore`/`moveStepDownCore` below exist specifically so no
- * other caller has to rediscover. `StepList.tsx`'s drag handler is the one
- * remaining direct caller, since its drop index already comes out of
- * `resolveDropIndex` in that same pre-removal convention.
+ * Moves a step from `fromIndex` to `toIndex` - dragging a step's reorder
+ * handle on the canvas (task 9; the standalone StepList panel this
+ * originally served was later folded into InstructionCanvas). `toIndex` is a
+ * pre-removal splice target (see `adjustIndexForRemoval`'s comment), not
+ * "the index it should end up at" - a fact `moveStepUpCore`/`moveStepDownCore`
+ * below exist specifically so no other caller has to rediscover.
+ * `InstructionCanvas.tsx`'s drag handler is the one remaining direct caller,
+ * since its drop index already comes out of `resolveStepDropIndex` in that
+ * same pre-removal convention.
  */
 function reorderStepsCore(session: DocumentSession, fromIndex: number, toIndex: number): void {
   const steps = [...session.document.value.steps];
@@ -377,9 +379,10 @@ function reorderStepsCore(session: DocumentSession, fromIndex: number, toIndex: 
  * step) - the seam callers actually want, so they never have to reason
  * about `reorderStepsCore`'s pre-removal splice-index convention
  * themselves. A no-op at either end of the list (moving the first step up,
- * or the last step down) rather than clamping to a no-op reorder - `StepList.tsx`
- * disables the corresponding button at those positions, but these guard
- * independently in case either is ever called some other way.
+ * or the last step down) rather than clamping to a no-op reorder -
+ * `InstructionCanvas.tsx` disables the corresponding button at those
+ * positions, but these guard independently in case either is ever called
+ * some other way.
  */
 function moveStepUpCore(session: DocumentSession, stepId: string): void {
   const index = session.document.value.steps.findIndex((s) => s.id === stepId);

@@ -12,9 +12,9 @@ import { DurationField } from "../DurationField/DurationField";
 /**
  * Editor for the selected step's user-authored title/details, plus a plain
  * list of its tokens (icon + label only - the app-given description per
- * token lives in TokenDetails now, once a token is selected there). Lives
- * below StepList in the same panel column (see the "step-details" grid area
- * in global.css).
+ * token lives in TokenDetails now, once a token is selected there). Opens
+ * the left panel column (the standalone StepList panel that used to sit
+ * above it was folded into the canvas itself - see InstructionCanvas.tsx).
  *
  * Task 22: each token in that list is also a button selecting it (this list
  * only renders once a step is already selected, so the canvas's two-stage

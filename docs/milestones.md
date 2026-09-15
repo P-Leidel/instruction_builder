@@ -169,6 +169,14 @@ while deliberately keeping `insertionMarkerPosition` as its own seam,
 since it depends on live drag state at a much higher rate than the
 document itself. See
 [phase-3/progress/architecture-2026-09-15-canvas-deepening.md](./phase-3/progress/architecture-2026-09-15-canvas-deepening.md).
+A further same-day UX rework, worked through via
+`/mattpocock-skills:grilling`, moved step management off the standalone
+`StepList` side panel entirely and onto the canvas: `StepList` is deleted,
+and each step card in `InstructionCanvas.tsx` now shows its own title, a
+left-edge drag-to-reorder handle plus click-only move up/down buttons, a
+remove button, and a dashed "+ Add step" row rendered inside the SVG past
+the last step. See
+[phase-3/progress/step-management-moved-to-canvas.md](./phase-3/progress/step-management-moved-to-canvas.md).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   document,
   selectedStepId,
@@ -7,9 +7,14 @@ import {
   selectToken,
   removeTokenFromStep,
   moveToken,
+  addStep,
+  removeStep,
+  moveStepUp,
+  moveStepDown,
+  reorderSteps,
 } from "../../state/document";
 import { dragGhost, dropTarget } from "../../state/drag";
-import { beginPointerDrag, resolveTokenDropTarget } from "../../lib/pointer-drag";
+import { beginPointerDrag, resolveTokenDropTarget, resolveStepDropIndex } from "../../lib/pointer-drag";
 import { iconMarkup, ICON_PRESENTATION_PROPS } from "../../data/icon-library";
 import {
   DESKTOP_QUERY,
@@ -20,6 +25,12 @@ import {
   BADGE_SIZE,
   MARKER_WIDTH,
   ICON_DRAW_SIZE,
+  STEP_CONTROL_CX,
+  STEP_CONTROL_RADIUS,
+  REORDER_HANDLE_CY,
+  MOVE_UP_CY,
+  MOVE_DOWN_CY,
+  ADD_STEP_ROW_HEIGHT,
   insertionMarkerPosition,
   computeCanvasLayout,
 } from "../../lib/canvas-layout";
@@ -62,6 +73,18 @@ function WarningBadge({ attachment }: { attachment: TokenAttachment }) {
 const QUANTITY_PILL_WIDTH = 80;
 const QUANTITY_PILL_HEIGHT = 16;
 const QUANTITY_PILL_MARGIN_BOTTOM = 4;
+
+// A step's remove control (×), top-right corner of the card - same visual
+// language as the chip's own remove button (below), sized to match. The
+// incomplete-step flag (!) shares that corner, positioned this button's
+// STEP_FLAG_GAP to its left rather than at a fixed offset from the card
+// edge - simpler than branching the flag's own x on whether the remove
+// button happens to be shown for this particular step (it isn't, for the
+// sole remaining step - see steps.length guard below).
+const STEP_REMOVE_RADIUS = 9;
+const STEP_REMOVE_CY = 12;
+const STEP_REMOVE_MARGIN = 14; // distance from the card's right edge to the remove button's center
+const STEP_FLAG_GAP = 28;
 
 /** The chip's bottom-center quantity value pill - text only, no icon, so it never crowds the token's own icon/label above it. */
 function QuantityBadge({ attachment }: { attachment: TokenAttachment }) {
@@ -171,22 +194,43 @@ interface InstructionCanvasProps {
  * `lib/canvas-layout.ts` reserves the room per row of chips (only when a
  * row actually has a timed token in it), not here; this just renders the
  * label for whichever tokens have one.
+ *
+ * Step management (previously a standalone StepList side panel) lives on the
+ * canvas itself: each step's title renders next to its select badge, a
+ * left-edge control column below the badge holds a drag-to-reorder handle
+ * (pointer-only, same `beginPointerDrag`/`dragGhost` pattern as a token
+ * drag, drop slot resolved via `resolveStepDropIndex`) plus click-only move
+ * up/down buttons (the keyboard-operable path, each disabled at its end of
+ * the list), and a remove (×) button sits in the card's top-right corner -
+ * both the reorder controls and remove are hidden for the sole remaining
+ * step, same rule StepList used. A dashed "+ Add step" row renders inside
+ * the SVG just past the last step. All of it is hidden when `readOnly`, same
+ * as the token-level editing controls above.
  */
 export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) {
   const steps = document.value.steps;
   const isDesktop = useIsDesktop();
+  const svgRef = useRef<SVGSVGElement>(null);
 
-  const { layouts, totalHeight, canvasWidth } = useMemo(
+  const { layouts, totalHeight, canvasWidth, addStepRowY } = useMemo(
     () => computeCanvasLayout(steps, isDesktop),
     [steps, isDesktop],
   );
+  // computeCanvasLayout stays read-only-agnostic (document + isDesktop is its
+  // whole interface - see its own comment), so the "+ Add step" row's extra
+  // height only applies here, where readOnly is actually known: the read-only/
+  // export canvas stays exactly totalHeight tall (no trailing gap for a row
+  // it never draws), the editable one reserves ADD_STEP_ROW_HEIGHT + PADDING
+  // past addStepRowY for it.
+  const svgHeight = readOnly ? totalHeight : addStepRowY + ADD_STEP_ROW_HEIGHT + PADDING;
 
   return (
     <div class={`instruction-canvas${readOnly ? " instruction-canvas--readonly" : ""}`}>
       <h2 class="instruction-canvas__heading">Instructions</h2>
       <svg
+        ref={svgRef}
         class="instruction-canvas__svg"
-        viewBox={`0 0 ${canvasWidth} ${totalHeight}`}
+        viewBox={`0 0 ${canvasWidth} ${svgHeight}`}
         role="group"
         aria-label={
           readOnly
@@ -228,8 +272,18 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
             ? `Select step ${stepNumber}, incomplete: ${issues.join(", ")}`
             : `Select step ${stepNumber}`;
 
+          const canMoveUp = index > 0;
+          const canMoveDown = index < steps.length - 1;
+          const canReorder = !readOnly && steps.length > 1;
+          const canRemove = !readOnly && steps.length > 1;
+
           return (
-            <g key={step.id} transform={`translate(${PADDING}, ${cardY})`} data-step-id={step.id}>
+            <g
+              key={step.id}
+              transform={`translate(${PADDING}, ${cardY})`}
+              data-step-id={step.id}
+              data-step-index={index}
+            >
               {displayedTime && (
                 <text
                   class="instruction-canvas__step-time"
@@ -277,17 +331,116 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                   </text>
                 </g>
               )}
+              <text
+                class="instruction-canvas__step-title"
+                x={BADGE_SIZE + 12}
+                y={16}
+                aria-hidden="true"
+              >
+                {step.title || "Untitled step"}
+              </text>
               {showIncompleteFlag && (
                 <g aria-hidden="true">
-                  <text class="instruction-canvas__flag" x={canvasWidth - PADDING * 2 - 14} y={20}>
+                  <text
+                    class="instruction-canvas__flag"
+                    x={canvasWidth - PADDING * 2 - STEP_REMOVE_MARGIN - STEP_FLAG_GAP}
+                    y={20}
+                  >
                     !<title>{issues.join(", ")}</title>
                   </text>
                 </g>
               )}
-              {step.tokens.length === 0 && (
-                <text class="instruction-canvas__hint" x={BADGE_SIZE + 12} y={20} aria-hidden="true">
-                  Empty step
-                </text>
+              {canRemove && (
+                <g
+                  class="instruction-canvas__step-remove"
+                  role="button"
+                  tabindex={0}
+                  aria-label={`Remove step ${stepNumber}`}
+                  onClick={() => removeStep(step.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      removeStep(step.id);
+                    }
+                  }}
+                >
+                  <circle
+                    cx={canvasWidth - PADDING * 2 - STEP_REMOVE_MARGIN}
+                    cy={STEP_REMOVE_CY}
+                    r={STEP_REMOVE_RADIUS}
+                  />
+                  <text
+                    x={canvasWidth - PADDING * 2 - STEP_REMOVE_MARGIN}
+                    y={STEP_REMOVE_CY + 3}
+                    text-anchor="middle"
+                    aria-hidden="true"
+                  >
+                    ×
+                  </text>
+                </g>
+              )}
+              {canReorder && (
+                <g class="instruction-canvas__step-controls">
+                  <g
+                    class="instruction-canvas__step-drag-handle"
+                    aria-hidden="true"
+                    onPointerDown={(event) => {
+                      beginPointerDrag(event, {
+                        onMove: (x, y) => {
+                          dragGhost.value = { label: step.title || "Untitled step", x, y };
+                        },
+                        onDrop: (_x, y, wasDrag) => {
+                          dragGhost.value = null;
+                          if (!wasDrag || !svgRef.current) return;
+                          reorderSteps(index, resolveStepDropIndex(y, svgRef.current));
+                        },
+                      });
+                    }}
+                  >
+                    <circle cx={STEP_CONTROL_CX} cy={REORDER_HANDLE_CY} r={STEP_CONTROL_RADIUS} />
+                    <text x={STEP_CONTROL_CX} y={REORDER_HANDLE_CY + 3} text-anchor="middle">
+                      ⠿
+                    </text>
+                  </g>
+                  <g
+                    class={`instruction-canvas__step-move instruction-canvas__step-move--up${canMoveUp ? "" : " instruction-canvas__step-move--disabled"}`}
+                    role="button"
+                    tabindex={canMoveUp ? 0 : -1}
+                    aria-disabled={canMoveUp ? undefined : "true"}
+                    aria-label={`Move step ${stepNumber} up`}
+                    onClick={() => canMoveUp && moveStepUp(step.id)}
+                    onKeyDown={(event) => {
+                      if ((event.key === "Enter" || event.key === " ") && canMoveUp) {
+                        event.preventDefault();
+                        moveStepUp(step.id);
+                      }
+                    }}
+                  >
+                    <circle cx={STEP_CONTROL_CX} cy={MOVE_UP_CY} r={STEP_CONTROL_RADIUS} />
+                    <text x={STEP_CONTROL_CX} y={MOVE_UP_CY + 3} text-anchor="middle" aria-hidden="true">
+                      ↑
+                    </text>
+                  </g>
+                  <g
+                    class={`instruction-canvas__step-move instruction-canvas__step-move--down${canMoveDown ? "" : " instruction-canvas__step-move--disabled"}`}
+                    role="button"
+                    tabindex={canMoveDown ? 0 : -1}
+                    aria-disabled={canMoveDown ? undefined : "true"}
+                    aria-label={`Move step ${stepNumber} down`}
+                    onClick={() => canMoveDown && moveStepDown(step.id)}
+                    onKeyDown={(event) => {
+                      if ((event.key === "Enter" || event.key === " ") && canMoveDown) {
+                        event.preventDefault();
+                        moveStepDown(step.id);
+                      }
+                    }}
+                  >
+                    <circle cx={STEP_CONTROL_CX} cy={MOVE_DOWN_CY} r={STEP_CONTROL_RADIUS} />
+                    <text x={STEP_CONTROL_CX} y={MOVE_DOWN_CY + 3} text-anchor="middle" aria-hidden="true">
+                      ↓
+                    </text>
+                  </g>
+                </g>
               )}
               <g transform={`translate(${tokensOffsetX}, 0)`}>
                 <g class="instruction-canvas__connectors" aria-hidden="true">
@@ -434,6 +587,39 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
             </g>
           );
         })}
+        {!readOnly && (
+          <g
+            class="instruction-canvas__add-step"
+            role="button"
+            tabindex={0}
+            aria-label="Add step"
+            transform={`translate(${PADDING}, ${addStepRowY})`}
+            onClick={addStep}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                addStep();
+              }
+            }}
+          >
+            <rect
+              class="instruction-canvas__add-step-bg"
+              x={0}
+              y={0}
+              width={canvasWidth - PADDING * 2}
+              height={ADD_STEP_ROW_HEIGHT}
+              rx={8}
+            />
+            <text
+              x={(canvasWidth - PADDING * 2) / 2}
+              y={ADD_STEP_ROW_HEIGHT / 2 + 5}
+              text-anchor="middle"
+              aria-hidden="true"
+            >
+              + Add step
+            </text>
+          </g>
+        )}
       </svg>
     </div>
   );

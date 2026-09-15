@@ -8,7 +8,11 @@ import {
   CHIP_TIME_HEADER_HEIGHT,
   HEADER_HEIGHT,
   PADDING,
+  ROW_GAP,
   BASE_CANVAS_WIDTH,
+  STEP_CONTROLS_WIDTH,
+  STEP_CONTROL_RADIUS,
+  MOVE_DOWN_CY,
 } from "./canvas-layout";
 import { createEmptyStep, createToken } from "../model/instruction";
 import type { InstructionToken } from "../model/instruction";
@@ -171,25 +175,29 @@ describe("tokensOffsetX centering (via computeCanvasLayout)", () => {
   it("centers within the full available width when a step has no tokens", () => {
     const step = { ...createEmptyStep(), tokens: tokens(0) };
     const layout = computeCanvasLayout([step], true);
-    expect(layout.canvasWidth).toBe(BASE_CANVAS_WIDTH);
-    expect(layout.layouts[0].tokensOffsetX).toBe((BASE_CANVAS_WIDTH - PADDING * 2) / 2);
+    expect(layout.canvasWidth).toBe(BASE_CANVAS_WIDTH + STEP_CONTROLS_WIDTH);
+    expect(layout.layouts[0].tokensOffsetX).toBe(
+      STEP_CONTROLS_WIDTH + (BASE_CANVAS_WIDTH - PADDING * 2) / 2,
+    );
   });
 
   it("centers a partial row using that row's own (not the full chipsPerRow's) width", () => {
     const step = { ...createEmptyStep(), tokens: tokens(3) };
     const layout = computeCanvasLayout([step], true);
     const rowWidth = 3 * CHIP_WIDTH + 2 * CHIP_GAP;
-    expect(layout.canvasWidth).toBe(BASE_CANVAS_WIDTH);
-    expect(layout.layouts[0].tokensOffsetX).toBe((BASE_CANVAS_WIDTH - PADDING * 2 - rowWidth) / 2);
+    expect(layout.canvasWidth).toBe(BASE_CANVAS_WIDTH + STEP_CONTROLS_WIDTH);
+    expect(layout.layouts[0].tokensOffsetX).toBe(
+      STEP_CONTROLS_WIDTH + (BASE_CANVAS_WIDTH - PADDING * 2 - rowWidth) / 2,
+    );
   });
 
   it("caps the centered row width at chipsPerRow even with more tokens than fit in one row", () => {
     const step = { ...createEmptyStep(), tokens: tokens(10) };
     const layout = computeCanvasLayout([step], true);
     const cappedRowWidth = DESKTOP_CHIPS_PER_ROW * CHIP_WIDTH + (DESKTOP_CHIPS_PER_ROW - 1) * CHIP_GAP;
-    expect(layout.canvasWidth).toBe(BASE_CANVAS_WIDTH);
+    expect(layout.canvasWidth).toBe(BASE_CANVAS_WIDTH + STEP_CONTROLS_WIDTH);
     expect(layout.layouts[0].tokensOffsetX).toBe(
-      (BASE_CANVAS_WIDTH - PADDING * 2 - cappedRowWidth) / 2,
+      STEP_CONTROLS_WIDTH + (BASE_CANVAS_WIDTH - PADDING * 2 - cappedRowWidth) / 2,
     );
   });
 });
@@ -242,13 +250,28 @@ describe("computeCanvasLayout", () => {
     const layout = computeCanvasLayout([], true);
     expect(layout.layouts).toEqual([]);
     expect(layout.totalHeight).toBe(PADDING * 2);
-    expect(layout.canvasWidth).toBe(BASE_CANVAS_WIDTH);
+    expect(layout.canvasWidth).toBe(BASE_CANVAS_WIDTH + STEP_CONTROLS_WIDTH);
+    expect(layout.addStepRowY).toBe(PADDING);
   });
 
   it("produces one layout entry per step, in order", () => {
     const steps = [createEmptyStep(), createEmptyStep(), createEmptyStep()];
     const layout = computeCanvasLayout(steps, true);
     expect(layout.layouts.map((l) => l.step.id)).toEqual(steps.map((s) => s.id));
+  });
+
+  it("grows an empty step's height so its reorder stack (drag handle + move up/down) always fits", () => {
+    const layout = computeCanvasLayout([{ ...createEmptyStep(), tokens: [] }], true);
+    // Matches canvas-layout.ts's own MIN_HEIGHT_FOR_CONTROLS derivation -
+    // MOVE_DOWN_CY + STEP_CONTROL_RADIUS + PADDING - via the constants it
+    // exports, rather than duplicating a hardcoded number here.
+    expect(layout.layouts[0].height).toBe(MOVE_DOWN_CY + STEP_CONTROL_RADIUS + PADDING);
+  });
+
+  it("positions the add-step row just past the last step, with the usual ROW_GAP before it", () => {
+    const step = { ...createEmptyStep(), tokens: [createToken("action", "a")] };
+    const layout = computeCanvasLayout([step], true);
+    expect(layout.addStepRowY).toBe(layout.layouts[0].cardY + layout.layouts[0].height + ROW_GAP);
   });
 
   it("stacks steps without overlap", () => {

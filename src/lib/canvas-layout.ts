@@ -22,6 +22,16 @@ import type { InstructionStep, InstructionToken, DurationAttachment } from "../m
  * function that stays a separate public seam is `insertionMarkerPosition` -
  * it depends on live drag state, not the document, so it can't be folded
  * into a memo keyed on the document alone (see its own comment).
+ *
+ * Also reserves - as fixed-position, document-independent geometry, not
+ * something a StepLayout computes per step - room for the per-step
+ * management controls (select badge, drag-to-reorder handle, move up/down,
+ * remove) that replaced the standalone StepList panel: `STEP_CONTROLS_WIDTH`
+ * and the other exported STEP_CONTROL, REORDER_HANDLE, and MOVE_UP/DOWN
+ * constants below place that left edge column, and `addStepRowY` positions
+ * the "+ Add step" row past the last step. InstructionCanvas.tsx renders all
+ * of it; this module only guarantees the space exists and stays clear of
+ * chips.
  */
 
 // Keep in sync with the `min-width: 800px` breakpoint in global.css.
@@ -74,6 +84,34 @@ export const TIME_HEADER_HEIGHT = 22;
 // actually renders inside it - see computeRowStartYs below.
 export const CHIP_TIME_HEADER_HEIGHT = 14;
 
+// A step's left-edge control column (select badge, then drag handle, then
+// move up/down - see InstructionCanvas.tsx) is reserved at a fixed width for
+// every step, the same way PADDING is a fixed canvas margin rather than
+// something derived from content - so tokens never render underneath it
+// (see tokensOffsetX below) regardless of how wide or narrow a step's own
+// row of chips is.
+export const STEP_CONTROLS_WIDTH = 28;
+// Horizontal center of the select badge, drag handle, and move up/down
+// controls - all four stack in one column at this x, in that vertical order.
+export const STEP_CONTROL_CX = 12;
+export const STEP_CONTROL_RADIUS = 9;
+// The drag handle sits just below the header band (badge/title/flag all
+// live within [0, HEADER_HEIGHT), see the module comment) so it never
+// overlaps the badge above it.
+export const REORDER_HANDLE_CY = HEADER_HEIGHT + 10;
+export const MOVE_UP_CY = REORDER_HANDLE_CY + 22;
+export const MOVE_DOWN_CY = MOVE_UP_CY + 22;
+// A step with no tokens would otherwise be shorter (HEADER_HEIGHT + PADDING)
+// than the reorder stack it has to contain - this floor guarantees every
+// step, even an empty one, is tall enough for move-down's circle plus its
+// own bottom padding.
+const MIN_HEIGHT_FOR_CONTROLS = MOVE_DOWN_CY + STEP_CONTROL_RADIUS + PADDING;
+
+// The "+ Add step" row drawn inside the SVG just past the last step (see
+// InstructionCanvas.tsx) - full width, like a step card, but its own fixed
+// height rather than anything derived from content.
+export const ADD_STEP_ROW_HEIGHT = 44;
+
 export interface StepLayout {
   step: InstructionStep;
   /** y of the card itself - the duration header, if any, sits just above this. */
@@ -89,7 +127,7 @@ export interface StepLayout {
   chipPositions: ChipPosition[];
   /** One entry per consecutive token pair, in array order - see buildConnectors. */
   connectors: ConnectorSegment[];
-  /** Horizontal offset that centers this step's token block within the card. */
+  /** Horizontal offset that centers this step's token block within the card, always at least STEP_CONTROLS_WIDTH. */
   tokensOffsetX: number;
 }
 
@@ -97,6 +135,17 @@ export interface CanvasLayout {
   layouts: StepLayout[];
   totalHeight: number;
   canvasWidth: number;
+  /**
+   * y where the "+ Add step" row starts, just past the last step (or right
+   * at the top margin for an empty document) - a separate field from
+   * totalHeight since totalHeight deliberately stays tight (no trailing gap)
+   * for the read-only/export canvas, which never renders that row; the
+   * editable canvas adds ADD_STEP_ROW_HEIGHT + PADDING on top of this itself
+   * (see InstructionCanvas.tsx) rather than this module baking in an
+   * editable-vs-read-only distinction its own interface (document + isDesktop
+   * in) has no other reason to know about.
+   */
+  addStepRowY: number;
 }
 
 export interface ChipPosition {
@@ -164,11 +213,12 @@ function desktopChipsPerRow(): number {
 }
 
 function stepHeight(tokenCount: number, rowStartYs: number[]): number {
-  if (tokenCount === 0) {
-    // No chip row to reserve space for - the "Empty step" hint fits in the header band.
-    return HEADER_HEIGHT + PADDING;
-  }
-  return rowStartYs[rowStartYs.length - 1] + CHIP_HEIGHT + PADDING;
+  const contentHeight =
+    tokenCount === 0
+      // No chip row to reserve space for.
+      ? HEADER_HEIGHT + PADDING
+      : rowStartYs[rowStartYs.length - 1] + CHIP_HEIGHT + PADDING;
+  return Math.max(contentHeight, MIN_HEIGHT_FOR_CONTROLS);
 }
 
 /** Width (in design units) of the widest single row a step actually uses. Not exported - see chipPosition's comment. */
@@ -340,6 +390,7 @@ export function computeCanvasLayout(steps: InstructionStep[], isDesktop: boolean
     layouts.length > 0
       ? layouts[layouts.length - 1].cardY + layouts[layouts.length - 1].height + PADDING
       : PADDING * 2;
+  const addStepRowY = cursor;
 
   const widestContent = layouts.reduce(
     (max, l) => Math.max(max, widestRowWidth(l.step.tokens.length, l.chipsPerRow)),
@@ -347,25 +398,31 @@ export function computeCanvasLayout(steps: InstructionStep[], isDesktop: boolean
   );
   // Reserves room on *both* sides for the row-wrap bend's lead-out/lead-in
   // stubs (see buildConnectors): the widest row is centered with exactly
-  // CONNECTOR_LEAD_OUT of slack on its left and right (see tokensOffsetX
-  // below), so neither stub can ever poke past a step card's own border,
-  // even when a row's own width exactly matches the canvas's widest content.
-  const canvasWidth = Math.max(
+  // CONNECTOR_LEAD_OUT of slack on its left and right within this width
+  // (see tokensOffsetX below), so neither stub can ever poke past a step
+  // card's own border, even when a row's own width exactly matches the
+  // canvas's widest content. STEP_CONTROLS_WIDTH is then added on top,
+  // uniformly, as the card's own reserved left-edge control column - it
+  // isn't part of the centering math above, just extra width every card
+  // carries regardless of content.
+  const contentWidth = Math.max(
     BASE_CANVAS_WIDTH,
     widestContent + CONNECTOR_LEAD_OUT * 2 + PADDING * 2,
   );
+  const canvasWidth = contentWidth + STEP_CONTROLS_WIDTH;
 
-  // Centers each step's own token block horizontally within the step card
-  // instead of leaving it flush against the left edge - a step with only a
-  // couple of tokens on a wide card otherwise reads as lopsided. Computed per
-  // step (each step's own content width) against the one shared canvasWidth,
-  // so a short step centers within the same card width a long step fills
-  // edge-to-edge. This has to be a second pass: canvasWidth isn't known until
-  // every step's widest row has been seen above.
+  // Centers each step's own token block horizontally within the space to the
+  // right of the reserved control column, instead of leaving it flush
+  // against that column - a step with only a couple of tokens on a wide card
+  // otherwise reads as lopsided. Computed per step (each step's own content
+  // width) against the one shared contentWidth, so a short step centers
+  // within the same width a long step fills edge-to-edge. This has to be a
+  // second pass: contentWidth isn't known until every step's widest row has
+  // been seen above.
   for (const layout of layouts) {
     const rowWidth = widestRowWidth(layout.step.tokens.length, layout.chipsPerRow);
-    layout.tokensOffsetX = Math.max(0, (canvasWidth - PADDING * 2 - rowWidth) / 2);
+    layout.tokensOffsetX = STEP_CONTROLS_WIDTH + Math.max(0, (contentWidth - PADDING * 2 - rowWidth) / 2);
   }
 
-  return { layouts, totalHeight, canvasWidth };
+  return { layouts, totalHeight, canvasWidth, addStepRowY };
 }

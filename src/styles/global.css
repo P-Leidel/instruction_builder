@@ -471,7 +471,6 @@ button {
   overflow-x: auto;
 }
 
-.step-list,
 .step-details,
 .token-details,
 .instruction-canvas,
@@ -488,124 +487,12 @@ button {
   background: var(--color-canvas-bg);
 }
 
-.step-list__heading,
 .step-details__heading,
 .token-details__heading,
 .instruction-canvas__heading,
 .token-picker__heading {
   margin: 0 0 0.75rem;
   font-size: 1rem;
-}
-
-.step-list__items {
-  list-style: none;
-  margin: 0 0 0.75rem;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.step-list__items li {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.step-list__item {
-  flex: 1;
-  /* Without this, a long, unbroken step title (.step-list__summary's
-     white-space: nowrap) sets this flex item's own automatic minimum width
-     to that title's full unwrapped size - overriding flex: 1 and refusing
-     to shrink below it, which both defeats the summary's own
-     overflow/text-overflow ellipsis and forces the whole page wider. */
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-sunken);
-  text-align: left;
-  min-height: 44px; /* touch target */
-  /* Task 10: without this, a touch-drag to reorder scrolls the page instead. */
-  touch-action: none;
-}
-
-.step-list__item--selected {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
-}
-
-.step-list__number {
-  font-weight: 600;
-}
-
-.step-list__summary {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.9rem;
-}
-
-.step-list__flag {
-  color: var(--color-danger);
-  font-weight: 700;
-}
-
-.step-list__remove {
-  border: none;
-  background: transparent;
-  font-size: 1rem;
-  line-height: 1;
-  padding: 0.5rem;
-  color: var(--color-text-muted);
-  min-width: 44px;
-  min-height: 44px;
-  border-radius: var(--radius-sm);
-}
-
-.step-list__reorder {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.step-list__move {
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-sunken);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-  font-size: 0.8rem;
-  line-height: 1;
-  min-width: 32px;
-  min-height: 32px;
-}
-
-.step-list__move:not(:disabled):hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-
-.step-list__move:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.step-list__add {
-  border: 1px dashed var(--color-border-strong);
-  background: transparent;
-  border-radius: var(--radius-md);
-  padding: 0.5rem 1rem;
-  min-height: 44px;
-  width: 100%;
-  color: var(--color-text);
-}
-
-.step-list__add:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
 }
 
 /* Step details */
@@ -939,9 +826,18 @@ button {
 }
 
 .instruction-canvas__badge:focus-visible,
-.instruction-canvas__chip-remove:focus-visible {
+.instruction-canvas__chip-remove:focus-visible,
+.instruction-canvas__step-remove:focus-visible,
+.instruction-canvas__step-move:focus-visible,
+.instruction-canvas__add-step:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+.instruction-canvas__step-title {
+  fill: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .instruction-canvas__flag {
@@ -950,9 +846,96 @@ button {
   font-weight: 700;
 }
 
-.instruction-canvas__hint {
+/* Step management controls (previously the standalone StepList panel - see
+   InstructionCanvas.tsx's doc comment) - remove and the reorder stack
+   (drag handle + move up/down) share the chip remove button's visual
+   language (a plain circle + glyph), just at the step level. */
+
+.instruction-canvas__step-remove {
+  cursor: pointer;
+}
+
+.instruction-canvas__step-remove circle {
+  fill: var(--color-surface);
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+}
+
+.instruction-canvas__step-remove text {
   fill: var(--color-text-muted);
   font-size: 12px;
+}
+
+.instruction-canvas__step-remove:hover circle {
+  stroke: var(--color-accent);
+}
+
+.instruction-canvas__step-drag-handle {
+  cursor: grab;
+  /* Task 10: without this, a touch-drag to reorder a step scrolls the page instead. */
+  touch-action: none;
+}
+
+.instruction-canvas__step-drag-handle circle {
+  fill: var(--color-surface-sunken);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.instruction-canvas__step-drag-handle text {
+  fill: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.instruction-canvas__step-move {
+  cursor: pointer;
+}
+
+.instruction-canvas__step-move circle {
+  fill: var(--color-surface-sunken);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.instruction-canvas__step-move text {
+  fill: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.instruction-canvas__step-move:not(.instruction-canvas__step-move--disabled):hover circle {
+  stroke: var(--color-accent);
+}
+
+.instruction-canvas__step-move--disabled {
+  cursor: not-allowed;
+}
+
+.instruction-canvas__step-move--disabled circle {
+  opacity: 0.4;
+}
+
+.instruction-canvas__add-step {
+  cursor: pointer;
+}
+
+.instruction-canvas__add-step-bg {
+  fill: transparent;
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 5 4;
+}
+
+.instruction-canvas__add-step text {
+  fill: var(--color-text);
+  font-size: 12px;
+}
+
+.instruction-canvas__add-step:hover .instruction-canvas__add-step-bg {
+  stroke: var(--color-accent);
+}
+
+.instruction-canvas__add-step:hover text {
+  fill: var(--color-accent);
 }
 
 .instruction-canvas__connector {

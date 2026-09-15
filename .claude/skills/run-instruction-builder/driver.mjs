@@ -72,7 +72,7 @@ const historyButtonsDisabledInitially = (await undoButton.isDisabled()) && (awai
 
 // Representative flow: name the first step, add tokens via the picker,
 // select a step from the canvas badge, remove a token from the canvas.
-await page.locator(".step-list__item").first().click();
+await editableCanvas.locator(".instruction-canvas__badge").first().click();
 await page.locator(".step-details__field input").fill("Chop the onion");
 await page.locator(".step-details__field textarea").fill("Use a sharp knife on a stable board.");
 await page.locator("body").click({ position: { x: 5, y: 5 } }); // blur the field
@@ -104,9 +104,9 @@ const connectorCount = await editableCanvas.locator(".instruction-canvas__connec
 // Two-stage select: add a second (unselected) step, then click one of its
 // tokens - the FIRST click on an unselected step's token should select the
 // step, not the token (token-details stays empty).
-await page.locator(".step-list__add").click();
+await editableCanvas.locator(".instruction-canvas__add-step").click();
 await picker.getByRole("button", { name: "Bake", exact: true }).click();
-await page.locator(".step-list__item").first().click(); // reselect step 1 (still has tokens)
+await editableCanvas.locator(".instruction-canvas__badge").first().click(); // reselect step 1 (still has tokens)
 
 const firstToken = editableCanvas.locator(".instruction-canvas__token").first();
 await firstToken.click(); // step 1 already selected -> should select the TOKEN
@@ -236,12 +236,12 @@ const stepTimeOverridesTokenSum = stepTimeAfterStepTime === "2d";
 // "Add step time" fresh, not step 1's leftover unsaved edit.
 await stepDurationField.getByRole("button", { name: "Edit step time", exact: true }).click();
 await stepDurationInputs.nth(0).fill("5"); // change but deliberately don't save
-await page.locator(".step-list__item").nth(1).click(); // switch to step 2 (no time of its own)
+await editableCanvas.locator(".instruction-canvas__badge").nth(1).click(); // switch to step 2 (no time of its own)
 const freshStepDurationField = page.locator(".step-details").locator(".duration-field");
 const durationFieldResetsPerStep =
   (await freshStepDurationField.locator(".duration-field__inputs").count()) === 0 &&
   (await freshStepDurationField.getByRole("button", { name: "Add step time", exact: true }).count()) === 1;
-await page.locator(".step-list__item").first().click(); // back to step 1 for the rest of the flow
+await editableCanvas.locator(".instruction-canvas__badge").first().click(); // back to step 1 for the rest of the flow
 
 await page.screenshot({ path: path.join(OUT, "02d-time.png"), fullPage: true });
 
@@ -319,42 +319,44 @@ const forwardTokenDragLandsAtDropPoint =
   step2LabelsAfterForwardDrag[1] === step2LabelsBeforeForwardDrag[0] && // Bake lands just before "Chop finely"
   step2LabelsAfterForwardDrag[2] === step2LabelsBeforeForwardDrag[2]; // "Chop finely" unchanged, still last
 
-// Drag step 2 above step 1 in the StepList to reorder. Drop near the TOP of
-// step 1's box, not its center - the drop-index calculation compares
-// against each item's vertical midpoint, so dropping exactly on a midpoint
-// is a genuine boundary tie, not a realistic drag gesture.
-const stepItems = page.locator(".step-list__item");
-const firstSummaryBefore = await stepItems.first().locator(".step-list__summary").textContent();
-const step2ItemBox = await stepItems.nth(1).boundingBox();
-const step1ItemBox = await stepItems.nth(0).boundingBox();
-await page.mouse.move(step2ItemBox.x + step2ItemBox.width / 2, step2ItemBox.y + step2ItemBox.height / 2);
+// Drag step 2's canvas drag handle above step 1's card to reorder (task 9's
+// step-management functionality moved from a standalone StepList panel onto
+// the canvas itself - see InstructionCanvas.tsx). Drop near the TOP of step
+// 1's card, not its center - the drop-index calculation compares against
+// each step's vertical midpoint, so dropping exactly on a midpoint is a
+// genuine boundary tie, not a realistic drag gesture.
+const stepGroups = editableCanvas.locator("[data-step-index]");
+const stepTitles = editableCanvas.locator(".instruction-canvas__step-title");
+const firstSummaryBefore = await stepTitles.first().textContent();
+const step2HandleBox = await stepGroups.nth(1).locator(".instruction-canvas__step-drag-handle").boundingBox();
+const step1Box = await stepGroups.nth(0).boundingBox();
+await page.mouse.move(step2HandleBox.x + step2HandleBox.width / 2, step2HandleBox.y + step2HandleBox.height / 2);
 await page.mouse.down();
-await page.mouse.move(step1ItemBox.x + step1ItemBox.width / 2, step1ItemBox.y + 2, { steps: 10 });
+await page.mouse.move(step1Box.x + step1Box.width / 2, step1Box.y + 2, { steps: 10 });
 await page.mouse.up();
-let firstSummaryAfter = await stepItems.first().locator(".step-list__summary").textContent();
+let firstSummaryAfter = await stepTitles.first().textContent();
 const stepsReordered = firstSummaryAfter !== firstSummaryBefore;
 
 // Regression test for a review finding: forward step reorder used to
 // overshoot by one slot for the same reason as the token reorder above,
 // but only shows up when the drop target sits strictly *between* two other
-// items - "move to the very end" happens to clamp to the same result
+// steps - "move to the very end" happens to clamp to the same result
 // either way, which is why the backward-drag check above never caught it.
 // Add a third step so there's a middle slot to drop into, then drag the
-// first item ("Untitled step", from the backward drag just above) forward
+// first step ("Untitled step", from the backward drag just above) forward
 // to land just before the third.
-await page.locator(".step-list__add").click();
-await page.locator(".step-list__item").nth(2).click();
+await editableCanvas.locator(".instruction-canvas__add-step").click();
+await editableCanvas.locator(".instruction-canvas__badge").nth(2).click();
 await page.locator(".step-details__field input").fill("Third step");
 await page.locator("body").click({ position: { x: 5, y: 5 } }); // blur
 
-const forwardStepItems = page.locator(".step-list__item");
-const forwardDragSourceBox = await forwardStepItems.nth(0).boundingBox();
-const forwardDragTargetBox = await forwardStepItems.nth(2).boundingBox();
+const forwardDragSourceBox = await stepGroups.nth(0).locator(".instruction-canvas__step-drag-handle").boundingBox();
+const forwardDragTargetBox = await stepGroups.nth(2).boundingBox();
 await page.mouse.move(forwardDragSourceBox.x + forwardDragSourceBox.width / 2, forwardDragSourceBox.y + forwardDragSourceBox.height / 2);
 await page.mouse.down();
 await page.mouse.move(forwardDragTargetBox.x + forwardDragTargetBox.width / 2, forwardDragTargetBox.y + 2, { steps: 10 });
 await page.mouse.up();
-const summariesAfterForwardStepDrag = await forwardStepItems.locator(".step-list__summary").allTextContents();
+const summariesAfterForwardStepDrag = await stepTitles.allTextContents();
 const forwardStepDragLandsAtDropPoint =
   summariesAfterForwardStepDrag.length === 3 &&
   summariesAfterForwardStepDrag[0] === "Chop the onion" && // former 2nd item now 1st
@@ -363,58 +365,52 @@ const forwardStepDragLandsAtDropPoint =
 
 // Remove the temporary third step so downstream counts (the persistence
 // check below expects exactly 2 steps) stay accurate, and refresh
-// firstSummaryAfter to reflect the resulting order. `.step-list__remove` is
-// a sibling of `.step-list__item` (the button), not a descendant of it -
-// both live under the same `<li data-step-index>` - so it's targeted via
-// that shared ancestor, not by scoping into the item button itself.
-await page.locator("[data-step-index='2']").locator(".step-list__remove").click();
-firstSummaryAfter = await page.locator(".step-list__item").first().locator(".step-list__summary").textContent();
+// firstSummaryAfter to reflect the resulting order.
+await stepGroups.nth(2).locator(".instruction-canvas__step-remove").click();
+firstSummaryAfter = await stepTitles.first().textContent();
 
 // Task 22: Move up/down buttons are the keyboard-operable alternative to
-// dragging a step in the list to reorder it (the project plan calls this
+// dragging a step's canvas handle to reorder it (the project plan calls this
 // out by name specifically). Move step 1 down, confirm it swapped with
 // step 2, then move it back up - a net no-op, so `firstSummaryAfter`
 // above still matches the persistence check further below.
-const summariesBeforeKeyboardReorder = await page.locator(".step-list__summary").allTextContents();
-const step0MoveDown = page.locator("[data-step-index='0']").locator(".step-list__move").nth(1);
+const summariesBeforeKeyboardReorder = await stepTitles.allTextContents();
+const step0MoveDown = stepGroups.nth(0).locator(".instruction-canvas__step-move--down");
 await step0MoveDown.focus();
 await step0MoveDown.press("Enter");
-const summariesAfterKeyboardMoveDown = await page.locator(".step-list__summary").allTextContents();
-const step1MoveUp = page.locator("[data-step-index='1']").locator(".step-list__move").first();
+const summariesAfterKeyboardMoveDown = await stepTitles.allTextContents();
+const step1MoveUp = stepGroups.nth(1).locator(".instruction-canvas__step-move--up");
 await step1MoveUp.focus();
 await step1MoveUp.press(" ");
-const summariesAfterKeyboardMoveUp = await page.locator(".step-list__summary").allTextContents();
+const summariesAfterKeyboardMoveUp = await stepTitles.allTextContents();
 const stepReorderedViaKeyboard =
   summariesAfterKeyboardMoveDown[0] === summariesBeforeKeyboardReorder[1] &&
   summariesAfterKeyboardMoveDown[1] === summariesBeforeKeyboardReorder[0] &&
   JSON.stringify(summariesAfterKeyboardMoveUp) === JSON.stringify(summariesBeforeKeyboardReorder);
 
 // Boundary check: the first step's Move up and the last step's Move down
-// must be disabled, not just unwired - there's nowhere for them to go.
-const firstStepMoveUpDisabled = await page
-  .locator("[data-step-index='0']")
-  .locator(".step-list__move")
-  .first()
-  .isDisabled();
-const lastStepIndex = (await page.locator(".step-list__item").count()) - 1;
-const lastStepMoveDownDisabled = await page
-  .locator(`[data-step-index='${lastStepIndex}']`)
-  .locator(".step-list__move")
-  .nth(1)
-  .isDisabled();
+// must be aria-disabled, not just unwired - there's nowhere for them to go.
+// Not real `disabled` elements (these are SVG <g role="button">, not <button>)
+// so the check reads aria-disabled directly rather than Playwright's
+// `.isDisabled()`, which only understands native form controls.
+const firstStepMoveUpDisabled =
+  (await stepGroups.nth(0).locator(".instruction-canvas__step-move--up").getAttribute("aria-disabled")) === "true";
+const lastStepIndex = (await stepGroups.count()) - 1;
+const lastStepMoveDownDisabled =
+  (await stepGroups.nth(lastStepIndex).locator(".instruction-canvas__step-move--down").getAttribute("aria-disabled")) === "true";
 const stepMoveButtonsDisabledAtBoundaries = firstStepMoveUpDisabled && lastStepMoveDownDisabled;
 
 // Task 13 (Undo/Redo): snapshot state first so this block can fully undo
 // itself afterward, leaving the step count/order exactly as the
 // persistence check below expects (it was captured just above, before this
 // block runs).
-const summariesBeforeHistoryTest = await page.locator(".step-list__summary").allTextContents();
+const summariesBeforeHistoryTest = await stepTitles.allTextContents();
 
 // Discrete action: adding a step is its own undo step.
-await page.locator(".step-list__add").click();
-const stepCountAfterAddForHistoryTest = await page.locator(".step-list__item").count();
+await editableCanvas.locator(".instruction-canvas__add-step").click();
+const stepCountAfterAddForHistoryTest = await stepGroups.count();
 await undoButton.click();
-const stepCountAfterUndoingAdd = await page.locator(".step-list__item").count();
+const stepCountAfterUndoingAdd = await stepGroups.count();
 const discreteActionUndoes =
   stepCountAfterAddForHistoryTest === summariesBeforeHistoryTest.length + 1 &&
   stepCountAfterUndoingAdd === summariesBeforeHistoryTest.length;
@@ -425,31 +421,30 @@ const discreteActionUndoes =
 // state (see state/document.ts's COALESCE_WINDOW_MS comment), so without
 // coalescing, undo would only ever remove the last-typed character.
 const originalFirstTitle = summariesBeforeHistoryTest[0];
-await page.locator(".step-list__item").first().click();
+await editableCanvas.locator(".instruction-canvas__badge").first().click();
 await page.locator(".step-details__field input").fill("");
 await page.locator(".step-details__field input").pressSequentially("Renamed step", { delay: 20 });
 await page.locator("body").click({ position: { x: 5, y: 5 } }); // blur
-const titleAfterTyping = await page.locator(".step-list__item").first().locator(".step-list__summary").textContent();
+const titleAfterTyping = await stepTitles.first().textContent();
 await undoButton.click(); // one click undoes the WHOLE typed title
-const titleAfterOneUndo = await page.locator(".step-list__item").first().locator(".step-list__summary").textContent();
+const titleAfterOneUndo = await stepTitles.first().textContent();
 const continuousEditCoalescesIntoOneUndo =
   titleAfterTyping === "Renamed step" && titleAfterOneUndo === originalFirstTitle;
 
 // Redo restores the coalesced edit in one step.
 await redoButton.click();
-const redoRestoresCoalescedEdit =
-  (await page.locator(".step-list__item").first().locator(".step-list__summary").textContent()) === "Renamed step";
+const redoRestoresCoalescedEdit = (await stepTitles.first().textContent()) === "Renamed step";
 
 // Keyboard shortcuts: Ctrl+Z undoes, Ctrl+Shift+Z redoes.
 await page.keyboard.press("Control+z");
-const titleAfterCtrlZ = await page.locator(".step-list__item").first().locator(".step-list__summary").textContent();
+const titleAfterCtrlZ = await stepTitles.first().textContent();
 await page.keyboard.press("Control+Shift+z");
-const titleAfterCtrlShiftZ = await page.locator(".step-list__item").first().locator(".step-list__summary").textContent();
+const titleAfterCtrlShiftZ = await stepTitles.first().textContent();
 const keyboardShortcutsWork = titleAfterCtrlZ === originalFirstTitle && titleAfterCtrlShiftZ === "Renamed step";
 
 // Undo the rename back out, leaving state exactly as this block found it.
 await undoButton.click();
-const summariesAfterHistoryTest = await page.locator(".step-list__summary").allTextContents();
+const summariesAfterHistoryTest = await stepTitles.allTextContents();
 const historyTestLeftStateUnchanged =
   JSON.stringify(summariesAfterHistoryTest) === JSON.stringify(summariesBeforeHistoryTest);
 
@@ -472,10 +467,13 @@ await page.locator(".app__preview-toggle").click();
 await page.waitForSelector(".app__main--preview");
 const previewHidesEditingControls =
   (await editableCanvas.locator(".instruction-canvas__chip-remove").count()) === 0 &&
-  (await page.locator(".step-list").count()) === 0;
+  (await editableCanvas.locator(".instruction-canvas__step-remove").count()) === 0 &&
+  (await editableCanvas.locator(".instruction-canvas__step-move").count()) === 0 &&
+  (await editableCanvas.locator(".instruction-canvas__step-drag-handle").count()) === 0 &&
+  (await editableCanvas.locator(".instruction-canvas__add-step").count()) === 0;
 await page.screenshot({ path: path.join(OUT, "06-preview-mode.png"), fullPage: true });
 await page.locator(".app__preview-toggle").click();
-await page.waitForSelector(".step-list");
+await page.waitForSelector(".instruction-canvas__add-step");
 
 // Task 12 (Data Persistence): reload and confirm the document - including
 // the step-reorder above - survived via IndexedDB, not just in-memory
@@ -489,7 +487,7 @@ await page.waitForSelector(".step-list");
 await page.waitForTimeout(300);
 await page.reload({ waitUntil: "networkidle" });
 await page.waitForSelector(".instruction-canvas__svg");
-const summariesAfterReload = await page.locator(".step-list__summary").allTextContents();
+const summariesAfterReload = await stepTitles.allTextContents();
 const persistedAcrossReload =
   summariesAfterReload.length === 2 && summariesAfterReload[0] === firstSummaryAfter;
 
@@ -518,20 +516,23 @@ const noHorizontalOverflowAtMobileWidth = mobileOverflow === 0;
 // itself must still succeed either way - "non-blocking" per
 // docs/fixed-issues/README.md's design intent, not enforced there but this is where
 // it's actually exercised).
-await page.locator(".step-list__add").click();
+await editableCanvas.locator(".instruction-canvas__add-step").click();
 // Reconstruct the true incomplete-step count from two DOM signals rather
-// than trusting `.step-list__flag`'s count alone: that persistent badge is
-// deliberately suppressed for an untouched, zero-token step (see
+// than trusting `.instruction-canvas__flag`'s count alone: that persistent
+// badge is deliberately suppressed for an untouched, zero-token step (see
 // model/validate.ts's shouldFlagIncompleteStep) even though it's still
 // counted incomplete by this export warning, which checks `isComplete`
 // directly and doesn't go through the badge at all. A step is incomplete
-// for exactly one of two reasons - zero tokens (badge suppressed, but the
-// canvas still shows its "Empty step" hint) or tokens with no action among
-// them (badge shown) - so the two counts together give the real total. At
-// this point in the flow that's step 1 (its action token was removed
-// earlier below) plus the empty step just added here.
-const flaggedIncompleteCount = await page.locator(".step-list__flag").count();
-const emptyStepCount = await editableCanvas.locator(".instruction-canvas__hint").count();
+// for exactly one of two reasons - zero tokens (badge suppressed - counted
+// directly below by checking each step's own token count) or tokens with no
+// action among them (badge shown) - so the two counts together give the
+// real total. At this point in the flow that's step 1 (its action token was
+// removed earlier below) plus the empty step just added here.
+const flaggedIncompleteCount = await editableCanvas.locator(".instruction-canvas__flag").count();
+const stepTokenCounts = await Promise.all(
+  (await stepGroups.all()).map((group) => group.locator(".instruction-canvas__token").count()),
+);
+const emptyStepCount = stepTokenCounts.filter((count) => count === 0).length;
 const expectedIncompleteCount = flaggedIncompleteCount + emptyStepCount;
 const [download] = await Promise.all([
   page.waitForEvent("download"),
@@ -548,7 +549,7 @@ const exportWarnedAboutIncompleteSteps =
   exportToastText.includes(String(expectedIncompleteCount));
 const jsonExportDownloadsCurrentDocument =
   exportSuggestedFilename === "untitled-instructions.json" &&
-  exportedDoc.steps.length === (await page.locator(".step-list__item").count());
+  exportedDoc.steps.length === (await stepGroups.count());
 await page.screenshot({ path: path.join(OUT, "07-export-warning-toast.png"), fullPage: true });
 await page.locator(".app__toast-dismiss").click();
 const toastGoneAfterDismiss = (await page.locator(".app__toast").count()) === 0;
@@ -583,7 +584,13 @@ const svgExportIsSelfContainedAndStyled =
   svgContent.startsWith('<?xml version="1.0" encoding="UTF-8"?>') &&
   svgContent.includes("<svg") &&
   svgContent.includes("rgb(245, 246, 249)") && // baked chip fill (--color-surface-sunken)
-  !svgContent.includes("instruction-canvas__chip-remove"); // exported from the read-only canvas, not the editable one
+  // exported from the read-only canvas, not the editable one - none of its
+  // token- or step-level editing controls should ever appear in a download.
+  !svgContent.includes("instruction-canvas__chip-remove") &&
+  !svgContent.includes("instruction-canvas__step-remove") &&
+  !svgContent.includes("instruction-canvas__step-move") &&
+  !svgContent.includes("instruction-canvas__step-drag-handle") &&
+  !svgContent.includes("instruction-canvas__add-step");
 await page.screenshot({ path: path.join(OUT, "09-svg-export-toast.png"), fullPage: true });
 await page.locator(".app__toast-dismiss").click();
 
@@ -671,6 +678,11 @@ const printLayout = await page.evaluate(() => {
     exportCanvasVisible: !!exportCanvas && getComputedStyle(exportCanvas).display !== "none" && exportCanvas.getBoundingClientRect().width > 0,
     svgStepCount: svg ? svg.querySelectorAll(".instruction-canvas__step-bg").length : 0,
     svgHasNoRemoveButtons: svg ? svg.querySelectorAll(".instruction-canvas__chip-remove").length === 0 : false,
+    svgHasNoStepControls: svg
+      ? svg.querySelectorAll(
+          ".instruction-canvas__step-remove, .instruction-canvas__step-move, .instruction-canvas__step-drag-handle, .instruction-canvas__add-step",
+        ).length === 0
+      : false,
   };
 });
 await page.screenshot({ path: path.join(OUT, "11-print-preview.png"), fullPage: true });
@@ -680,16 +692,17 @@ const printStylesheetIsolatesReadOnlyCanvas =
   printLayout.mainHidden &&
   printLayout.exportCanvasVisible &&
   printLayout.svgStepCount > 0 &&
-  printLayout.svgHasNoRemoveButtons;
+  printLayout.svgHasNoRemoveButtons &&
+  printLayout.svgHasNoStepControls;
 
 // Remove the temporary empty step so the step count is back to what it was.
-await page.locator("[data-step-index='2']").locator(".step-list__remove").click();
+await stepGroups.nth(2).locator(".instruction-canvas__step-remove").click();
 
 // Task 19 (Import): a small valid document, imported via the hidden file
 // input (Playwright's setInputFiles fires the same `change` event a real
 // file picker would, so the visually-hidden input - proxied by the visible
 // "Import" button in normal use - doesn't need to actually be clicked open).
-const summariesBeforeImportTest = await page.locator(".step-list__summary").allTextContents();
+const summariesBeforeImportTest = await stepTitles.allTextContents();
 const importFileInput = page.locator('input[type="file"]');
 const validImportDoc = {
   schemaVersion: 1,
@@ -725,8 +738,7 @@ const focusWrappedBackToCancel = await page.evaluate(
 await page.keyboard.press("Escape");
 const escapeClosedDialogWithNoChange =
   (await page.locator(".confirm-dialog").count()) === 0 &&
-  JSON.stringify(await page.locator(".step-list__summary").allTextContents()) ===
-    JSON.stringify(summariesBeforeImportTest);
+  JSON.stringify(await stepTitles.allTextContents()) === JSON.stringify(summariesBeforeImportTest);
 const importDialogTrapsFocusAndEscapeCloses =
   dialogFocusedCancelOnOpen &&
   focusedReplaceAfterOneTab === "confirm-dialog-confirm" &&
@@ -741,17 +753,17 @@ await importFileInput.setInputFiles({
 const importDialogMentionsStepCount = (await page.locator(".confirm-dialog").textContent()).includes("1 step");
 await page.screenshot({ path: path.join(OUT, "08-import-confirm-dialog.png"), fullPage: true });
 await page.getByRole("button", { name: "Replace", exact: true }).click();
-const summariesAfterImport = await page.locator(".step-list__summary").allTextContents();
+const summariesAfterImport = await stepTitles.allTextContents();
 const importReplacedDocument = summariesAfterImport.length === 1 && summariesAfterImport[0] === "Imported step";
 await page.locator(".app__toast-dismiss").click();
 
 // Undo/redo must cover import too, same as every other mutation - an
 // accidental "Replace" is one Ctrl+Z away from being reverted.
 await page.keyboard.press("Control+z");
-const summariesAfterUndoingImport = await page.locator(".step-list__summary").allTextContents();
+const summariesAfterUndoingImport = await stepTitles.allTextContents();
 const undoRevertsImport = JSON.stringify(summariesAfterUndoingImport) === JSON.stringify(summariesBeforeImportTest);
 await page.keyboard.press("Control+Shift+z");
-const summariesAfterRedoingImport = await page.locator(".step-list__summary").allTextContents();
+const summariesAfterRedoingImport = await stepTitles.allTextContents();
 const redoReappliesImport = summariesAfterRedoingImport.length === 1 && summariesAfterRedoingImport[0] === "Imported step";
 await page.keyboard.press("Control+z"); // leave state back at the pre-import baseline
 
@@ -812,7 +824,7 @@ await importFileInput.setInputFiles({
   buffer: Buffer.from(JSON.stringify(validImportDoc)),
 });
 await page.getByRole("button", { name: "Cancel", exact: true }).click();
-const summariesAfterCancelingImport = await page.locator(".step-list__summary").allTextContents();
+const summariesAfterCancelingImport = await stepTitles.allTextContents();
 const importCancelLeavesDocumentUnchanged =
   (await page.locator(".confirm-dialog").count()) === 0 &&
   JSON.stringify(summariesAfterCancelingImport) === JSON.stringify(summariesBeforeImportTest);
@@ -890,7 +902,7 @@ const storedRightAfterReload = await readStoredDocument();
 const oldSaveNotClobberedOnLoad = storedRightAfterReload?.schemaVersion === 2;
 
 await page.locator(".app__toast-dismiss").click();
-await page.locator(".step-list__add").click(); // a real edit - should autosave normally
+await editableCanvas.locator(".instruction-canvas__add-step").click(); // a real edit - should autosave normally
 await page.waitForTimeout(300);
 const storedAfterRealEdit = await readStoredDocument();
 const autosaveResumesAfterRealEdit =

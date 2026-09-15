@@ -7,8 +7,8 @@
 > a new `phase-4/progress/README.md` takes over as CURRENT.
 
 Date: 2026-09-14, updated 2026-09-15 (tasks 25-29, an architecture review
-pass, a pre-launch file/docs and UI audit, and a follow-up canvas-specific
-architecture deepening)
+pass, a pre-launch file/docs and UI audit, a follow-up canvas-specific
+architecture deepening, and a step-management-onto-the-canvas UX rework)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
 [../../project-plan.md](../../project-plan.md#implementation-plan)'s Phase 3
@@ -84,6 +84,12 @@ rather than `InstructionCanvas` computing them itself), while keeping the
 drag-state-dependent `insertionMarkerPosition` as its own separate seam on
 purpose - see
 [architecture-2026-09-15-canvas-deepening.md](./architecture-2026-09-15-canvas-deepening.md).
+A further same-day UX rework, settled via `/mattpocock-skills:grilling`,
+moved step management (select/add/remove/reorder) off the standalone
+`StepList` panel and onto the canvas itself - `StepList` is deleted, each
+step card gained a title, a left-edge drag-handle-plus-move-up/down reorder
+stack, a remove button, and a dashed "+ Add step" row inside the SVG - see
+[step-management-moved-to-canvas.md](./step-management-moved-to-canvas.md).
 
 ## What shipped
 
@@ -99,16 +105,18 @@ One file per task (or per notable pass), in task-number order:
 | — | Pre-launch file/docs audit and UI polish follow-up (stale README, vestigial `tests/`, grid layout fix, toolbar grouping, human-readable durations, deferred incomplete-step badge, document-title contrast) | [pre-launch-file-and-ui-audit.md](./pre-launch-file-and-ui-audit.md) |
 | 29 | Publish MVP | [task-29-publish-mvp.md](./task-29-publish-mvp.md) |
 | — | Architecture: 2026-09-15 canvas deepening (`computeCanvasLayout` becomes `canvas-layout.ts`'s whole interface; `insertionMarkerPosition` kept as a separate seam) | [architecture-2026-09-15-canvas-deepening.md](./architecture-2026-09-15-canvas-deepening.md) |
+| — | UX: step management moved onto the canvas (StepList deleted; title, reorder stack, remove, add-step row now live in InstructionCanvas.tsx) | [step-management-moved-to-canvas.md](./step-management-moved-to-canvas.md) |
 | 30 | Test Real Users | *not started* |
 | 31 | Refine UX | *not started* |
 
 ## Verification
 
-- `npm run lint`, `npm run typecheck`, `npm test` (119 tests - the
+- `npm run lint`, `npm run typecheck`, `npm test` (128 tests - the
   pre-launch audit only updated 3 existing `duration.test.ts` assertions'
   expected strings for the new human-readable format; the canvas deepening
   added 1 net new case to `canvas-layout.test.ts` while porting the rest
-  through `computeCanvasLayout`), and `npm run build` all pass cleanly.
+  through `computeCanvasLayout`; the step-management rework added 2 more),
+  and `npm run build` all pass cleanly.
 - See each task's own file above for full verification detail
   (browser-driven checks, bundle size deltas, and the decisions made along
   the way).
