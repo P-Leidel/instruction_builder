@@ -1,26 +1,46 @@
 import { describe, it, expect } from "vitest";
 import {
-  chipPosition,
-  widestRowWidth,
-  buildConnectors,
   insertionMarkerPosition,
   computeCanvasLayout,
   CHIP_WIDTH,
   CHIP_HEIGHT,
   CHIP_GAP,
+  CHIP_TIME_HEADER_HEIGHT,
   HEADER_HEIGHT,
   PADDING,
   BASE_CANVAS_WIDTH,
 } from "./canvas-layout";
 import { createEmptyStep, createToken } from "../model/instruction";
+import type { InstructionToken } from "../model/instruction";
 
-describe("chipPosition", () => {
+// Desktop's fixed chips-per-row, derived the same way desktopChipsPerRow()
+// does internally: floor((688 + 16) / (96 + 16)) = 6. Hardcoded here (like
+// the old direct-primitive tests did) since computeCanvasLayout doesn't
+// expose the raw figure - only the resulting chipsPerRow on each StepLayout,
+// which every test below asserts against instead of trusting this constant.
+const DESKTOP_CHIPS_PER_ROW = 6;
+
+function tokens(count: number) {
+  return Array.from({ length: count }, () => createToken("action", "a"));
+}
+
+/** A copy of `token` with a `time` attached - the actual seconds/iconId don't matter to canvas-layout, only that `time` is set. */
+function withTime(token: InstructionToken): InstructionToken {
+  return { ...token, time: { iconId: "time", label: "30m", seconds: 1800 } };
+}
+
+describe("chip positions (via computeCanvasLayout)", () => {
   it("places the first chip at the header's top-left", () => {
-    expect(chipPosition(0, 6)).toEqual({ cx: 0, cy: HEADER_HEIGHT, col: 0, row: 0 });
+    const step = { ...createEmptyStep(), tokens: tokens(1) };
+    const layout = computeCanvasLayout([step], true);
+    expect(layout.layouts[0].chipsPerRow).toBe(DESKTOP_CHIPS_PER_ROW);
+    expect(layout.layouts[0].chipPositions[0]).toEqual({ cx: 0, cy: HEADER_HEIGHT, col: 0, row: 0 });
   });
 
   it("advances columns within a row", () => {
-    expect(chipPosition(1, 6)).toEqual({
+    const step = { ...createEmptyStep(), tokens: tokens(2) };
+    const layout = computeCanvasLayout([step], true);
+    expect(layout.layouts[0].chipPositions[1]).toEqual({
       cx: CHIP_WIDTH + CHIP_GAP,
       cy: HEADER_HEIGHT,
       col: 1,
@@ -29,7 +49,9 @@ describe("chipPosition", () => {
   });
 
   it("wraps to a new row after chipsPerRow columns", () => {
-    expect(chipPosition(6, 6)).toEqual({
+    const step = { ...createEmptyStep(), tokens: tokens(DESKTOP_CHIPS_PER_ROW + 1) };
+    const layout = computeCanvasLayout([step], true);
+    expect(layout.layouts[0].chipPositions[DESKTOP_CHIPS_PER_ROW]).toEqual({
       cx: 0,
       cy: HEADER_HEIGHT + (CHIP_HEIGHT + CHIP_GAP),
       col: 0,
@@ -38,32 +60,91 @@ describe("chipPosition", () => {
   });
 });
 
-describe("widestRowWidth", () => {
-  it("is zero for no tokens", () => {
-    expect(widestRowWidth(0, 6)).toBe(0);
+describe("token time labels (via computeCanvasLayout)", () => {
+  it("reserves no extra band above a row where no token has a time", () => {
+    const step = { ...createEmptyStep(), tokens: tokens(2) };
+    const layout = computeCanvasLayout([step], true);
+    expect(layout.layouts[0].chipPositions[0].cy).toBe(HEADER_HEIGHT);
+    expect(layout.layouts[0].chipPositions[1].cy).toBe(HEADER_HEIGHT);
   });
 
-  it("is the full row width when a row isn't full", () => {
-    expect(widestRowWidth(3, 6)).toBe(3 * CHIP_WIDTH + 2 * CHIP_GAP);
+  it("reserves a band above a row with a timed token, pushing that row's chips down", () => {
+    const step = { ...createEmptyStep(), tokens: [withTime(createToken("action", "a"))] };
+    const layout = computeCanvasLayout([step], true);
+    expect(layout.layouts[0].chipPositions[0].cy).toBe(HEADER_HEIGHT + CHIP_TIME_HEADER_HEIGHT);
   });
 
-  it("caps at chipsPerRow even with more tokens than fit in one row", () => {
-    expect(widestRowWidth(10, 6)).toBe(6 * CHIP_WIDTH + 5 * CHIP_GAP);
+  it("shares the row's reserved band with every chip in that row, not just the timed one", () => {
+    const step = {
+      ...createEmptyStep(),
+      tokens: [withTime(createToken("action", "a")), createToken("action", "b")],
+    };
+    const layout = computeCanvasLayout([step], true);
+    // Both tokens land in row 0 (desktop fits 6/row) - only the first has a
+    // time, but the whole row's chips share one shifted-down y.
+    expect(layout.layouts[0].chipPositions[0].cy).toBe(HEADER_HEIGHT + CHIP_TIME_HEADER_HEIGHT);
+    expect(layout.layouts[0].chipPositions[1].cy).toBe(HEADER_HEIGHT + CHIP_TIME_HEADER_HEIGHT);
+  });
+
+  it("only reserves the band for rows that actually need it, not every row in the step", () => {
+    // 7 tokens at 6/row: row 0 has none of them timed, row 1 (just the 7th
+    // token) does - only row 1 should carry the extra band.
+    const stepTokens = tokens(DESKTOP_CHIPS_PER_ROW + 1);
+    stepTokens[DESKTOP_CHIPS_PER_ROW] = withTime(stepTokens[DESKTOP_CHIPS_PER_ROW]);
+    const step = { ...createEmptyStep(), tokens: stepTokens };
+    const layout = computeCanvasLayout([step], true);
+    expect(layout.layouts[0].chipPositions[0].cy).toBe(HEADER_HEIGHT);
+    expect(layout.layouts[0].chipPositions[DESKTOP_CHIPS_PER_ROW].cy).toBe(
+      HEADER_HEIGHT + (CHIP_HEIGHT + CHIP_GAP) + CHIP_TIME_HEADER_HEIGHT,
+    );
+  });
+
+  it("grows the step's own height by the reserved band", () => {
+    const untimed = computeCanvasLayout(
+      [{ ...createEmptyStep(), tokens: [createToken("action", "a")] }],
+      true,
+    );
+    const timed = computeCanvasLayout(
+      [{ ...createEmptyStep(), tokens: [withTime(createToken("action", "a"))] }],
+      true,
+    );
+    expect(timed.layouts[0].height).toBe(untimed.layouts[0].height + CHIP_TIME_HEADER_HEIGHT);
+  });
+
+  it("keeps the row-wrap connector's bend anchored to the source row, unaffected by the target row's own band", () => {
+    const stepTokens = tokens(DESKTOP_CHIPS_PER_ROW + 1);
+    stepTokens[DESKTOP_CHIPS_PER_ROW] = withTime(stepTokens[DESKTOP_CHIPS_PER_ROW]);
+    const step = { ...createEmptyStep(), tokens: stepTokens };
+    const layout = computeCanvasLayout([step], true);
+    const segment = layout.layouts[0].connectors[DESKTOP_CHIPS_PER_ROW - 1];
+    const fromMidY = HEADER_HEIGHT + CHIP_HEIGHT / 2;
+    const toCy = HEADER_HEIGHT + (CHIP_HEIGHT + CHIP_GAP) + CHIP_TIME_HEADER_HEIGHT;
+    const toMidY = toCy + CHIP_HEIGHT / 2;
+    const fromRightX = (DESKTOP_CHIPS_PER_ROW - 1) * (CHIP_WIDTH + CHIP_GAP) + CHIP_WIDTH;
+    expect(segment.d).toContain("Q");
+    expect(segment.d.startsWith(`M ${fromRightX} ${fromMidY}`)).toBe(true);
+    expect(segment.d.endsWith(`L 0 ${toMidY}`)).toBe(true);
   });
 });
 
-describe("buildConnectors", () => {
+describe("connectors (via computeCanvasLayout)", () => {
   it("draws nothing for zero or one token", () => {
-    expect(buildConnectors(0, 6)).toEqual([]);
-    expect(buildConnectors(1, 6)).toEqual([]);
+    const zero = computeCanvasLayout([{ ...createEmptyStep(), tokens: tokens(0) }], true);
+    const one = computeCanvasLayout([{ ...createEmptyStep(), tokens: tokens(1) }], true);
+    expect(zero.layouts[0].connectors).toEqual([]);
+    expect(one.layouts[0].connectors).toEqual([]);
   });
 
   it("draws one connector per consecutive pair", () => {
-    expect(buildConnectors(4, 6)).toHaveLength(3);
+    const step = { ...createEmptyStep(), tokens: tokens(4) };
+    const layout = computeCanvasLayout([step], true);
+    expect(layout.layouts[0].connectors).toHaveLength(3);
   });
 
   it("draws a plain straight line within one row", () => {
-    const [segment] = buildConnectors(2, 6);
+    const step = { ...createEmptyStep(), tokens: tokens(2) };
+    const layout = computeCanvasLayout([step], true);
+    const [segment] = layout.layouts[0].connectors;
     const fromMidY = HEADER_HEIGHT + CHIP_HEIGHT / 2;
     expect(segment.key).toBe("0-1");
     expect(segment.d).toBe(`M ${CHIP_WIDTH} ${fromMidY} L ${CHIP_WIDTH + CHIP_GAP} ${fromMidY}`);
@@ -71,31 +152,88 @@ describe("buildConnectors", () => {
   });
 
   it("draws a curved bend across a row wrap", () => {
-    // chipsPerRow=1 forces every consecutive pair onto a different row.
-    const [segment] = buildConnectors(2, 1);
+    // DESKTOP_CHIPS_PER_ROW + 1 tokens forces exactly one pair (the last of
+    // row 0, the first of row 1) onto different rows.
+    const step = { ...createEmptyStep(), tokens: tokens(DESKTOP_CHIPS_PER_ROW + 1) };
+    const layout = computeCanvasLayout([step], true);
+    const segment = layout.layouts[0].connectors[DESKTOP_CHIPS_PER_ROW - 1];
     const fromMidY = HEADER_HEIGHT + CHIP_HEIGHT / 2;
     const toMidY = HEADER_HEIGHT + (CHIP_HEIGHT + CHIP_GAP) + CHIP_HEIGHT / 2;
+    const fromRightX = (DESKTOP_CHIPS_PER_ROW - 1) * (CHIP_WIDTH + CHIP_GAP) + CHIP_WIDTH;
+    const toLeftX = 0;
     expect(segment.d).toContain("Q");
-    expect(segment.d.startsWith(`M ${CHIP_WIDTH} ${fromMidY}`)).toBe(true);
-    expect(segment.d.endsWith(`L 0 ${toMidY}`)).toBe(true);
+    expect(segment.d.startsWith(`M ${fromRightX} ${fromMidY}`)).toBe(true);
+    expect(segment.d.endsWith(`L ${toLeftX} ${toMidY}`)).toBe(true);
   });
 });
 
+describe("tokensOffsetX centering (via computeCanvasLayout)", () => {
+  it("centers within the full available width when a step has no tokens", () => {
+    const step = { ...createEmptyStep(), tokens: tokens(0) };
+    const layout = computeCanvasLayout([step], true);
+    expect(layout.canvasWidth).toBe(BASE_CANVAS_WIDTH);
+    expect(layout.layouts[0].tokensOffsetX).toBe((BASE_CANVAS_WIDTH - PADDING * 2) / 2);
+  });
+
+  it("centers a partial row using that row's own (not the full chipsPerRow's) width", () => {
+    const step = { ...createEmptyStep(), tokens: tokens(3) };
+    const layout = computeCanvasLayout([step], true);
+    const rowWidth = 3 * CHIP_WIDTH + 2 * CHIP_GAP;
+    expect(layout.canvasWidth).toBe(BASE_CANVAS_WIDTH);
+    expect(layout.layouts[0].tokensOffsetX).toBe((BASE_CANVAS_WIDTH - PADDING * 2 - rowWidth) / 2);
+  });
+
+  it("caps the centered row width at chipsPerRow even with more tokens than fit in one row", () => {
+    const step = { ...createEmptyStep(), tokens: tokens(10) };
+    const layout = computeCanvasLayout([step], true);
+    const cappedRowWidth = DESKTOP_CHIPS_PER_ROW * CHIP_WIDTH + (DESKTOP_CHIPS_PER_ROW - 1) * CHIP_GAP;
+    expect(layout.canvasWidth).toBe(BASE_CANVAS_WIDTH);
+    expect(layout.layouts[0].tokensOffsetX).toBe(
+      (BASE_CANVAS_WIDTH - PADDING * 2 - cappedRowWidth) / 2,
+    );
+  });
+});
+
+// A plain, no-time-band chip position, for building the chipPositions arrays
+// insertionMarkerPosition reads from below - equivalent to what
+// computeCanvasLayout would produce for a step with no token times set.
+function plainChipPosition(index: number, chipsPerRow: number) {
+  const col = index % chipsPerRow;
+  const row = Math.floor(index / chipsPerRow);
+  return {
+    cx: col * (CHIP_WIDTH + CHIP_GAP),
+    cy: HEADER_HEIGHT + row * (CHIP_HEIGHT + CHIP_GAP),
+    col,
+    row,
+  };
+}
+
 describe("insertionMarkerPosition", () => {
-  it("matches the target chip's own position in the ordinary case", () => {
-    expect(insertionMarkerPosition(2, 5, 6)).toEqual(chipPosition(2, 6));
+  it("returns the empty-step default when there are no existing chips", () => {
+    expect(insertionMarkerPosition(0, [], 6)).toEqual({ cx: 0, cy: HEADER_HEIGHT, col: 0, row: 0 });
+  });
+
+  it("reads the target chip's own position straight off chipPositions in the ordinary case", () => {
+    const chipPositions = Array.from({ length: 5 }, (_, i) => plainChipPosition(i, 6));
+    expect(insertionMarkerPosition(2, chipPositions, 6)).toBe(chipPositions[2]);
   });
 
   it("appends just past the last chip of an exactly-full row, instead of starting a phantom new row", () => {
-    const marker = insertionMarkerPosition(6, 6, 6);
-    const last = chipPosition(5, 6);
-    expect(marker).toEqual({ ...last, cx: last.cx + CHIP_WIDTH });
+    const chipPositions = Array.from({ length: 6 }, (_, i) => plainChipPosition(i, 6));
+    const last = chipPositions[5];
+    expect(insertionMarkerPosition(6, chipPositions, 6)).toEqual({ ...last, cx: last.cx + CHIP_WIDTH });
   });
 
   it("starts a real new row when the last row isn't full", () => {
     // 7 tokens at 6/row leaves the second row with only 1 chip - dropping at
     // the end (index 7) is a genuine new row, not the exactly-full case above.
-    expect(insertionMarkerPosition(7, 7, 6)).toEqual(chipPosition(7, 6));
+    const chipPositions = Array.from({ length: 7 }, (_, i) => plainChipPosition(i, 6));
+    expect(insertionMarkerPosition(7, chipPositions, 6)).toEqual({
+      cx: CHIP_WIDTH + CHIP_GAP,
+      cy: HEADER_HEIGHT + (CHIP_HEIGHT + CHIP_GAP),
+      col: 1,
+      row: 1,
+    });
   });
 });
 
@@ -148,5 +286,11 @@ describe("computeCanvasLayout", () => {
     const manyTokens = Array.from({ length: 10 }, () => createToken("action", "a"));
     const layout = computeCanvasLayout([{ ...createEmptyStep(), tokens: manyTokens }], false);
     expect(layout.canvasWidth).toBeGreaterThan(BASE_CANVAS_WIDTH);
+  });
+
+  it("gives every step one chip position per token, in token order", () => {
+    const step = { ...createEmptyStep(), tokens: tokens(3) };
+    const layout = computeCanvasLayout([step], true);
+    expect(layout.layouts[0].chipPositions).toHaveLength(3);
   });
 });

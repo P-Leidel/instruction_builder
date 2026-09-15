@@ -6,23 +6,23 @@ import {
   updateStepDescription,
   setStepTime,
 } from "../../state/document";
-import { descriptionFor } from "../../data/sample-tokens";
 import { Icon } from "../Icon/Icon";
 import { DurationField } from "../DurationField/DurationField";
 
 /**
- * Editor for the selected step's user-authored title/details, plus a list
- * of its tokens with the app-given description for each (from
- * sample-tokens.ts - becomes the icon library's data once task 7 lands).
- * Lives below StepList in the same panel column (see the "step-details"
- * grid area in global.css).
+ * Editor for the selected step's user-authored title/details, plus a plain
+ * list of its tokens (icon + label only - the app-given description per
+ * token lives in TokenDetails now, once a token is selected there). Lives
+ * below StepList in the same panel column (see the "step-details" grid area
+ * in global.css).
  *
  * Task 22: each token in that list is also a button selecting it (this list
  * only renders once a step is already selected, so the canvas's two-stage
  * select rule - a token only selects once its step does - is automatically
  * satisfied). This is the keyboard-operable path to a token's TokenDetails
  * panel; the canvas's own SVG token chips remain pointer/touch-only, same as
- * before.
+ * before - so this list stays even though it no longer shows a description,
+ * since it's still the only way a keyboard user can select a token at all.
  */
 export function StepDetails() {
   const step = selectedStep.value;
@@ -89,7 +89,6 @@ export function StepDetails() {
                   >
                     <Icon iconId={token.iconId} size={18} />
                     <span class="step-details__token-label">{token.label ?? token.iconId}</span>
-                    <span class="step-details__token-description">{descriptionFor(token.iconId)}</span>
                   </button>
                 </li>
               );

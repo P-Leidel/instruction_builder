@@ -667,13 +667,8 @@ button {
 
 .step-details__token-button {
   display: grid;
-  /* The label track was a plain `auto` - for a long user-typed token title,
-     that greedily claims space up to its own max-content width before the
-     description's `1fr` track gets anything, starving it down to an
-     unreadably narrow, one-word-per-line column. `minmax(0, ...)` on both
-     text tracks makes them share the row's actual available width instead. */
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.3fr);
-  align-items: baseline;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
   gap: 0.4rem;
   width: 100%;
   padding: 0.3rem;
@@ -697,10 +692,6 @@ button {
 
 .step-details__token-label {
   font-weight: 600;
-}
-
-.step-details__token-description {
-  color: var(--color-text-muted);
 }
 
 /* Duration field (Time) - shared by Step details and Token details, see
@@ -1069,6 +1060,16 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* Token duration label - the same idea as .instruction-canvas__step-time
+   above, just above one chip instead of a whole step card, and smaller to
+   match the chip's own label (.instruction-canvas__chip-label). */
+.instruction-canvas__chip-time {
+  fill: var(--color-text-muted);
+  font-size: 8px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Token picker */
 
 .token-picker__tabs {
@@ -1111,9 +1112,12 @@ button {
   flex-direction: column;
   align-items: center;
   gap: 0.25rem;
-  min-width: 64px;
+  /* A fixed width (not just min-width) plus the label's own reserved
+     two-line height below is what makes every button the same size,
+     regardless of how long its label is. */
+  width: 76px;
   min-height: 44px;
-  padding: 0.5rem;
+  padding: 0.5rem 0.4rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-sunken);
@@ -1125,6 +1129,25 @@ button {
 
 .token-picker__button:hover {
   border-color: var(--color-accent);
+}
+
+.token-picker__label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  /* Reserved for two lines even when a label only needs one, so a short
+     label ("Pan") and a long one ("Thermometer") produce the same button
+     height instead of the row's tallest label dictating it. */
+  min-height: calc(1.2em * 2);
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  /* A long single word (e.g. "Thermometer") wraps at a real syllable break
+     with a hyphen instead of an arbitrary mid-word cut - index.html's
+     lang="en" is what lets the browser find those break points. */
+  hyphens: auto;
 }
 
 /* Quantity's own form (TokenAttachmentPicker) - replaces a button grid,

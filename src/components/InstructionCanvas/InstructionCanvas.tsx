@@ -16,13 +16,11 @@ import {
   PADDING,
   CHIP_WIDTH,
   CHIP_HEIGHT,
+  CHIP_TIME_HEADER_HEIGHT,
   BADGE_SIZE,
   MARKER_WIDTH,
   ICON_DRAW_SIZE,
-  chipPosition,
-  buildConnectors,
   insertionMarkerPosition,
-  widestRowWidth,
   computeCanvasLayout,
 } from "../../lib/canvas-layout";
 import type { TokenAttachment } from "../../model/instruction";
@@ -167,6 +165,12 @@ interface InstructionCanvasProps {
  * below nor grow past a reasonable size - both are easy to revisit later
  * (swap the mobile chipsPerRow back to the wrapped desktop formula, or
  * change the clamp bounds).
+ *
+ * A token with its own `time` (see InstructionToken.time) shows it above
+ * its chip, the same idea as a step's own duration header above its card -
+ * `lib/canvas-layout.ts` reserves the room per row of chips (only when a
+ * row actually has a timed token in it), not here; this just renders the
+ * label for whichever tokens have one.
  */
 export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) {
   const steps = document.value.steps;
@@ -190,7 +194,23 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
             : `${steps.length} instruction step${steps.length === 1 ? "" : "s"}, each with a select button and removable tokens`
         }
       >
-        {layouts.map(({ step, cardY, headerHeight, displayedTime, height, chipsPerRow, isComplete, issues }, index) => {
+        {layouts.map(
+          (
+            {
+              step,
+              cardY,
+              headerHeight,
+              displayedTime,
+              height,
+              chipsPerRow,
+              isComplete,
+              issues,
+              chipPositions,
+              connectors,
+              tokensOffsetX,
+            },
+            index,
+          ) => {
           const isSelected = !readOnly && step.id === selectedStepId.value;
           const isDropTarget = !readOnly && dropTarget.value?.stepId === step.id;
           const dropIndex = isDropTarget
@@ -207,15 +227,6 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
           const selectLabel = showIncompleteFlag
             ? `Select step ${stepNumber}, incomplete: ${issues.join(", ")}`
             : `Select step ${stepNumber}`;
-          const connectors = buildConnectors(step.tokens.length, chipsPerRow);
-          // Center the token block horizontally within the step card instead
-          // of leaving it flush against the left edge - a step with only a
-          // couple of tokens on a wide card otherwise reads as lopsided.
-          // Computed per step (each step's own content width), not once for
-          // the whole canvas, so a short step centers within the same card
-          // width a long step fills edge-to-edge.
-          const rowWidth = widestRowWidth(step.tokens.length, chipsPerRow);
-          const tokensOffsetX = Math.max(0, (canvasWidth - PADDING * 2 - rowWidth) / 2);
 
           return (
             <g key={step.id} transform={`translate(${PADDING}, ${cardY})`} data-step-id={step.id}>
@@ -286,7 +297,7 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                 </g>
                 <g class="instruction-canvas__tokens">
                   {step.tokens.map((token, tokenIndex) => {
-                    const { cx, cy } = chipPosition(tokenIndex, chipsPerRow);
+                    const { cx, cy } = chipPositions[tokenIndex];
                     const label = token.label ?? token.iconId;
                     const isTokenSelected = isSelected && token.id === selectedTokenId.value;
                     return (
@@ -338,6 +349,16 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                               }
                         }
                       >
+                        {token.time && (
+                          <text
+                            class="instruction-canvas__chip-time"
+                            x={CHIP_WIDTH / 2}
+                            y={-CHIP_TIME_HEADER_HEIGHT + 10}
+                            text-anchor="middle"
+                          >
+                            {token.time.label}
+                          </text>
+                        )}
                         <rect
                           class={`instruction-canvas__chip${
                             token.category === "warning" ? " instruction-canvas__chip--warning" : ""
@@ -396,7 +417,7 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                 </g>
                 {dropIndex !== null &&
                   (() => {
-                    const marker = insertionMarkerPosition(dropIndex, step.tokens.length, chipsPerRow);
+                    const marker = insertionMarkerPosition(dropIndex, chipPositions, chipsPerRow);
                     return (
                       <rect
                         class="instruction-canvas__insertion-marker"

@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review — instruction_builder (canvas)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; }
+      .deep {
+        background: linear-gradient(135deg, #0f172a, #1e293b);
+      }
+      .mono { font-variant-numeric: tabular-nums; }
+      .badge-strong { background: #d1fae5; color: #065f46; }
+      .badge-explore { background: #fef3c7; color: #92400e; }
+      .badge-speculative { background: #e2e8f0; color: #334155; }
+      .arrow {
+        position: absolute;
+        stroke: #64748b;
+        stroke-width: 2;
+        fill: none;
+        marker-end: url(#arrowhead);
+      }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-16">
+      <header class="space-y-4 border-b border-slate-200 pb-8">
+        <p class="text-xs uppercase tracking-wider text-slate-500">Architecture review</p>
+        <h1 class="font-serif text-3xl font-semibold">instruction_builder — the canvas</h1>
+        <p class="text-sm text-slate-500">
+          2026-09-15 · scope: <span class="font-mono">InstructionCanvas.tsx</span>,
+          <span class="font-mono">lib/canvas-layout.ts</span>,
+          <span class="font-mono">lib/pointer-drag.ts</span>,
+          <span class="font-mono">state/drag.ts</span>
+          — a fresh pass, not re-litigating anything already tracked in
+          <span class="font-mono">known-issues.md</span>/<span class="font-mono">planned-additions.md</span>.
+        </p>
+        <div class="flex flex-wrap gap-x-8 gap-y-2 text-xs text-slate-500 pt-2">
+          <span class="flex items-center gap-2"><span class="inline-block w-6 h-3 border-2 border-slate-400 rounded-sm"></span>module</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-6 border-t-2 border-dashed border-slate-400"></span>seam</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-6 border-t-2 border-red-500"></span>leak</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-6 h-3 rounded-sm deep"></span>deep module</span>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-16">
+
+        <!-- Candidate 1 -->
+        <article class="space-y-5">
+          <div class="flex items-center gap-3 flex-wrap">
+            <h2 class="font-serif text-2xl font-semibold">Give canvas-layout.ts the geometry it already promises</h2>
+          </div>
+          <div class="flex gap-2 flex-wrap">
+            <span class="badge-strong text-xs font-medium px-2.5 py-1 rounded-full">Strong</span>
+            <span class="badge-speculative text-xs font-medium px-2.5 py-1 rounded-full">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">lib/canvas-layout.ts · components/InstructionCanvas/InstructionCanvas.tsx</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before</p>
+              <pre class="mermaid">
+flowchart TB
+  IC["InstructionCanvas.tsx<br/>(render)"]
+  CL["computeCanvasLayout()<br/>StepLayout: cardY, height…"]
+  CP["chipPosition()"]
+  BC["buildConnectors()"]
+  WR["widestRowWidth()"]
+  IM["insertionMarkerPosition()"]
+  MATH["tokensOffsetX math<br/>(centering, inline)"]
+  IC --> CL
+  IC -.leak.-> CP
+  IC -.leak.-> BC
+  IC -.leak.-> WR
+  IC -.leak.-> IM
+  IC -.leak.-> MATH
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class CP,BC,WR,IM,MATH leak
+              </pre>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">After</p>
+              <pre class="mermaid">
+flowchart TB
+  IC["InstructionCanvas.tsx<br/>(render)"]
+  CL["computeCanvasLayout()<br/>StepLayout: cardY, height,<br/>tokenPositions, connectors,<br/>tokensOffsetX…"]
+  IC --> CL
+  classDef deepnode fill:#0f172a,color:#fff,stroke:#0f172a;
+  class CL deepnode
+              </pre>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <span class="font-semibold">The module's own doc comment already claims this is true</span> — "this
+            component only renders whatever that module computes." It isn't, yet: <span class="font-mono">StepLayout</span>
+            carries no chip positions, no connector paths, no horizontal offset. <span class="font-mono">InstructionCanvas.tsx</span>
+            re-derives all three at render time from four separate exported functions plus six raw constants
+            (<span class="font-mono">PADDING</span>, <span class="font-mono">CHIP_WIDTH</span>…), including doing
+            its own centering arithmetic inline (<span class="font-mono">tokensOffsetX</span>) that never lives in
+            <span class="font-mono">canvas-layout.ts</span> at all.
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-6 text-sm">
+            <div>
+              <p class="font-semibold text-slate-700 mb-1">Problem</p>
+              <p class="text-slate-600">The interface a caller actually depends on is five functions and six constants, not the one entry point the module advertises — the seam leaks.</p>
+            </div>
+            <div>
+              <p class="font-semibold text-slate-700 mb-1">Solution</p>
+              <p class="text-slate-600"><span class="font-mono">computeCanvasLayout</span> composes chip positions, connector paths, and the offset into each <span class="font-mono">StepLayout</span>; the four helper functions become internal, unexported.</p>
+            </div>
+          </div>
+
+          <ul class="text-sm text-slate-700 space-y-1 list-disc list-inside">
+            <li><span class="font-semibold">Deletion test:</span> delete the module today — the centering math doesn't vanish, it's already sitting in the component. Deepening moves it back in.</li>
+            <li><span class="font-semibold">Locality:</span> a positioning bug has exactly one place to live</li>
+            <li><span class="font-semibold">Leverage:</span> one interface, not five imports to keep straight</li>
+            <li><span class="font-semibold">canvas-layout.test.ts</span> already unit-tests the pieces separately — deepening lets it test the assembled-per-step geometry as one thing, the shape a bug would actually appear in</li>
+          </ul>
+        </article>
+
+        <!-- Candidate 2 -->
+        <article class="space-y-5">
+          <h2 class="font-serif text-2xl font-semibold">Split the step card out of InstructionCanvas's one render tree</h2>
+          <div class="flex gap-2 flex-wrap">
+            <span class="badge-strong text-xs font-medium px-2.5 py-1 rounded-full">Strong</span>
+            <span class="badge-speculative text-xs font-medium px-2.5 py-1 rounded-full">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">components/InstructionCanvas/InstructionCanvas.tsx (lines 193–415)</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="rounded-lg border border-slate-200 bg-white p-4 h-80 flex flex-col">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before</p>
+              <div class="flex-1 border-2 border-slate-300 rounded-md p-3 flex flex-col gap-1.5 text-xs text-slate-500 overflow-hidden">
+                <p class="text-[11px] uppercase tracking-wider text-slate-400">InstructionCanvas — one .map()</p>
+                <div class="rounded bg-slate-100 px-2 py-1">duration header</div>
+                <div class="rounded bg-slate-100 px-2 py-1">step-bg rect + onClick</div>
+                <div class="rounded bg-slate-100 px-2 py-1">badge (readOnly ? A : B)</div>
+                <div class="rounded bg-slate-100 px-2 py-1">incomplete flag</div>
+                <div class="rounded bg-slate-100 px-2 py-1">empty hint</div>
+                <div class="rounded bg-slate-100 px-2 py-1">connectors .map()</div>
+                <div class="rounded bg-red-100 px-2 py-1 text-red-700 font-medium">tokens .map() — icon, label,<br/>2 badge kinds, remove control,<br/>drag source, ~100 lines</div>
+                <div class="rounded bg-slate-100 px-2 py-1">insertion marker</div>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-2">2 of ~8 visual units are their own module (WarningBadge, QuantityBadge)</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 h-80 flex flex-col">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">After</p>
+              <div class="flex-1 rounded-md p-3 flex flex-col gap-2 text-xs deep text-white overflow-hidden">
+                <p class="text-[11px] uppercase tracking-wider text-slate-300">InstructionCanvas — map → &lt;StepCard&gt;</p>
+                <div class="rounded bg-white/10 px-2 py-1.5">&lt;StepCard step layout /&gt;</div>
+                <div class="rounded bg-white/10 px-2 py-2 pl-4 border-l-2 border-white/30">
+                  duration · badge · flag · hint · connectors
+                </div>
+                <div class="rounded bg-white/20 px-2 py-2 pl-4 border-l-2 border-emerald-300">
+                  &lt;TokenChip token position readOnly /&gt;<br/>
+                  <span class="text-[10px] text-slate-300">icon · label · WarningBadge · QuantityBadge · remove · drag source</span>
+                </div>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-2">every visual unit is a small, named interface</p>
+            </div>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-6 text-sm">
+            <div>
+              <p class="font-semibold text-slate-700 mb-1">Problem</p>
+              <p class="text-slate-600">One render function carries every visual concern for the whole document. The token chip alone — icon, label, two badge kinds, remove control, drag source, <span class="font-mono">readOnly</span> branching — is ~100 lines nested four levels inside a <span class="font-mono">.map()</span>.</p>
+            </div>
+            <div>
+              <p class="font-semibold text-slate-700 mb-1">Solution</p>
+              <p class="text-slate-600">Extract <span class="font-mono">&lt;StepCard&gt;</span> and <span class="font-mono">&lt;TokenChip&gt;</span> as named modules, the same way <span class="font-mono">WarningBadge</span>/<span class="font-mono">QuantityBadge</span> already are — each with a small props interface, not a shared blob of local variables.</p>
+            </div>
+          </div>
+
+          <ul class="text-sm text-slate-700 space-y-1 list-disc list-inside">
+            <li><span class="font-semibold">Deletion test:</span> delete <span class="font-mono">TokenChip</span> today — its ~100 lines don't move anywhere, they're the only copy. Extracting doesn't remove duplication; it buys locality for the one place this complexity already lives.</li>
+            <li><span class="font-semibold">Locality:</span> a chip rendering bug has one file, not a line range inside a 420-line file</li>
+            <li><span class="font-semibold">Leverage: </span><span class="font-mono">readOnly</span> branching (6 sites today) localizes to the two modules that actually vary by it</li>
+            <li>AI-navigability: a future change to "how a token looks" doesn't require reading step-badge/connector/insertion-marker code to find the right ~15 lines</li>
+          </ul>
+        </article>
+
+        <!-- Candidate 3 -->
+        <article class="space-y-5">
+          <h2 class="font-serif text-2xl font-semibold">Name the two-stage select/drag decision, don't leave it in the pointerdown closure</h2>
+          <div class="flex gap-2 flex-wrap">
+            <span class="badge-explore text-xs font-medium px-2.5 py-1 rounded-full">Worth exploring</span>
+            <span class="badge-speculative text-xs font-medium px-2.5 py-1 rounded-full">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">components/InstructionCanvas/InstructionCanvas.tsx (lines 299–339)</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — test surface</p>
+              <pre class="mermaid">
+flowchart LR
+  Dev["A change to<br/>'select vs move' rules"]
+  JSX["onPointerDown closure<br/>(inline, 4 levels deep)"]
+  PW["Playwright driver<br/>(full browser, slow)"]
+  Dev --> JSX
+  JSX --> PW
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class JSX leak
+              </pre>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">After — test surface</p>
+              <pre class="mermaid">
+flowchart LR
+  Dev["A change to<br/>'select vs move' rules"]
+  FN["resolveTokenPointerAction()<br/>pure, named"]
+  VT["canvas-interactions.test.ts<br/>(Vitest, fast)"]
+  JSX["onPointerDown<br/>(calls FN)"]
+  PW["Playwright driver<br/>(still covers the DOM wiring)"]
+  Dev --> FN
+  FN --> VT
+  FN --> JSX
+  JSX --> PW
+  classDef deepnode fill:#0f172a,color:#fff,stroke:#0f172a;
+  class FN deepnode
+              </pre>
+            </div>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-6 text-sm">
+            <div>
+              <p class="font-semibold text-slate-700 mb-1">Problem</p>
+              <p class="text-slate-600">The two-stage select rule and the drag-vs-tap decision — real, documented business logic — live only inside a nested <span class="font-mono">onPointerDown</span> closure. The only test surface today is the full Playwright driver.</p>
+            </div>
+            <div>
+              <p class="font-semibold text-slate-700 mb-1">Solution</p>
+              <p class="text-slate-600">Pull the decision (not the DOM wiring) into a small pure function: <span class="font-mono">(wasDrag, isSelected, dropTarget) → Action</span>. The pointerdown handler calls it and dispatches; the function is Vitest-testable with no DOM.</p>
+            </div>
+          </div>
+
+          <ul class="text-sm text-slate-700 space-y-1 list-disc list-inside">
+            <li><span class="font-semibold">Deletion test:</span> delete the function — the branching reappears inline exactly where it was. It concentrates real decision logic, so it earns the seam.</li>
+            <li><span class="font-semibold">Locality:</span> the "which action fires" question has one small function to read, not a render closure</li>
+            <li><span class="font-semibold">Testability:</span> the two-stage-select rule gets a fast unit test alongside <span class="font-mono">state/document.test.ts</span>'s existing 38</li>
+          </ul>
+
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            The 2026-09-14 review deliberately left <span class="font-mono">InstructionCanvas</span>'s drag
+            handling out of the shared <span class="font-mono">createClickAfterDragGuard</span> unification,
+            reasoning its click-vs-drag handling is "genuinely different." That's still true and isn't being
+            revisited here — this candidate is narrower: naming the decision function, not merging it with
+            StepList/TokenPicker's.
+          </div>
+        </article>
+
+      </section>
+
+      <section id="top-recommendation" class="rounded-xl border-2 border-slate-900 bg-white p-8 space-y-3">
+        <p class="text-xs uppercase tracking-wider text-slate-500">Top recommendation</p>
+        <h2 class="font-serif text-2xl font-semibold">
+          Start with <a href="#candidates" class="underline decoration-2 underline-offset-4">deepening canvas-layout.ts</a>
+        </h2>
+        <p class="text-slate-700 max-w-2xl">
+          It's the foundation the other two sit on. Once <span class="font-mono">StepLayout</span> carries
+          real chip positions and connector paths, extracting <span class="font-mono">TokenChip</span> means
+          handing it a position, not a <span class="font-mono">chipsPerRow</span> it has to re-derive one
+          from — and the pointerdown decision function reads target/selection state that's already
+          fully computed, not partially assembled at render time. Doing it last would mean touching the
+          same lines twice.
+        </p>
+      </section>
+
+    </main>
+  </body>
+</html>

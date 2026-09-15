@@ -156,7 +156,19 @@ also needed repo access, installed via the dashboard's Connect Git
 Repository flow) - confirmed by querying the Vercel API directly for the
 project's `link` object rather than trusting the CLI's "already
 connected" message alone. Every push to `main` now triggers an automatic
-production deployment.
+production deployment. A same-day follow-up (2026-09-15) ran a fresh,
+unbiased architecture review scoped specifically to the canvas
+(`InstructionCanvas.tsx`/`lib/canvas-layout.ts`), deliberately ignoring
+everything already tracked as deferred, and reconsidering whether
+`InstructionCanvas.tsx` (cleared with no remediation on 2026-09-14) still
+held up. It deepened `canvas-layout.ts`: `computeCanvasLayout` is now the
+module's whole interface - each step's chip positions, connector paths,
+and centering offset all come back on its `StepLayout`, so
+`InstructionCanvas` never calls a geometry primitive directly mid-render -
+while deliberately keeping `insertionMarkerPosition` as its own seam,
+since it depends on live drag state at a much higher rate than the
+document itself. See
+[phase-3/progress/architecture-2026-09-15-canvas-deepening.md](./phase-3/progress/architecture-2026-09-15-canvas-deepening.md).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that

@@ -6,8 +6,9 @@
 > this gets frozen with a HISTORICAL banner the day Phase 3 closes out, and
 > a new `phase-4/progress/README.md` takes over as CURRENT.
 
-Date: 2026-09-14, updated 2026-09-14 (tasks 25-29, plus an architecture
-review pass and a pre-launch file/docs and UI audit)
+Date: 2026-09-14, updated 2026-09-15 (tasks 25-29, an architecture review
+pass, a pre-launch file/docs and UI audit, and a follow-up canvas-specific
+architecture deepening)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
 [../../project-plan.md](../../project-plan.md#implementation-plan)'s Phase 3
@@ -73,7 +74,16 @@ one flow that specifically depends on the CSP's `blob:` allowance. Git-based
 push-to-deploy is connected too, verified via the Vercel API directly
 rather than the CLI's own success message (see
 [task-29-publish-mvp.md](./task-29-publish-mvp.md)) - every push to
-`main` now deploys automatically.
+`main` now deploys automatically. A same-day follow-up (2026-09-15) ran a
+fresh, unbiased architecture review scoped specifically to the canvas
+(`InstructionCanvas.tsx`/`lib/canvas-layout.ts`), deliberately not
+re-confirming anything already deferred - it deepened `canvas-layout.ts`
+so `computeCanvasLayout` is the module's whole interface (chip positions,
+connector paths, and centering all come back on each step's layout now,
+rather than `InstructionCanvas` computing them itself), while keeping the
+drag-state-dependent `insertionMarkerPosition` as its own separate seam on
+purpose - see
+[architecture-2026-09-15-canvas-deepening.md](./architecture-2026-09-15-canvas-deepening.md).
 
 ## What shipped
 
@@ -88,15 +98,17 @@ One file per task (or per notable pass), in task-number order:
 | — | Architecture: 2026-09-14 review remediation (`lib/document-actions.ts` extraction, `useConfirmDialogFocusTrap` prop-bag contract, a `known-issues.md` sharpening, and a flaky driver check fixed) | [architecture-2026-09-14-review-remediation.md](./architecture-2026-09-14-review-remediation.md) |
 | — | Pre-launch file/docs audit and UI polish follow-up (stale README, vestigial `tests/`, grid layout fix, toolbar grouping, human-readable durations, deferred incomplete-step badge, document-title contrast) | [pre-launch-file-and-ui-audit.md](./pre-launch-file-and-ui-audit.md) |
 | 29 | Publish MVP | [task-29-publish-mvp.md](./task-29-publish-mvp.md) |
+| — | Architecture: 2026-09-15 canvas deepening (`computeCanvasLayout` becomes `canvas-layout.ts`'s whole interface; `insertionMarkerPosition` kept as a separate seam) | [architecture-2026-09-15-canvas-deepening.md](./architecture-2026-09-15-canvas-deepening.md) |
 | 30 | Test Real Users | *not started* |
 | 31 | Refine UX | *not started* |
 
 ## Verification
 
-- `npm run lint`, `npm run typecheck`, `npm test` (118 tests - unchanged in
-  count by the pre-launch audit, which only updated 3 existing
-  `duration.test.ts` assertions' expected strings for the new
-  human-readable format), and `npm run build` all pass cleanly.
+- `npm run lint`, `npm run typecheck`, `npm test` (119 tests - the
+  pre-launch audit only updated 3 existing `duration.test.ts` assertions'
+  expected strings for the new human-readable format; the canvas deepening
+  added 1 net new case to `canvas-layout.test.ts` while porting the rest
+  through `computeCanvasLayout`), and `npm run build` all pass cleanly.
 - See each task's own file above for full verification detail
   (browser-driven checks, bundle size deltas, and the decisions made along
   the way).
