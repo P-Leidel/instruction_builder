@@ -6,7 +6,7 @@ import {
   updateTokenLabel,
   updateTokenNote,
   removeTokenAttachment,
-  attachToSelectedToken,
+  attachToToken,
   setTokenTime,
 } from "../../state/document";
 import { SAMPLE_TOKENS, descriptionFor } from "../../data/sample-tokens";
@@ -17,6 +17,9 @@ import { DurationField } from "../DurationField/DurationField";
 
 const MIN_QUANTITY = 1;
 const MAX_QUANTITY = 99999;
+
+const TITLE_MAX_LENGTH = 50;
+const NOTE_MAX_LENGTH = 249;
 
 const WARNING_TOKENS = SAMPLE_TOKENS.filter((t) => t.category === "warning");
 
@@ -65,7 +68,7 @@ function QuantityRow({ step, token }: { step: InstructionStep; token: Instructio
 
   function save() {
     if (!isValid) return;
-    attachToSelectedToken("quantity", { iconId: QUANTITY_ICON_ID, label: `${amount} ${unit}` });
+    attachToToken(step.id, token.id, "quantity", { iconId: QUANTITY_ICON_ID, label: `${amount} ${unit}` });
     setEditing(false);
   }
 
@@ -200,7 +203,7 @@ function WarningRow({ step, token }: { step: InstructionStep; token: Instruction
               token.warning?.iconId === sample.iconId ? " token-picker__button--active" : ""
             }`}
             onClick={() =>
-              attachToSelectedToken("warning", { iconId: sample.iconId, label: sample.label })
+              attachToToken(step.id, token.id, "warning", { iconId: sample.iconId, label: sample.label })
             }
           >
             <Icon iconId={sample.iconId} size={22} />
@@ -258,6 +261,7 @@ export function TokenDetails() {
           type="text"
           value={token.label ?? ""}
           placeholder="e.g. Chop"
+          maxLength={TITLE_MAX_LENGTH}
           onInput={(event) => updateTokenLabel(step.id, token.id, event.currentTarget.value)}
         />
       </label>
@@ -268,6 +272,7 @@ export function TokenDetails() {
           value={token.note ?? ""}
           placeholder="Add any extra detail for this token..."
           rows={3}
+          maxLength={NOTE_MAX_LENGTH}
           onInput={(event) => updateTokenNote(step.id, token.id, event.currentTarget.value)}
         />
       </label>

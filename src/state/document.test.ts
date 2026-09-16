@@ -301,15 +301,6 @@ describe("attachments", () => {
     attached = session.document.value.steps[0].tokens[0];
     expect(attached.warning).toBeUndefined();
   });
-
-  it("attachToSelectedToken is a no-op when nothing is selected", () => {
-    const session = createDocumentSession();
-    const before = session.document.value;
-
-    sessionActions.attachToSelectedToken(session, "warning", { iconId: "warn" });
-
-    expect(session.document.value).toBe(before);
-  });
 });
 
 describe("time", () => {

@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review for instruction_builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+      .seam { stroke-dasharray: 5 5; }
+      .leak { stroke: #dc2626; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .badge-strong { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+      .badge-explore { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+      .badge-speculative { background: #f8fafc; color: #475569; border-color: #cbd5e1; }
+      .mono { font-variant-numeric: tabular-nums; }
+      .diagram-box { min-height: 320px; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900">
+    <main class="max-w-5xl mx-auto px-6 py-14 space-y-16">
+
+      <header class="space-y-4 border-b border-slate-200 pb-8">
+        <div class="flex items-baseline justify-between flex-wrap gap-2">
+          <h1 class="font-serif text-3xl tracking-tight">Architecture review — instruction_builder</h1>
+          <span class="text-sm text-slate-500 mono">2026-09-16</span>
+        </div>
+        <p class="text-sm text-slate-500 max-w-2xl">
+          Third pass. The 2026-09-14 and 2026-09-15 reviews already deepened
+          <span class="font-mono text-xs bg-slate-100 px-1 rounded">reorderStepsCore</span>,
+          <span class="font-mono text-xs bg-slate-100 px-1 rounded">public/sw.js</span> and
+          <span class="font-mono text-xs bg-slate-100 px-1 rounded">canvas-layout.ts</span>.
+          This pass targets what grew since: step management and token attachments were folded
+          into <span class="font-mono text-xs bg-slate-100 px-1 rounded">InstructionCanvas.tsx</span>
+          and <span class="font-mono text-xs bg-slate-100 px-1 rounded">TokenDetails.tsx</span>.
+        </p>
+        <div class="flex flex-wrap gap-x-8 gap-y-2 text-xs text-slate-500 pt-2">
+          <div class="flex items-center gap-2"><span class="inline-block w-6 h-4 border-2 border-slate-400 rounded-sm"></span> module</div>
+          <div class="flex items-center gap-2"><span class="inline-block w-6 h-0 border-t-2 border-dashed border-slate-400"></span> seam</div>
+          <div class="flex items-center gap-2"><span class="inline-block w-6 h-0 border-t-2 border-red-500"></span> leak</div>
+          <div class="flex items-center gap-2"><span class="inline-block w-6 h-4 deep rounded-sm"></span> deep module</div>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-16">
+
+        <!-- Candidate 1 -->
+        <article id="candidate-1" class="space-y-5">
+          <div class="flex items-start justify-between flex-wrap gap-3">
+            <h2 class="font-serif text-2xl">1. Name the two-stage select/drag decision</h2>
+            <div class="flex gap-2 shrink-0">
+              <span class="text-xs px-2 py-1 rounded-full border badge-strong">Strong</span>
+              <span class="text-xs px-2 py-1 rounded-full border badge-explore">in-process</span>
+            </div>
+          </div>
+          <p class="font-mono text-sm text-slate-600">
+            src/components/InstructionCanvas/InstructionCanvas.tsx:387–398, 463–503
+          </p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="rounded-lg border border-slate-200 bg-white p-4 diagram-box">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before</p>
+              <svg viewBox="0 0 320 260" class="w-full h-full">
+                <rect x="10" y="10" width="300" height="240" rx="6" fill="none" stroke="#cbd5e1" stroke-width="2"/>
+                <text x="20" y="28" class="text-xs" font-size="10" fill="#64748b" font-family="monospace">InstructionCanvas.tsx</text>
+
+                <rect x="24" y="40" width="270" height="90" rx="4" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
+                <text x="34" y="56" font-size="9" fill="#991b1b" font-family="monospace">step drag handle onDrop</text>
+                <text x="34" y="70" font-size="8.5" fill="#991b1b">clear ghost → if(wasDrag)</text>
+                <text x="34" y="82" font-size="8.5" fill="#991b1b">  reorderSteps(i, resolve…)</text>
+                <text x="34" y="94" font-size="8.5" fill="#991b1b">else bail</text>
+                <text x="34" y="112" font-size="8" fill="#b91c1c" font-style="italic">policy inlined, copy #1</text>
+
+                <rect x="24" y="140" width="270" height="100" rx="4" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
+                <text x="34" y="156" font-size="9" fill="#991b1b" font-family="monospace">token chip onDrop</text>
+                <text x="34" y="170" font-size="8.5" fill="#991b1b">clear ghost/dropTarget</text>
+                <text x="34" y="182" font-size="8.5" fill="#991b1b">if(wasDrag) moveToken(…)</text>
+                <text x="34" y="194" font-size="8.5" fill="#991b1b">else isSelected ? selectToken</text>
+                <text x="34" y="206" font-size="8.5" fill="#991b1b">          : selectStep</text>
+                <text x="34" y="222" font-size="8" fill="#b91c1c" font-style="italic">policy inlined, copy #2</text>
+              </svg>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 diagram-box">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">After</p>
+              <svg viewBox="0 0 320 260" class="w-full h-full">
+                <rect x="24" y="20" width="270" height="70" rx="4" class="deep"/>
+                <text x="140" y="45" font-size="9.5" fill="#e2e8f0" font-family="monospace" text-anchor="middle">resolvePointerOutcome()</text>
+                <text x="140" y="60" font-size="8" fill="#94a3b8" text-anchor="middle">(wasDrag, isSelected, dropTarget)</text>
+                <text x="140" y="74" font-size="8" fill="#94a3b8" text-anchor="middle">→ {kind, ...} — one seam, unit-testable</text>
+
+                <line x1="90" y1="90" x2="90" y2="140" stroke="#0f172a" stroke-width="1.5"/>
+                <line x1="200" y1="90" x2="200" y2="140" stroke="#0f172a" stroke-width="1.5"/>
+
+                <rect x="24" y="140" width="120" height="60" rx="4" fill="#f8fafc" stroke="#cbd5e1"/>
+                <text x="84" y="165" font-size="8.5" fill="#334155" text-anchor="middle" font-family="monospace">step onDrop</text>
+                <text x="84" y="180" font-size="7.5" fill="#64748b" text-anchor="middle">dispatch(outcome)</text>
+
+                <rect x="174" y="140" width="120" height="60" rx="4" fill="#f8fafc" stroke="#cbd5e1"/>
+                <text x="234" y="165" font-size="8.5" fill="#334155" text-anchor="middle" font-family="monospace">token onDrop</text>
+                <text x="234" y="180" font-size="7.5" fill="#64748b" text-anchor="middle">dispatch(outcome)</text>
+
+                <rect x="24" y="215" width="270" height="30" rx="4" fill="#ecfdf5" stroke="#10b981" stroke-dasharray="4 4"/>
+                <text x="140" y="234" font-size="8" fill="#047857" text-anchor="middle">Vitest: synthetic wasDrag/isSelected/dropTarget in, {kind} out</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm">
+            <p><span class="font-semibold">Problem:</span> the click-vs-drag decision lives twice, inline in JSX closures, and only the Playwright driver exercises it.</p>
+            <p><span class="font-semibold">Solution:</span> extract one function that turns (wasDrag, isSelected, dropTarget) into an outcome; both onDrop handlers call it instead of re-deriving it.</p>
+          </div>
+          <ul class="text-sm list-disc list-inside text-slate-700 space-y-1">
+            <li>Locality: the select/drag rule exists in one place, not two independently-maintained copies</li>
+            <li>Leverage: one interface, testable with plain values instead of simulated pointer events</li>
+            <li>Closes a real gap — InstructionCanvas.tsx has no test file of its own</li>
+          </ul>
+          <div class="text-xs rounded border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2">
+            Continues, not contradicts, an ADR-adjacent decision: the 2026-09-15 canvas-deepening review named this exact candidate and deliberately deferred it. It's more overdue now — the rework duplicated the pattern instead of shrinking it.
+          </div>
+        </article>
+
+        <!-- Candidate 2 -->
+        <article id="candidate-2" class="space-y-5">
+          <div class="flex items-start justify-between flex-wrap gap-3">
+            <h2 class="font-serif text-2xl">2. Give pointer-drag's hit-test math its own seam in Vitest</h2>
+            <div class="flex gap-2 shrink-0">
+              <span class="text-xs px-2 py-1 rounded-full border badge-explore">Worth exploring</span>
+              <span class="text-xs px-2 py-1 rounded-full border badge-explore">local-substitutable</span>
+            </div>
+          </div>
+          <p class="font-mono text-sm text-slate-600">
+            src/lib/pointer-drag.ts:110–119 (resolveStepDropIndex), 162–180 (resolveTokenDropTarget)
+          </p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="rounded-lg border border-slate-200 bg-white p-4 diagram-box">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before — coverage cross-section</p>
+              <svg viewBox="0 0 320 260" class="w-full h-full">
+                <rect x="20" y="30" width="280" height="24" fill="#ecfdf5" stroke="#10b981"/>
+                <text x="30" y="46" font-size="8.5" fill="#047857">createClickAfterDragGuard — Vitest ✓</text>
+
+                <rect x="20" y="58" width="280" height="120" fill="#fef2f2" stroke="#dc2626"/>
+                <text x="30" y="76" font-size="8.5" fill="#991b1b">resolveStepDropIndex</text>
+                <text x="30" y="90" font-size="8.5" fill="#991b1b">resolveTokenDropTarget</text>
+                <text x="30" y="106" font-size="8" fill="#b91c1c" font-style="italic">no Vitest coverage —</text>
+                <text x="30" y="118" font-size="8" fill="#b91c1c" font-style="italic">these are the exact functions</text>
+                <text x="30" y="130" font-size="8" fill="#b91c1c" font-style="italic">the driver's own comments say</text>
+                <text x="30" y="142" font-size="8" fill="#b91c1c" font-style="italic">"used to overshoot by one slot"</text>
+
+                <rect x="20" y="182" width="280" height="60" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="4 4"/>
+                <text x="30" y="200" font-size="8.5" fill="#475569">Playwright driver (44+ checks)</text>
+                <text x="30" y="214" font-size="8" fill="#64748b">only regression net for both,</text>
+                <text x="30" y="226" font-size="8" fill="#64748b">full dev-server run required</text>
+              </svg>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 diagram-box">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">After</p>
+              <svg viewBox="0 0 320 260" class="w-full h-full">
+                <rect x="20" y="30" width="280" height="150" fill="#ecfdf5" stroke="#10b981"/>
+                <text x="30" y="48" font-size="8.5" fill="#047857">createClickAfterDragGuard — Vitest ✓</text>
+                <text x="30" y="66" font-size="8.5" fill="#047857">resolveStepDropIndex — Vitest ✓</text>
+                <text x="30" y="80" font-size="8" fill="#047857">before-first / between / past-last</text>
+                <text x="30" y="98" font-size="8.5" fill="#047857">resolveTokenDropTarget — Vitest ✓</text>
+                <text x="30" y="112" font-size="8" fill="#047857">over-chip / over-step-bg / nothing</text>
+                <text x="30" y="140" font-size="8" fill="#065f46">stubbed rects + elementFromPoint,</text>
+                <text x="30" y="152" font-size="8" fill="#065f46">no dev server, milliseconds</text>
+
+                <rect x="20" y="190" width="280" height="52" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="4 4"/>
+                <text x="30" y="208" font-size="8.5" fill="#475569">Playwright driver</text>
+                <text x="30" y="222" font-size="8" fill="#64748b">now confirms integration,</text>
+                <text x="30" y="234" font-size="8" fill="#64748b">not first line of defense</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm">
+            <p><span class="font-semibold">Problem:</span> pointer-drag.test.ts covers a quarter of the module's interface; the two hit-test functions that previously shipped off-by-one bugs are unit-test-free.</p>
+            <p><span class="font-semibold">Solution:</span> add Vitest cases against hand-built DOM fragments with stubbed rects/elementFromPoint for both functions.</p>
+          </div>
+          <ul class="text-sm list-disc list-inside text-slate-700 space-y-1">
+            <li>Leverage: the bug class the driver's own comments describe twice gets a fast regression test</li>
+            <li>Locality: pointer-drag.test.ts becomes a true reflection of the whole module's interface</li>
+          </ul>
+        </article>
+
+        <!-- Candidate 3 -->
+        <article id="candidate-3" class="space-y-5">
+          <div class="flex items-start justify-between flex-wrap gap-3">
+            <h2 class="font-serif text-2xl">3. Drop the selected-token wrapper that no longer earns its keep</h2>
+            <div class="flex gap-2 shrink-0">
+              <span class="text-xs px-2 py-1 rounded-full border badge-explore">Worth exploring</span>
+            </div>
+          </div>
+          <p class="font-mono text-sm text-slate-600">
+            src/state/document.ts:496–516, 576–577 · src/components/TokenDetails/TokenDetails.tsx:68, 203
+          </p>
+
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <pre class="mermaid">
+flowchart LR
+  subgraph TD["TokenDetails.tsx"]
+    Q["QuantityRow.save()"]
+    W["WarningRow onClick"]
+    R["removeTokenAttachment(step.id, token.id)"]
+    L["updateTokenLabel(step.id, token.id, …)"]
+  end
+  Q -. "attachToSelectedToken(kind, attachment)" .-> S["reads selectedStepId/selectedTokenId"]
+  W -. "attachToSelectedToken(kind, attachment)" .-> S
+  R --> M["attachToToken(step.id, token.id, kind, attachment)"]
+  L --> M
+  S --> Core["attachToSelectedTokenCore — 1 caller pattern, 0 callers without ids in scope"]
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class S,Core leak
+            </pre>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm">
+            <p><span class="font-semibold">Problem:</span> TokenDetails.tsx already holds step and token as props everywhere else, but two call sites route through an implicit "selected" mutator that depends on an unenforced invariant instead of passing the ids it already has.</p>
+            <p><span class="font-semibold">Solution:</span> call attachToToken(step.id, token.id, kind, attachment) directly at both sites, matching every other mutator call in the file.</p>
+          </div>
+          <ul class="text-sm list-disc list-inside text-slate-700 space-y-1">
+            <li>Locality: one calling convention per file instead of two coexisting for no reason</li>
+            <li>Removes a hidden "rendered token == selected token" invariant</li>
+            <li>Deletion test: delete attachToSelectedTokenCore — both call sites become one-line swaps, nothing reappears</li>
+          </ul>
+        </article>
+
+        <!-- Candidate 4 -->
+        <article id="candidate-4" class="space-y-5">
+          <div class="flex items-start justify-between flex-wrap gap-3">
+            <h2 class="font-serif text-2xl">4. Reunite the drag-move perf story in one module</h2>
+            <div class="flex gap-2 shrink-0">
+              <span class="text-xs px-2 py-1 rounded-full border badge-speculative">Speculative</span>
+            </div>
+          </div>
+          <p class="font-mono text-sm text-slate-600">
+            src/lib/pointer-drag.ts:37–45 · src/components/InstructionCanvas/InstructionCanvas.tsx:468–484
+          </p>
+          <div class="grid md:grid-cols-2 gap-6 text-sm items-start">
+            <div class="rounded border border-slate-200 bg-white p-4 text-xs space-y-2">
+              <p class="uppercase tracking-wider text-slate-400">Before</p>
+              <p class="font-mono">pointer-drag.ts comment: "…and cutting hit-test/re-render work to the display's refresh rate" <span class="text-red-600">→ narrates a half it doesn't implement</span></p>
+              <p class="font-mono">InstructionCanvas.tsx:468–484: inline 13-line equality check, only on the token path</p>
+            </div>
+            <div class="rounded border border-slate-200 bg-white p-4 text-xs space-y-2">
+              <p class="uppercase tracking-wider text-slate-400">After</p>
+              <p class="font-mono">pointer-drag.ts: named helper holds the "assign only if changed" rule, testable with two plain TokenDropTarget values</p>
+              <p>InstructionCanvas.tsx calls it; the policy has one home instead of a comment plus a call site</p>
+            </div>
+          </div>
+          <p class="text-sm"><span class="font-semibold">Solution:</span> move the changed-value comparison into pointer-drag.ts, next to the optimization it completes.</p>
+          <ul class="text-sm list-disc list-inside text-slate-700 space-y-1">
+            <li>Locality/discoverability only — the comparison itself is trivial and already correct</li>
+            <li>Worth doing opportunistically alongside Candidate 1, not on its own</li>
+          </ul>
+        </article>
+
+      </section>
+
+      <section id="top-recommendation">
+        <div class="rounded-xl border-2 border-emerald-600 bg-emerald-50 p-6 space-y-2">
+          <p class="text-xs uppercase tracking-wider text-emerald-700">Top recommendation</p>
+          <h3 class="font-serif text-xl">
+            <a href="#candidate-1" class="underline decoration-emerald-400 underline-offset-4">1. Name the two-stage select/drag decision</a>
+          </h3>
+          <p class="text-sm text-emerald-900">
+            It's the one candidate the codebase already told itself to do — the 2026-09-15 canvas-deepening
+            review named it and deferred it, and the step-management rework has since duplicated the exact
+            pattern it warned about. It's narrow (one function, two call sites), and it closes the only real
+            coverage gap in this review: InstructionCanvas.tsx has no test file, and this is the piece of its
+            behavior most worth pulling behind a seam a Vitest test can reach.
+          </p>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>

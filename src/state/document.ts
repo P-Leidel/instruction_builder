@@ -503,18 +503,6 @@ function attachToTokenCore(
   setTokenAttachment(session, stepId, tokenId, kind, attachment);
 }
 
-/** Attaches to whichever token is currently selected; a no-op if none is. */
-function attachToSelectedTokenCore(
-  session: DocumentSession,
-  kind: AttachmentKind,
-  attachment: TokenAttachment,
-): void {
-  const stepId = session.selectedStepId.value;
-  const tokenId = session.selectedTokenId.value;
-  if (!stepId || !tokenId) return;
-  attachToTokenCore(session, stepId, tokenId, kind, attachment);
-}
-
 function removeTokenAttachmentCore(
   session: DocumentSession,
   stepId: string,
@@ -574,7 +562,6 @@ export const sessionActions = {
   updateTokenLabel: updateTokenLabelCore,
   updateTokenNote: updateTokenNoteCore,
   attachToToken: attachToTokenCore,
-  attachToSelectedToken: attachToSelectedTokenCore,
   removeTokenAttachment: removeTokenAttachmentCore,
   setTokenTime: setTokenTimeCore,
   setStepTime: setStepTimeCore,
@@ -645,7 +632,6 @@ export const {
   updateTokenLabel,
   updateTokenNote,
   attachToToken,
-  attachToSelectedToken,
   removeTokenAttachment,
   setTokenTime,
   setStepTime,

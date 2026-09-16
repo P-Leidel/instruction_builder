@@ -184,6 +184,20 @@ deleted, and Quantity/Warning now render as two always-visible rows (no
 tabs), each letting an already-attached value be changed directly without
 removing it first. See
 [phase-3/progress/token-attachments-folded-into-token-details.md](./phase-3/progress/token-attachments-folded-into-token-details.md).
+A further `/mattpocock-skills:improve-codebase-architecture` pass
+(2026-09-16) targeted what those two reworks grew - `InstructionCanvas.tsx`
+and `state/document.ts` - and, via `/mattpocock-skills:grilling`, picked
+two of its four candidates: `resolveTokenPointerOutcome`, a new function in
+`lib/pointer-drag.ts` naming the two-stage select/drag decision that used
+to be hand-rolled inline (and duplicated) across two of
+`InstructionCanvas.tsx`'s `onDrop` closures, and deleting
+`attachToSelectedToken` from `state/document.ts`, a wrapper whose only
+callers already had `step`/`token` in scope. See
+[phase-3/progress/architecture-2026-09-16-review-remediation.md](./phase-3/progress/architecture-2026-09-16-review-remediation.md).
+The same day, on request, a step's Title and a token's Title were capped at
+50 characters and a step's Details and a token's Notes at 249, via a plain
+`maxLength` prop on each field. See
+[phase-3/progress/title-and-description-max-length.md](./phase-3/progress/title-and-description-max-length.md).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that

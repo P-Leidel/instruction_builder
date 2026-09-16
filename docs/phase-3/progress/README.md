@@ -9,7 +9,8 @@
 Date: 2026-09-14, updated 2026-09-15 (tasks 25-29, an architecture review
 pass, a pre-launch file/docs and UI audit, a follow-up canvas-specific
 architecture deepening, a step-management-onto-the-canvas UX rework, and an
-"Add to token"-into-Token-details UX rework)
+"Add to token"-into-Token-details UX rework), updated 2026-09-16 (a further
+architecture review remediation, plus title/description max length limits)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
 [../../project-plan.md](../../project-plan.md#implementation-plan)'s Phase 3
@@ -98,6 +99,20 @@ same way, folding Quantity/Warning attaching into `TokenDetails`'s own
 letting an already-attached value be changed directly without removing it
 first - see
 [token-attachments-folded-into-token-details.md](./token-attachments-folded-into-token-details.md).
+A further `/mattpocock-skills:improve-codebase-architecture` pass
+(2026-09-16) targeted what those two reworks grew - `InstructionCanvas.tsx`
+and `state/document.ts` - and, via `/mattpocock-skills:grilling`, picked two
+of its four candidates: `resolveTokenPointerOutcome`, a new function in
+`lib/pointer-drag.ts` naming the two-stage select/drag decision that used
+to be hand-rolled inline (and duplicated) across two of
+`InstructionCanvas.tsx`'s `onDrop` closures, and deleting
+`attachToSelectedToken` from `state/document.ts`, a wrapper that no longer
+had a caller without `step`/`token` already in scope - see
+[architecture-2026-09-16-review-remediation.md](./architecture-2026-09-16-review-remediation.md).
+The same day, on request, a step's Title and a token's Title were capped at
+50 characters and a step's Details and a token's Notes at 249, via a plain
+`maxLength` prop on each field - see
+[title-and-description-max-length.md](./title-and-description-max-length.md).
 
 ## What shipped
 
@@ -115,18 +130,23 @@ One file per task (or per notable pass), in task-number order:
 | — | Architecture: 2026-09-15 canvas deepening (`computeCanvasLayout` becomes `canvas-layout.ts`'s whole interface; `insertionMarkerPosition` kept as a separate seam) | [architecture-2026-09-15-canvas-deepening.md](./architecture-2026-09-15-canvas-deepening.md) |
 | — | UX: step management moved onto the canvas (StepList deleted; title, reorder stack, remove, add-step row now live in InstructionCanvas.tsx) | [step-management-moved-to-canvas.md](./step-management-moved-to-canvas.md) |
 | — | UX: "Add to token" folded into Token details (TokenAttachmentPicker deleted; Quantity/Warning are always-visible rows in TokenDetails.tsx, changeable without removing first) | [token-attachments-folded-into-token-details.md](./token-attachments-folded-into-token-details.md) |
+| — | Architecture: 2026-09-16 review remediation (`resolveTokenPointerOutcome` names the select/drag decision in `lib/pointer-drag.ts`; `attachToSelectedToken` deleted from `state/document.ts`) | [architecture-2026-09-16-review-remediation.md](./architecture-2026-09-16-review-remediation.md) |
+| — | Title/description max length limits (step and token Title capped at 50 characters, step Details and token Notes at 249) | [title-and-description-max-length.md](./title-and-description-max-length.md) |
 | 30 | Test Real Users | *not started* |
 | 31 | Refine UX | *not started* |
 
 ## Verification
 
-- `npm run lint`, `npm run typecheck`, `npm test` (128 tests - the
+- `npm run lint`, `npm run typecheck`, `npm test` (131 tests - the
   pre-launch audit only updated 3 existing `duration.test.ts` assertions'
   expected strings for the new human-readable format; the canvas deepening
   added 1 net new case to `canvas-layout.test.ts` while porting the rest
   through `computeCanvasLayout`; the step-management rework added 2 more;
   the "Add to token" rework added none - it moved already-tested state
-  mutators around without adding new logic), and `npm run build` all pass
+  mutators around without adding new logic; the 2026-09-16 architecture
+  remediation added 4 `resolveTokenPointerOutcome` cases to
+  `pointer-drag.test.ts` and removed 1 orphaned `attachToSelectedToken`
+  case from `document.test.ts`, net +3), and `npm run build` all pass
   cleanly.
 - See each task's own file above for full verification detail
   (browser-driven checks, bundle size deltas, and the decisions made along

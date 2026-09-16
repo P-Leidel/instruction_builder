@@ -9,6 +9,9 @@ import {
 import { Icon } from "../Icon/Icon";
 import { DurationField } from "../DurationField/DurationField";
 
+const TITLE_MAX_LENGTH = 50;
+const DESCRIPTION_MAX_LENGTH = 249;
+
 /**
  * Editor for the selected step's user-authored title/details, plus a plain
  * list of its tokens (icon + label only - the app-given description per
@@ -46,6 +49,7 @@ export function StepDetails() {
           type="text"
           value={step.title ?? ""}
           placeholder="e.g. Chop the onion"
+          maxLength={TITLE_MAX_LENGTH}
           onInput={(event) => updateStepTitle(step.id, event.currentTarget.value)}
         />
       </label>
@@ -56,6 +60,7 @@ export function StepDetails() {
           value={step.description ?? ""}
           placeholder="Add any extra detail for this step..."
           rows={3}
+          maxLength={DESCRIPTION_MAX_LENGTH}
           onInput={(event) => updateStepDescription(step.id, event.currentTarget.value)}
         />
       </label>

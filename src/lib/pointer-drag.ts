@@ -152,6 +152,33 @@ export function createClickAfterDragGuard(): {
   };
 }
 
+export type TokenPointerOutcome =
+  | { kind: "selectStep" }
+  | { kind: "selectToken" }
+  | { kind: "move"; target: TokenDropTarget }
+  | { kind: "none" };
+
+/**
+ * Turns a token pointer interaction's raw facts - did it drag, was its step
+ * already selected, and (if it dragged) what's under the pointer now - into
+ * what should happen, replacing the same branch InstructionCanvas used to
+ * hand-write inline in its `onDrop` closure. A tap (`wasDrag` false) is a
+ * two-stage select: it selects the step if that step wasn't already
+ * selected, or the token itself if it was. A real drag moves the token to
+ * `target` when the drop landed somewhere valid, and does nothing when it
+ * didn't (dropped over empty space, `target` null).
+ */
+export function resolveTokenPointerOutcome(
+  wasDrag: boolean,
+  isSelected: boolean,
+  target: TokenDropTarget | null,
+): TokenPointerOutcome {
+  if (!wasDrag) {
+    return isSelected ? { kind: "selectToken" } : { kind: "selectStep" };
+  }
+  return target ? { kind: "move", target } : { kind: "none" };
+}
+
 /**
  * Hit-tests the point under the pointer (via `elementFromPoint`, which
  * works regardless of SVG transforms) against `data-step-id`/

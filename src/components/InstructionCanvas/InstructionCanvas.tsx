@@ -14,7 +14,12 @@ import {
   reorderSteps,
 } from "../../state/document";
 import { dragGhost, dropTarget } from "../../state/drag";
-import { beginPointerDrag, resolveTokenDropTarget, resolveStepDropIndex } from "../../lib/pointer-drag";
+import {
+  beginPointerDrag,
+  resolveTokenDropTarget,
+  resolveStepDropIndex,
+  resolveTokenPointerOutcome,
+} from "../../lib/pointer-drag";
 import { iconMarkup, ICON_PRESENTATION_PROPS } from "../../data/icon-library";
 import {
   DESKTOP_QUERY,
@@ -485,17 +490,23 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                                   onDrop: (x, y, wasDrag) => {
                                     dragGhost.value = null;
                                     dropTarget.value = null;
-                                    if (!wasDrag) {
-                                      if (isSelected) {
-                                        selectToken(step.id, token.id);
-                                      } else {
+                                    const outcome = resolveTokenPointerOutcome(
+                                      wasDrag,
+                                      isSelected,
+                                      wasDrag ? resolveTokenDropTarget(x, y) : null,
+                                    );
+                                    switch (outcome.kind) {
+                                      case "selectStep":
                                         selectStep(step.id);
-                                      }
-                                      return;
-                                    }
-                                    const target = resolveTokenDropTarget(x, y);
-                                    if (target) {
-                                      moveToken(step.id, token.id, target.stepId, target.index);
+                                        break;
+                                      case "selectToken":
+                                        selectToken(step.id, token.id);
+                                        break;
+                                      case "move":
+                                        moveToken(step.id, token.id, outcome.target.stepId, outcome.target.index);
+                                        break;
+                                      case "none":
+                                        break;
                                     }
                                   },
                                 });
