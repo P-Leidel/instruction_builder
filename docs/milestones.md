@@ -333,6 +333,18 @@ Cheese/Bread/Salt/Pepper/Sugar, per the user's own explicit
 "use placeholders" instruction, rather than substituting in prepared
 dishes/drinks that happened to have better icon coverage. See
 [phase-3/progress/task-30-user-feedback-fixes-8.md](./phase-3/progress/task-30-user-feedback-fixes-8.md).
+A ninth same-day pass added copy/paste for tokens, settled via
+`/mattpocock-skills:grill-with-docs` - the first pass to run
+`domain-modeling` alongside `grilling`, adding a new "Token clipboard" entry
+to `CONTEXT.md` (previously just the pre-existing "Document session" one). A
+new `copiedToken` signal on the document session holds a full copy of one
+token (fresh id, all attachments included); `copyToken`/`pasteToken` are two
+new session actions, reachable via a Copy button in `TokenDetails`' header,
+a Paste button in `StepDetails`' header (split across the two panels since
+Paste targets the selected step, not the selected token, and must stay
+reachable with no token selected), and global `Ctrl+C`/`Ctrl+V` shortcuts
+that skip text inputs so native text copy/paste keeps working. See
+[phase-3/progress/task-30-user-feedback-fixes-9.md](./phase-3/progress/task-30-user-feedback-fixes-9.md).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
@@ -410,7 +422,7 @@ as "untitled-instructions.\<ext\>" because no UI lets the user set
 | 27 | Add Document Title UI | ✅ |
 | 28 | UI Polish Pass | ✅ |
 | 29 | Publish MVP | ✅ (live at <https://instructionbuilder-seven.vercel.app>) |
-| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md), and [eighth](./phase-3/progress/task-30-user-feedback-fixes-8.md) feedback passes shipped) |
+| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md), [eighth](./phase-3/progress/task-30-user-feedback-fixes-8.md), and [ninth](./phase-3/progress/task-30-user-feedback-fixes-9.md) feedback passes shipped) |
 | 31 | Refine UX | Not started |
 
 See [phase-3/progress/README.md](./phase-3/progress/README.md) for detail

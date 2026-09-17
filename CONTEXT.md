@@ -7,9 +7,10 @@ instead of reverse-engineering it from call sites.
 ## Document session
 
 A **document session** is one editable `InstructionDocument` together with
-its undo/redo history (`past`/`future`) and its selection
-(`selectedStepId`/`selectedTokenId`) - everything one instance of the app
-has open at a time. It's constructed by `createDocumentSession()` in
+its undo/redo history (`past`/`future`), its selection
+(`selectedStepId`/`selectedTokenId`), and its token clipboard
+(`copiedToken`) - everything one instance of the app has open at a time.
+It's constructed by `createDocumentSession()` in
 [src/state/document.ts](./src/state/document.ts).
 
 The running app uses exactly one document session (the module-level
@@ -26,3 +27,17 @@ This term replaces the informal "module-level singleton" phrasing used in
 [docs/known-issues.md](./docs/known-issues.md) while that item was still
 open; see [docs/phase-2/progress/README.md](./docs/phase-2/progress/README.md)
 for when it was resolved.
+
+## Token clipboard
+
+The **token clipboard** is a document session's single-slot, in-memory
+holding area for one copied token (`copiedToken`) - a full deep copy of an
+`InstructionToken`, including its `note`/`quantity`/`warning`/`time`, but
+with a freshly generated `id`. Copying a token writes it here, overwriting
+whatever was held before; pasting reads it and appends a further fresh-id
+copy onto the currently selected step, and can be repeated indefinitely
+without clearing the clipboard. It is session-only UI state, not part of
+the document: it isn't saved, isn't part of undo/redo history, and doesn't
+touch the operating system's real clipboard - a browser tab reload or a
+document replace (New/Import) simply loses it, the same way selection does.
+_Avoid_: "copy buffer", "system clipboard" (this is never that).

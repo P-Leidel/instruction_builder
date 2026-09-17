@@ -9,7 +9,19 @@ import { ImportConfirmDialog } from "./components/ImportConfirmDialog/ImportConf
 import { NewDocumentConfirmDialog } from "./components/NewDocumentConfirmDialog/NewDocumentConfirmDialog";
 import { previewMode, toast, pendingImport, confirmingNewDocument } from "./state/ui";
 import { persistenceStatus } from "./state/persistence";
-import { document, undo, redo, canUndo, canRedo, updateTitle } from "./state/document";
+import {
+  document,
+  undo,
+  redo,
+  canUndo,
+  canRedo,
+  updateTitle,
+  selectedStep,
+  selectedToken,
+  copiedToken,
+  copyToken,
+  pasteToken,
+} from "./state/document";
 import {
   runJsonExport,
   runSvgExport,
@@ -143,6 +155,49 @@ function useHistoryKeyboardShortcuts(): void {
   }, []);
 }
 
+/** True for an `<input>`/`<textarea>`/contenteditable currently receiving keystrokes. */
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
+}
+
+/**
+ * Copy/paste tokens: `Ctrl/Cmd+C` copies the selected token (see
+ * CONTEXT.md's "Token clipboard"), `Ctrl/Cmd+V` pastes onto the selected
+ * step - the same actions as TokenDetails'/StepDetails' own Copy/Paste
+ * buttons (see their own comments), wired globally too like undo/redo above.
+ * Unlike undo/redo, this one skips entirely while focus is in a text
+ * input/textarea/contenteditable (`isTextEntryTarget`), so typing in the
+ * Title/Notes fields keeps the browser's native text copy/paste instead of
+ * this shortcut hijacking it.
+ */
+function useTokenClipboardKeyboardShortcuts(): void {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent): void {
+      const meta = event.ctrlKey || event.metaKey;
+      if (!meta || isTextEntryTarget(event.target)) return;
+      const key = event.key.toLowerCase();
+      if (key === "c") {
+        const step = selectedStep.value;
+        const token = selectedToken.value;
+        if (!step || !token) return;
+        event.preventDefault();
+        copyToken(step.id, token.id);
+        toast.value = { text: `Copied ${token.label ?? token.iconId}`, tone: "info" };
+      } else if (key === "v") {
+        if (!copiedToken.value) return;
+        event.preventDefault();
+        pasteToken();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+}
+
 /**
  * Phase 2 task 5: the toolbar/canvas/panel regions from
  * docs/phase-1/architecture.md section 5. `.app__col-left`/`.app__col-right`
@@ -199,6 +254,7 @@ function useHistoryKeyboardShortcuts(): void {
  */
 export function App() {
   useHistoryKeyboardShortcuts();
+  useTokenClipboardKeyboardShortcuts();
   useDocumentTitleSync();
   const importInputRef = useRef<HTMLInputElement>(null);
   const exportCanvasRef = useRef<HTMLDivElement>(null);

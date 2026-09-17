@@ -5,6 +5,8 @@ import {
   updateStepTitle,
   updateStepDescription,
   setStepTime,
+  copiedToken,
+  pasteToken,
 } from "../../state/document";
 import { Icon } from "../Icon/Icon";
 import { DurationField } from "../DurationField/DurationField";
@@ -32,6 +34,14 @@ const DESCRIPTION_MAX_LENGTH = 249;
  * panel further down the same column. It doesn't force itself open when a
  * token here is selected - selection is already visible on the canvas, so a
  * keyboard user who wants this list just opens it themselves.
+ *
+ * The header's Paste button appends a copy of the token clipboard
+ * (CONTEXT.md, `state/document.ts`'s `copiedToken`/`pasteToken`) onto this
+ * step - it lives here rather than in TokenDetails because it targets the
+ * *selected step*, not the selected token, so it must stay reachable even
+ * when no token is selected yet (e.g. pasting into a freshly added empty
+ * step). Disabled whenever nothing's been copied. `Ctrl+V` does the same
+ * thing globally - see app.tsx.
  */
 export function StepDetails() {
   const step = selectedStep.value;
@@ -47,7 +57,18 @@ export function StepDetails() {
 
   return (
     <div class="step-details">
-      <h2 class="step-details__heading">Step details</h2>
+      <div class="step-details__header">
+        <h2 class="step-details__heading">Step details</h2>
+        <button
+          type="button"
+          class="step-details__paste-button"
+          title="Paste (Ctrl+V)"
+          disabled={!copiedToken.value}
+          onClick={() => pasteToken()}
+        >
+          Paste
+        </button>
+      </div>
 
       <label class="step-details__field">
         <span class="step-details__label">Title</span>

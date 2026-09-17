@@ -8,7 +8,9 @@ import {
   removeTokenAttachment,
   attachToToken,
   setTokenTime,
+  copyToken,
 } from "../../state/document";
+import { toast } from "../../state/ui";
 import { SAMPLE_TOKENS } from "../../data/sample-tokens";
 import { Icon } from "../Icon/Icon";
 import { CollapsedField } from "../CollapsedField/CollapsedField";
@@ -160,6 +162,12 @@ function WarningRow({ step, token }: { step: InstructionStep; token: Instruction
   );
 }
 
+/** Copy button's handler - also the keyboard `Ctrl+C` path's shared shape (see app.tsx). */
+function handleCopy(step: InstructionStep, token: InstructionToken): void {
+  copyToken(step.id, token.id);
+  toast.value = { text: `Copied ${token.label ?? token.iconId}`, tone: "info" };
+}
+
 /**
  * Editor for the currently selected token - see InstructionCanvas's
  * two-stage select behavior: a token only becomes selectable, and shows up
@@ -194,7 +202,17 @@ export function TokenDetails() {
 
   return (
     <div class="token-details">
-      <h2 class="token-details__heading">Token details</h2>
+      <div class="token-details__header">
+        <h2 class="token-details__heading">Token details</h2>
+        <button
+          type="button"
+          class="token-details__copy-button"
+          title="Copy (Ctrl+C)"
+          onClick={() => handleCopy(step, token)}
+        >
+          Copy
+        </button>
+      </div>
 
       <label class="token-details__field">
         <span class="token-details__label">Title</span>

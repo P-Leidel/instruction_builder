@@ -527,6 +527,47 @@ button {
   font-size: 1rem;
 }
 
+/* Copy/paste tokens: each panel's heading shares a row with its own button
+   (Copy in token-details, Paste in step-details - see CONTEXT.md's "Token
+   clipboard" and each component's own doc comment for why they're split
+   across panels), so the heading's own margin moves onto the row. */
+.token-details__header,
+.step-details__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+}
+
+.token-details__header .token-details__heading,
+.step-details__header .step-details__heading {
+  margin: 0;
+}
+
+.token-details__copy-button,
+.step-details__paste-button {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.7rem;
+  min-height: 32px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.token-details__copy-button:hover,
+.step-details__paste-button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.step-details__paste-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 /* .instruction-canvas__heading-time/-title (the document's own title,
    optionally prefixed by the sum of every step's displayedTime) carry no
    styling of their own - same "just a selectable sub-span of the heading

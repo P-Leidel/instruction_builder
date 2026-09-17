@@ -136,7 +136,7 @@ export interface InstructionDocument {
   steps: InstructionStep[];
 }
 
-function newId(): string {
+export function newId(): string {
   return crypto.randomUUID();
 }
 

@@ -2,6 +2,7 @@ import { signal, computed, type Signal, type ReadonlySignal } from "@preact/sign
 import {
   createEmptyDocument,
   createEmptyStep,
+  newId,
   type InstructionDocument,
   type InstructionStep,
   type InstructionToken,
@@ -66,6 +67,12 @@ export interface DocumentSession {
   readonly selectedStepId: Signal<string | null>;
   readonly selectedTokenId: Signal<string | null>;
   /**
+   * See CONTEXT.md's "Token clipboard" entry - a single-slot, in-memory copy
+   * of one token, written by `copyToken`, read (and paste-again-able) by
+   * `pasteToken`. Not part of the document, not part of undo/redo history.
+   */
+  readonly copiedToken: Signal<InstructionToken | null>;
+  /**
    * Task 13 (Undo/Redo): `past`/`future` hold whole prior/subsequent document
    * snapshots rather than individual diffs - the document is small enough
    * (a handful of steps/tokens) that snapshotting is simpler and safer than a
@@ -96,6 +103,7 @@ export function createDocumentSession(
   const documentSignal = signal<InstructionDocument>(initial);
   const selectedStepId = signal<string | null>(initial.steps[0]?.id ?? null);
   const selectedTokenId = signal<string | null>(null);
+  const copiedToken = signal<InstructionToken | null>(null);
   const past = signal<InstructionDocument[]>([]);
   const future = signal<InstructionDocument[]>([]);
   const canUndo = computed(() => past.value.length > 0);
@@ -111,6 +119,7 @@ export function createDocumentSession(
     document: documentSignal,
     selectedStepId,
     selectedTokenId,
+    copiedToken,
     past,
     future,
     canUndo,
@@ -271,6 +280,7 @@ function replaceDocumentCore(session: DocumentSession, doc: InstructionDocument)
   recordHistory(session, false);
   session.document.value = { ...doc, meta: { ...doc.meta, updatedAt: new Date().toISOString() } };
   selectStepCore(session, doc.steps[0]?.id ?? null);
+  session.copiedToken.value = null;
 }
 
 function selectStepCore(session: DocumentSession, stepId: string | null): void {
@@ -542,6 +552,36 @@ function setStepTimeCore(
   );
 }
 
+/**
+ * Copies a token into the session's token clipboard (CONTEXT.md) - a full
+ * copy of everything on it (label/note/quantity/warning/time), with a fresh
+ * id so the clipboard always holds a self-contained, valid `InstructionToken`
+ * on its own. Doesn't touch `document`/history/selection - copying isn't a
+ * document mutation.
+ */
+function copyTokenCore(session: DocumentSession, stepId: string, tokenId: string): void {
+  const step = session.document.value.steps.find((s) => s.id === stepId);
+  const token = step?.tokens.find((t) => t.id === tokenId);
+  if (!token) return;
+  session.copiedToken.value = { ...token, id: newId() };
+}
+
+/**
+ * Appends a fresh-id copy of whatever's in the token clipboard onto the
+ * currently selected step - the same "wherever's selected" convention as
+ * `addTokenToSelectedStepCore`, which this delegates to. A no-op if nothing's
+ * been copied yet, or no step is selected. Reuses the clipboard's own token
+ * as-is (deliberately not re-reading it from `document` by id - the source
+ * token may since have been edited or removed, and the clipboard is meant to
+ * paste back what was copied, not "whatever that token currently looks
+ * like"), minting yet another fresh id so repeated pastes never collide.
+ */
+function pasteTokenCore(session: DocumentSession): void {
+  const copied = session.copiedToken.value;
+  if (!copied) return;
+  addTokenToSelectedStepCore(session, { ...copied, id: newId() });
+}
+
 export const sessionActions = {
   undo: undoCore,
   redo: redoCore,
@@ -566,6 +606,8 @@ export const sessionActions = {
   removeTokenAttachment: removeTokenAttachmentCore,
   setTokenTime: setTokenTimeCore,
   setStepTime: setStepTimeCore,
+  copyToken: copyTokenCore,
+  pasteToken: pasteTokenCore,
 };
 
 type SessionAction = (session: DocumentSession, ...args: never[]) => unknown;
@@ -605,6 +647,7 @@ const defaultSession = createDocumentSession();
 export const document = defaultSession.document;
 export const selectedStepId = defaultSession.selectedStepId;
 export const selectedTokenId = defaultSession.selectedTokenId;
+export const copiedToken = defaultSession.copiedToken;
 export const past = defaultSession.past;
 export const future = defaultSession.future;
 export const canUndo = defaultSession.canUndo;
@@ -636,4 +679,6 @@ export const {
   removeTokenAttachment,
   setTokenTime,
   setStepTime,
+  copyToken,
+  pasteToken,
 } = bindActionsToSession(sessionActions, defaultSession);

@@ -329,6 +329,99 @@ describe("time", () => {
   });
 });
 
+describe("copyToken / pasteToken", () => {
+  it("copies a token's full content into the clipboard with a fresh id", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife", "Chop");
+    sessionActions.addTokenToStep(session, stepId, token);
+    sessionActions.attachToToken(session, stepId, token.id, "warning", { iconId: "warn" });
+
+    sessionActions.copyToken(session, stepId, token.id);
+
+    expect(session.copiedToken.value).toEqual({ ...token, warning: { iconId: "warn" }, id: expect.any(String) });
+    expect(session.copiedToken.value?.id).not.toBe(token.id);
+  });
+
+  it("copying doesn't touch the document or push a new history entry", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, stepId, token);
+    const docBefore = session.document.value;
+    const historyLengthBefore = session.past.value.length;
+
+    sessionActions.copyToken(session, stepId, token.id);
+
+    expect(session.document.value).toBe(docBefore);
+    expect(session.past.value.length).toBe(historyLengthBefore);
+  });
+
+  it("pastes onto the selected step, minting yet another fresh id, and is undoable", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife", "Chop");
+    sessionActions.addTokenToStep(session, stepId, token);
+    sessionActions.copyToken(session, stepId, token.id);
+    const copiedId = session.copiedToken.value?.id;
+
+    sessionActions.pasteToken(session);
+
+    const tokens = session.document.value.steps[0].tokens;
+    expect(tokens).toHaveLength(2);
+    expect(tokens[1]).toMatchObject({ category: "action", iconId: "knife", label: "Chop" });
+    expect(tokens[1].id).not.toBe(token.id);
+    expect(tokens[1].id).not.toBe(copiedId);
+
+    sessionActions.undo(session);
+    expect(session.document.value.steps[0].tokens).toHaveLength(1);
+  });
+
+  it("pasting the same clipboard twice appends two distinct tokens", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, stepId, token);
+    sessionActions.copyToken(session, stepId, token.id);
+
+    sessionActions.pasteToken(session);
+    sessionActions.pasteToken(session);
+
+    const tokens = session.document.value.steps[0].tokens;
+    expect(tokens).toHaveLength(3);
+    expect(tokens[1].id).not.toBe(tokens[2].id);
+  });
+
+  it("pasting with nothing copied, or no step selected, is a no-op", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+
+    sessionActions.pasteToken(session);
+    expect(session.document.value.steps[0].tokens).toHaveLength(0);
+
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, stepId, token);
+    sessionActions.copyToken(session, stepId, token.id);
+    sessionActions.selectStep(session, null);
+
+    sessionActions.pasteToken(session);
+    expect(session.document.value.steps[0].tokens).toHaveLength(1);
+  });
+
+  it("replacing the document clears the clipboard", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, stepId, token);
+    sessionActions.copyToken(session, stepId, token.id);
+    expect(session.copiedToken.value).not.toBeNull();
+
+    sessionActions.replaceDocument(session, createEmptyDocument());
+
+    expect(session.copiedToken.value).toBeNull();
+  });
+});
+
 describe("updateTitle", () => {
   it("updates meta.title and is undoable", () => {
     const session = createDocumentSession();
