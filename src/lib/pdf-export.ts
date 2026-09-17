@@ -1,6 +1,7 @@
-import { downloadBlob, slugify } from "./document-file";
+import { downloadBlob, slugify } from "./download";
 import { cloneCanvasForExport } from "./svg-export";
 import { paginateSteps, type StepBounds } from "./pdf-pagination";
+import type { CanvasLayout } from "./canvas-layout";
 
 // A4, not Letter - this app's target audience is European (see 2026-09-17
 // remediation grill). Chosen deliberately now that jsPDF generates the file
@@ -22,42 +23,6 @@ const USABLE_HEIGHT_MM = PAGE_HEIGHT_MM - MARGIN_MM * 2;
 const HEADING_FONT_SIZE_PT = 14;
 const HEADING_BLOCK_MM = 12;
 
-interface ExportStep extends StepBounds {
-  top: number;
-  height: number;
-}
-
-/**
- * Reads each step's card position/height straight off the live export
- * canvas DOM - the same "read the rendered DOM back out rather than
- * recompute layout a second way" approach `lib/canvas-layout.ts`'s module
- * comment already describes the export pipeline following (SVG/PNG export
- * serialize the live SVG node itself; this reads its step groups' own
- * `transform`/background-rect `height` instead of calling
- * `computeCanvasLayout` a second time with a possibly-stale `isDesktop`).
- *
- * Selects `[data-step-index]`, not `[data-step-id]` - `TokenChip` also
- * carries `data-step-id` (for `pointer-drag.ts`'s drop-target resolution),
- * so that selector would match every token group too, feeding pagination a
- * pile of spurious zero-height "step" entries at each token's own local
- * `transform` position. `data-step-index` is the attribute already unique
- * to a step group (see `pointer-drag.ts`'s `resolveStepDropIndex`).
- */
-function readStepBounds(svg: SVGSVGElement): ExportStep[] {
-  const groups = Array.from(svg.querySelectorAll<SVGGElement>("[data-step-index]"));
-  return groups
-    .map((group) => {
-      const translateMatch = /translate\(\s*[-\d.]+\s*,\s*([-\d.]+)\s*\)/.exec(
-        group.getAttribute("transform") ?? "",
-      );
-      const top = translateMatch ? Number(translateMatch[1]) : 0;
-      const bg = group.querySelector<SVGRectElement>(".instruction-canvas__step-bg");
-      const height = bg ? Number(bg.getAttribute("height") ?? "0") : 0;
-      return { top, height };
-    })
-    .sort((a, b) => a.top - b.top);
-}
-
 /**
  * Triggers a browser download of `svg` (see `App`'s hidden export-only
  * `InstructionCanvas`) as a paginated PDF - task 17's "Phase 4 stretch
@@ -76,6 +41,18 @@ function readStepBounds(svg: SVGSVGElement): ExportStep[] {
  * rather than being read off the DOM, since the heading text they build
  * lives outside the `<svg>` entirely.
  *
+ * `layout` is the exact `CanvasLayout` the hidden export canvas was rendered
+ * with (see `app.tsx`'s `exportLayout`) - `canvasWidth` and each step's
+ * `cardY`/`height` come straight from it rather than being read back off the
+ * `<svg>`'s `viewBox`/step-group DOM a second way (2026-09-17 remediation,
+ * part 2: this used to regex-parse each step group's `transform` attribute
+ * and its background rect's `height`, both numbers `computeCanvasLayout` had
+ * already produced earlier in the same export pipeline - see
+ * `docs/phase-3/reviews/2026-09-17-whole-codebase-audit-evaluation.md`
+ * candidate 3). `svg` is still needed here: `cloneCanvasForExport` still
+ * clones and slices the real rendered node for each page's visual content -
+ * only the *numbers* driving where to slice it now come from `layout`.
+ *
  * jsPDF and svg2pdf.js are dynamically imported (not a static top-level
  * import) so they only ever load into the bundle - and only ever execute -
  * when a user actually clicks Export PDF, rather than being pulled into
@@ -86,10 +63,11 @@ export async function exportCanvasAsPdf(
   svg: SVGSVGElement,
   title: string,
   totalTimeLabel: string | undefined,
+  layout: CanvasLayout,
 ): Promise<void> {
   const [{ jsPDF }, { svg2pdf }] = await Promise.all([import("jspdf"), import("svg2pdf.js")]);
-  const { width: canvasWidth } = svg.viewBox.baseVal;
-  const steps = readStepBounds(svg);
+  const { canvasWidth } = layout;
+  const steps: StepBounds[] = layout.layouts.map((step) => ({ top: step.cardY, height: step.height }));
   const scale = USABLE_WIDTH_MM / canvasWidth;
   const firstPageHeightUnits = (USABLE_HEIGHT_MM - HEADING_BLOCK_MM) / scale;
   const laterPageHeightUnits = USABLE_HEIGHT_MM / scale;

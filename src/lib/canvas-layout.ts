@@ -8,9 +8,15 @@ import type { InstructionStep, InstructionToken, DurationAttachment } from "../m
  * (task 15 prep, per an external architecture audit - see
  * docs/known-issues.md and docs/planned-additions.md item 2) so the same
  * geometry that decides where a chip sits on screen doesn't exist only
- * inside a render function: `InstructionCanvas` renders this, and the
- * export pipeline (task 15) reads the resulting DOM back out of the same
- * canvas rather than recomputing or scraping geometry a second way.
+ * inside a render function: `InstructionCanvas` renders this, and SVG/PNG
+ * export read the resulting DOM back out of the same rendered canvas rather
+ * than recomputing geometry a second way. PDF export instead takes a
+ * `CanvasLayout` directly from its caller (2026-09-17 remediation, part 2 -
+ * see `lib/pdf-export.ts`'s own comment) - it needs the numbers themselves
+ * (`cardY`/`height` per step) for pagination, not just a DOM node to
+ * serialize, so reading them straight from this module's own output rather
+ * than parsing them back out of rendered SVG attributes avoids a redundant
+ * round-trip.
  *
  * `computeCanvasLayout` is the module's whole public interface for document
  * geometry: each StepLayout it returns carries every chip position,

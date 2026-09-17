@@ -349,7 +349,7 @@ button {
 }
 
 /* Task 27: an inline field for meta.title, the source every export
-   filename derives from (lib/document-file.ts's slugify). Lives inside
+   filename derives from (lib/download.ts's slugify). Lives inside
    .app__titles (already flex: 1 1 200px; min-width: 0) so it shrinks
    correctly on narrow viewports instead of forcing the toolbar to
    overflow - the same min-width: 0 discipline task 21's audit established

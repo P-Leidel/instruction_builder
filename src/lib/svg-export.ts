@@ -1,4 +1,4 @@
-import { downloadBlob, slugify } from "./document-file";
+import { downloadBlob, slugify } from "./download";
 
 /**
  * The canvas's entire visual appearance - fills, strokes, fonts, colors -

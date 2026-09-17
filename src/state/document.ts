@@ -536,7 +536,7 @@ function removeTokenFromStepCore(session: DocumentSession, stepId: string, token
 
 /**
  * Task 27 (Add Document Title UI): updates `meta.title`, the field every
- * export filename is derived from (`lib/document-file.ts`'s `slugify`) -
+ * export filename is derived from (`lib/download.ts`'s `slugify`) -
  * previously stuck at its creation-time default forever since nothing
  * wrote to it (see docs/known-issues.md's former "every export downloads
  * as untitled-instructions" entry). Mirrors `setSteps`'s coalescing/

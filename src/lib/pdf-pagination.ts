@@ -5,12 +5,12 @@
  * generic (`T extends StepBounds`) so `paginateSteps` can be handed either
  * plain bounds (as the tests below do) or a richer per-step type that also
  * carries whatever `pdf-export.ts` needs to draw it, without this module
- * knowing about SVG/DOM at all - see pdf-export.ts's own `readStepBounds`,
- * which reads these straight off the live export canvas DOM (its step
- * groups' own `transform`/step-background `height`) rather than
- * recomputing layout a second way, the same "read the rendered DOM back
- * out" approach `lib/canvas-layout.ts`'s own module comment already
- * describes the export pipeline following.
+ * knowing about SVG/DOM (or even `canvas-layout.ts`) at all - see
+ * `pdf-export.ts`'s own comment: it maps `computeCanvasLayout`'s
+ * `StepLayout.cardY`/`height` straight into this shape (2026-09-17
+ * remediation, part 2 - this used to instead be read back off the live
+ * export canvas DOM, one `cardY`/`height`-shaped round trip this module
+ * never needed to know about either way).
  */
 export interface StepBounds {
   top: number;

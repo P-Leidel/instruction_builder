@@ -1,31 +1,6 @@
 import { migrate } from "../model/migrate";
 import type { InstructionDocument } from "../model/instruction";
-
-/** Slugifies a title into a safe filename stem, falling back when nothing usable remains. */
-export function slugify(title: string): string {
-  const slug = title
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "untitled-instructions";
-}
-
-/**
- * Triggers a browser download of `blob` under `filename` via a `Blob`
- * object URL and a synthetic `<a download>` click - the one download
- * mechanic every export format (JSON now; SVG/PNG, tasks 15-16) shares, so
- * it's factored out here (and exported for `lib/svg-export.ts`) rather than
- * repeated per format.
- */
-export function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
+import { downloadBlob, slugify } from "./download";
 
 /**
  * Triggers a browser download of `doc` as a pretty-printed JSON file (task

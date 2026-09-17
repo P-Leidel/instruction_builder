@@ -1,8 +1,18 @@
 import { describe, it, expect } from "vitest";
 import { paginateSteps, type StepBounds } from "./pdf-pagination";
+import { computeCanvasLayout } from "./canvas-layout";
+import { createEmptyStep, createToken } from "../model/instruction";
+import type { InstructionStep } from "../model/instruction";
 
 function step(top: number, height: number): StepBounds {
   return { top, height };
+}
+
+function stepWithTokens(tokenCount: number): InstructionStep {
+  return {
+    ...createEmptyStep(),
+    tokens: Array.from({ length: tokenCount }, () => createToken("action", "a")),
+  };
 }
 
 describe("paginateSteps", () => {
@@ -54,5 +64,46 @@ describe("paginateSteps", () => {
     const pageHeight = (pageIndex: number) => (pageIndex === 0 ? 120 : 200);
     const pages = paginateSteps(steps, pageHeight);
     expect(pages).toEqual([[steps[0]], [steps[1], steps[2]]]);
+  });
+});
+
+/**
+ * Regression coverage for the 2026-09-17 remediation that deleted
+ * `pdf-export.ts`'s `readStepBounds()` DOM-scraping (see
+ * docs/known-issues.md's former "PDF pagination selector fix has no driver
+ * regression test yet" entry, and
+ * docs/phase-3/reviews/2026-09-17-whole-codebase-audit-evaluation.md
+ * candidate 3/item 6): pagination now takes its `top`/`height` numbers
+ * straight from `computeCanvasLayout`, so this exercises that same
+ * real-layout-to-pagination path in plain Vitest - no DOM, no Playwright, no
+ * fixed-viewport blocker. Uses desktop layout (`isDesktop: true`), matching
+ * what the export pipeline now always renders (see `app.tsx`'s
+ * `exportLayout`) - unlike mobile's forced single-row-per-step layout
+ * (`canvas-layout.ts`'s `chipsPerRow = tokens.length` there), desktop's fixed
+ * 6-per-row wrapping actually gives a non-uniform document non-uniform step
+ * heights to paginate against.
+ */
+describe("paginateSteps against real computeCanvasLayout output (non-uniform document)", () => {
+  it("gives a step with more tokens (more wrapped rows) a taller bound than one-row neighbors", () => {
+    const steps = [stepWithTokens(1), stepWithTokens(12), stepWithTokens(2)];
+    const layout = computeCanvasLayout(steps, true);
+    const bounds = layout.layouts.map((s) => ({ top: s.cardY, height: s.height }));
+
+    expect(bounds[1].height).toBeGreaterThan(bounds[0].height);
+    expect(bounds[1].height).toBeGreaterThan(bounds[2].height);
+  });
+
+  it("reacts to each step's own real height: a budget sized for the shortest step isolates a taller one onto its own page", () => {
+    const steps = [stepWithTokens(1), stepWithTokens(12), stepWithTokens(2)];
+    const layout = computeCanvasLayout(steps, true);
+    const bounds = layout.layouts.map((s) => ({ top: s.cardY, height: s.height }));
+
+    const pageHeight = bounds[0].height + 1;
+    const pages = paginateSteps(bounds, () => pageHeight);
+
+    // Nothing lost or reordered, and the tall middle step never shares a
+    // page (a budget this small could only fit it alone, if at all).
+    expect(pages.flat()).toEqual(bounds);
+    expect(pages.some((page) => page.includes(bounds[1]) && page.length > 1)).toBe(false);
   });
 });

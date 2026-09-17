@@ -5,6 +5,7 @@ import { exportCanvasAsSvg } from "./svg-export";
 import { exportCanvasAsPng } from "./png-export";
 import { exportCanvasAsPdf } from "./pdf-export";
 import { documentTotalTime } from "./duration";
+import type { CanvasLayout } from "./canvas-layout";
 
 /**
  * The export/import orchestration `App` used to own directly (five handler
@@ -43,10 +44,62 @@ export interface ExportResult {
   warning?: string;
 }
 
+/**
+ * Runs one format's actual export work and turns the outcome into an
+ * `ExportResult`: a thrown error becomes `error` (falling back to
+ * `fallbackError` if what was thrown isn't an `Error`), a clean run gets
+ * `incompleteStepsWarning`'s non-blocking warning. Previously each format
+ * wrote its own copy of this try/catch/warning shape, unevenly - JSON had
+ * none of it - which is exactly what let JSON silently skip the pattern the
+ * other three shared (2026-09-17 remediation - see
+ * docs/phase-3/reviews/2026-09-17-whole-codebase-audit-evaluation.md item 7).
+ */
+async function runExport(
+  doc: InstructionDocument,
+  fallbackError: string,
+  perform: () => void | Promise<void>,
+): Promise<ExportResult> {
+  try {
+    await perform();
+    return { warning: incompleteStepsWarning(doc) };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : fallbackError };
+  }
+}
+
+/**
+ * `svgElement`/`doc` travel together across every canvas-based export
+ * (SVG/PNG/PDF) - never just one alone - so `runCanvasExport` and its three
+ * callers below share this one shape instead of each repeating the same two
+ * positional params (2026-09-17 remediation, part 2 - see
+ * docs/phase-3/reviews/2026-09-17-whole-codebase-audit-evaluation.md item 7's
+ * follow-up code review). `layout` deliberately isn't part of this: it's
+ * PDF-only, and folding it in here would force SVG/PNG to carry a field they
+ * never read.
+ */
+export interface CanvasExportInput {
+  svgElement: SVGSVGElement | null;
+  doc: InstructionDocument;
+}
+
+/**
+ * `runExport`, plus the missing-canvas guard SVG/PNG/PDF export all need
+ * (the hidden export canvas hasn't mounted yet - shouldn't happen once past
+ * first render) but JSON export doesn't, since it never touches the canvas
+ * at all.
+ */
+async function runCanvasExport(
+  { svgElement, doc }: CanvasExportInput,
+  fallbackError: string,
+  perform: (svgElement: SVGSVGElement) => void | Promise<void>,
+): Promise<ExportResult> {
+  if (!svgElement) return {};
+  return runExport(doc, fallbackError, () => perform(svgElement));
+}
+
 /** Task 18 (JSON Export): downloads the current document as pretty-printed JSON. */
-export function runJsonExport(doc: InstructionDocument): ExportResult {
-  exportDocumentAsJson(doc);
-  return { warning: incompleteStepsWarning(doc) };
+export function runJsonExport(doc: InstructionDocument): Promise<ExportResult> {
+  return runExport(doc, "Could not export a JSON file.", () => exportDocumentAsJson(doc));
 }
 
 /**
@@ -55,28 +108,13 @@ export function runJsonExport(doc: InstructionDocument): ExportResult {
  * visible editor canvas, which carries editing-only affordances (remove
  * buttons, selection outlines) that shouldn't end up in an exported file.
  */
-export function runSvgExport(svgElement: SVGSVGElement | null, doc: InstructionDocument): ExportResult {
-  if (!svgElement) return {}; // the hidden export canvas hasn't mounted yet - shouldn't happen once past first render
-  try {
-    exportCanvasAsSvg(svgElement, doc.meta.title);
-    return { warning: incompleteStepsWarning(doc) };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Could not export an SVG." };
-  }
+export function runSvgExport(input: CanvasExportInput): Promise<ExportResult> {
+  return runCanvasExport(input, "Could not export an SVG.", (svg) => exportCanvasAsSvg(svg, input.doc.meta.title));
 }
 
 /** Task 16 (PNG Export): rasterizes the same hidden export canvas's SVG. */
-export async function runPngExport(
-  svgElement: SVGSVGElement | null,
-  doc: InstructionDocument,
-): Promise<ExportResult> {
-  if (!svgElement) return {}; // the hidden export canvas hasn't mounted yet - shouldn't happen once past first render
-  try {
-    await exportCanvasAsPng(svgElement, doc.meta.title);
-    return { warning: incompleteStepsWarning(doc) };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Could not export a PNG." };
-  }
+export function runPngExport(input: CanvasExportInput): Promise<ExportResult> {
+  return runCanvasExport(input, "Could not export a PNG.", (svg) => exportCanvasAsPng(svg, input.doc.meta.title));
 }
 
 /**
@@ -89,20 +127,17 @@ export async function runPngExport(
  * heading it draws on page 1 is computed here the same way
  * `InstructionCanvas.tsx` computes its own on-screen heading, since that
  * heading is a DOM sibling of the `<svg>` and never part of what gets
- * serialized.
+ * serialized. `layout` is the same fixed-desktop `CanvasLayout` the hidden
+ * export canvas was rendered with (see `app.tsx`'s `exportLayout`) - pagination
+ * reads its real `cardY`/`height` numbers directly instead of scraping them
+ * back off the SVG's DOM (2026-09-17 remediation, part 2 - see
+ * `lib/pdf-export.ts`'s own comment).
  */
-export async function runPdfExport(
-  svgElement: SVGSVGElement | null,
-  doc: InstructionDocument,
-): Promise<ExportResult> {
-  if (!svgElement) return {}; // the hidden export canvas hasn't mounted yet - shouldn't happen once past first render
-  try {
-    const totalTime = documentTotalTime(doc.steps);
-    await exportCanvasAsPdf(svgElement, doc.meta.title, totalTime?.label);
-    return { warning: incompleteStepsWarning(doc) };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Could not export a PDF." };
-  }
+export function runPdfExport(input: CanvasExportInput, layout: CanvasLayout): Promise<ExportResult> {
+  const totalTime = documentTotalTime(input.doc.steps);
+  return runCanvasExport(input, "Could not export a PDF.", (svg) =>
+    exportCanvasAsPdf(svg, input.doc.meta.title, totalTime?.label, layout),
+  );
 }
 
 export type ImportFileResult =

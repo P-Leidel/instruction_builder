@@ -1,30 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useRef } from "preact/hooks";
 import { document, addStep } from "../../state/document";
-import { DESKTOP_QUERY, PADDING, ADD_STEP_ROW_HEIGHT, computeCanvasLayout } from "../../lib/canvas-layout";
+import { PADDING, ADD_STEP_ROW_HEIGHT, type CanvasLayout } from "../../lib/canvas-layout";
 import { documentTotalTime } from "../../lib/duration";
 import { SvgButton } from "./SvgButton";
 import { StepCard } from "./StepCard";
-
-/**
- * Tracks the `min-width: 800px` breakpoint so layout can switch between
- * desktop's wrapped multi-row chips and mobile's single row per step. Kept
- * as a plain hook (not a signal) since it's a local rendering concern, not
- * shared app state.
- */
-function useIsDesktop(): boolean {
-  const [isDesktop, setIsDesktop] = useState(
-    () => typeof window !== "undefined" && window.matchMedia(DESKTOP_QUERY).matches,
-  );
-
-  useEffect(() => {
-    const mql = window.matchMedia(DESKTOP_QUERY);
-    const onChange = () => setIsDesktop(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
-
-  return isDesktop;
-}
 
 interface InstructionCanvasProps {
   /**
@@ -36,9 +15,22 @@ interface InstructionCanvasProps {
    * always-rendered `readOnly` instance around purely so the export button
    * has a live, always-current SVG node to serialize (see
    * `lib/svg-export.ts`) - export never re-renders or recomputes layout on
-   * its own.
+   * its own. Since the 2026-09-17 export-viewport-independence remediation,
+   * `App` also renders this Preview instance and the hidden export instance
+   * with the exact same fixed-desktop `layout` the export pipeline uses, so
+   * this mode is now genuinely (not just accidentally) what gets exported.
    */
   readOnly?: boolean;
+  /**
+   * Already-computed geometry - every chip position, connector path, and
+   * canvas sizing this component draws. `App` owns calling
+   * `computeCanvasLayout` (see its own doc comment) and decides what
+   * `isDesktop` value feeds it: the live editable instance gets the real
+   * `matchMedia` result, while the read-only Preview and hidden export
+   * instances both get a fixed desktop layout (2026-09-17 remediation) -
+   * this component itself no longer knows or cares which.
+   */
+  layout: CanvasLayout;
 }
 
 /**
@@ -108,15 +100,11 @@ interface InstructionCanvasProps {
  * the SVG just past the last step. All of it is hidden when `readOnly`, same
  * as the token-level editing controls above.
  */
-export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) {
+export function InstructionCanvas({ readOnly = false, layout }: InstructionCanvasProps) {
   const steps = document.value.steps;
-  const isDesktop = useIsDesktop();
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const { layouts, totalHeight, canvasWidth, addStepRowY } = useMemo(
-    () => computeCanvasLayout(steps, isDesktop),
-    [steps, isDesktop],
-  );
+  const { layouts, totalHeight, canvasWidth, addStepRowY } = layout;
   // computeCanvasLayout stays read-only-agnostic (document + isDesktop is its
   // whole interface - see its own comment), so the "+ Add step" row's extra
   // height only applies here, where readOnly is actually known: the read-only/

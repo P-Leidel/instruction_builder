@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { effect } from "@preact/signals";
 import { StepDetails } from "./components/StepDetails/StepDetails";
 import { TokenDetails } from "./components/TokenDetails/TokenDetails";
 import { InstructionCanvas } from "./components/InstructionCanvas/InstructionCanvas";
+import { DESKTOP_QUERY, computeCanvasLayout, type CanvasLayout } from "./lib/canvas-layout";
 import { TokenPicker } from "./components/TokenPicker/TokenPicker";
 import { DragGhost } from "./components/DragGhost/DragGhost";
 import { ImportConfirmDialog } from "./components/ImportConfirmDialog/ImportConfirmDialog";
@@ -34,6 +35,32 @@ import { MOD_KEY_LABEL } from "./lib/platform";
 const DOCUMENT_TITLE_MAX_LENGTH = 50;
 
 /**
+ * Tracks the `min-width: 800px` breakpoint so the live editable canvas can
+ * switch between desktop's wrapped multi-row chips and mobile's single row
+ * per step. Kept as a plain hook (not a signal) since it's a local rendering
+ * concern, not shared app state. Moved here from `InstructionCanvas.tsx`
+ * (2026-09-17 export-viewport-independence remediation): `App` is now the
+ * one place that decides `isDesktop` for the live canvas and computes
+ * `computeCanvasLayout` for all three `InstructionCanvas` instances, so the
+ * component itself never reads the viewport - only this, single, editable
+ * instance still needs to.
+ */
+function useIsDesktop(): boolean {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(DESKTOP_QUERY).matches,
+  );
+
+  useEffect(() => {
+    const mql = window.matchMedia(DESKTOP_QUERY);
+    const onChange = () => setIsDesktop(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  return isDesktop;
+}
+
+/**
  * Turns a `lib/document-actions.ts` result into the one toast this app
  * ever shows at a time - the one piece of export orchestration that
  * genuinely belongs here rather than in `lib/`, since routing a result to
@@ -48,8 +75,8 @@ function showExportResult(result: ExportResult): void {
 }
 
 /** Task 18 (JSON Export): downloads the current document as pretty-printed JSON. */
-function handleExportJson(): void {
-  showExportResult(runJsonExport(document.value));
+async function handleExportJson(): Promise<void> {
+  showExportResult(await runJsonExport(document.value));
 }
 
 /**
@@ -59,12 +86,12 @@ function handleExportJson(): void {
  * affordances (remove buttons, selection outlines) that shouldn't end up in
  * an exported file.
  */
-function handleExportSvg(svgElement: SVGSVGElement | null): void {
-  showExportResult(runSvgExport(svgElement, document.value));
+async function handleExportSvg(svgElement: SVGSVGElement | null): Promise<void> {
+  showExportResult(await runSvgExport({ svgElement, doc: document.value }));
 }
 
 async function handleExportPng(svgElement: SVGSVGElement | null): Promise<void> {
-  showExportResult(await runPngExport(svgElement, document.value));
+  showExportResult(await runPngExport({ svgElement, doc: document.value }));
 }
 
 /**
@@ -76,10 +103,13 @@ async function handleExportPng(svgElement: SVGSVGElement | null): Promise<void> 
  * copy prints the downloaded PDF from their own viewer, same as any other
  * downloaded PDF; a native Ctrl+P/File>Print still falls back to this
  * app's `@media print` rules (unchanged, left as an unsupported path - see
- * the 2026-09-17 remediation grill's Q7).
+ * the 2026-09-17 remediation grill's Q7). Pagination bounds come from
+ * `layout` (the same fixed-desktop `CanvasLayout` the hidden export canvas
+ * was rendered with) rather than being scraped back off the SVG's DOM - see
+ * `lib/pdf-export.ts`'s own comment (2026-09-17 remediation, part 2).
  */
-async function handleExportPdf(svgElement: SVGSVGElement | null): Promise<void> {
-  showExportResult(await runPdfExport(svgElement, document.value));
+async function handleExportPdf(svgElement: SVGSVGElement | null, layout: CanvasLayout): Promise<void> {
+  showExportResult(await runPdfExport({ svgElement, doc: document.value }, layout));
 }
 
 /**
@@ -277,6 +307,19 @@ export function App() {
   const getExportSvgElement = () =>
     exportCanvasRef.current?.querySelector<SVGSVGElement>(".instruction-canvas__svg") ?? null;
 
+  const isDesktop = useIsDesktop();
+  const steps = document.value.steps;
+  // The live editable canvas gets the real viewport; Preview and the hidden
+  // export canvas both get a fixed desktop layout instead (2026-09-17
+  // remediation) - a shared/printed document shouldn't render structurally
+  // differently depending on which device happened to trigger the export,
+  // and Preview's whole job is to stand in for what export actually
+  // produces (see InstructionCanvas.tsx's `readOnly` doc comment). Sharing
+  // one `exportLayout` between both read-only instances also means it's
+  // computed once, not twice, for what's provably the same input.
+  const liveLayout = useMemo(() => computeCanvasLayout(steps, isDesktop), [steps, isDesktop]);
+  const exportLayout = useMemo(() => computeCanvasLayout(steps, true), [steps]);
+
   return (
     <div class="app">
       <header class="app__toolbar">
@@ -333,7 +376,11 @@ export function App() {
           <button type="button" class="app__file-button" onClick={() => handleExportPng(getExportSvgElement())}>
             Export PNG
           </button>
-          <button type="button" class="app__file-button" onClick={() => handleExportPdf(getExportSvgElement())}>
+          <button
+            type="button"
+            class="app__file-button"
+            onClick={() => handleExportPdf(getExportSvgElement(), exportLayout)}
+          >
             Export PDF
           </button>
           <button type="button" class="app__file-button" onClick={() => importInputRef.current?.click()}>
@@ -380,14 +427,14 @@ export function App() {
       )}
       <main class={`app__main${previewMode.value ? " app__main--preview" : ""}`}>
         {previewMode.value ? (
-          <InstructionCanvas readOnly />
+          <InstructionCanvas readOnly layout={exportLayout} />
         ) : (
           <>
             <div class="app__col-left">
               <StepDetails />
               <TokenDetails />
             </div>
-            <InstructionCanvas />
+            <InstructionCanvas layout={liveLayout} />
             <div class="app__col-right">
               <TokenPicker />
             </div>
@@ -398,7 +445,7 @@ export function App() {
       <ImportConfirmDialog />
       <NewDocumentConfirmDialog />
       <div class="app__export-canvas" aria-hidden="true" ref={exportCanvasRef}>
-        <InstructionCanvas readOnly />
+        <InstructionCanvas readOnly layout={exportLayout} />
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { downloadBlob, slugify } from "./document-file";
+import { downloadBlob, slugify } from "./download";
 import { rasterizeCanvasToPngBlob } from "./svg-export";
 
 /**
