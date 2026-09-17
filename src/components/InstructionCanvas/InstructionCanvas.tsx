@@ -1,3 +1,4 @@
+import type { RefObject } from "preact";
 import { useRef } from "preact/hooks";
 import { document, addStep } from "../../state/document";
 import { PADDING, ADD_STEP_ROW_HEIGHT, type CanvasLayout } from "../../lib/canvas-layout";
@@ -31,6 +32,16 @@ interface InstructionCanvasProps {
    * this component itself no longer knows or cares which.
    */
   layout: CanvasLayout;
+  /**
+   * Lets a caller read this instance's own `<svg>` node directly, instead of
+   * reaching for it by DOM query - `App` passes this only for the hidden
+   * export instance (see its own doc comment), so SVG/PNG/PDF export read
+   * the node through a declared interface rather than
+   * `.instruction-canvas__svg`'s class name (2026-09-17 architecture
+   * remediation). Left `undefined` by the Preview and live editable
+   * instances, which have no caller that needs their SVG node.
+   */
+  svgRef?: RefObject<SVGSVGElement>;
 }
 
 /**
@@ -100,9 +111,10 @@ interface InstructionCanvasProps {
  * the SVG just past the last step. All of it is hidden when `readOnly`, same
  * as the token-level editing controls above.
  */
-export function InstructionCanvas({ readOnly = false, layout }: InstructionCanvasProps) {
+export function InstructionCanvas({ readOnly = false, layout, svgRef: externalSvgRef }: InstructionCanvasProps) {
   const steps = document.value.steps;
-  const svgRef = useRef<SVGSVGElement>(null);
+  const ownSvgRef = useRef<SVGSVGElement>(null);
+  const svgRef = externalSvgRef ?? ownSvgRef;
 
   const { layouts, totalHeight, canvasWidth, addStepRowY } = layout;
   // computeCanvasLayout stays read-only-agnostic (document + isDesktop is its

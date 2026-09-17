@@ -86,7 +86,10 @@ export interface CanvasExportInput {
  * `runExport`, plus the missing-canvas guard SVG/PNG/PDF export all need
  * (the hidden export canvas hasn't mounted yet - shouldn't happen once past
  * first render) but JSON export doesn't, since it never touches the canvas
- * at all.
+ * at all. Deliberately still a silent no-op, not an error: since `App` now
+ * passes this a typed `svgRef` instead of a `querySelector`-by-class-name
+ * result (2026-09-17 architecture remediation), the only way `svgElement`
+ * can be null here is that pre-first-render window, not a stale selector.
  */
 async function runCanvasExport(
   { svgElement, doc }: CanvasExportInput,

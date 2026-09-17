@@ -81,10 +81,11 @@ async function handleExportJson(): Promise<void> {
 
 /**
  * Task 15 (SVG Export) / Task 16 (PNG Export): both serialize the hidden,
- * always-mounted read-only `InstructionCanvas` kept in `exportCanvasRef`
- * below - never the visible editor canvas, which carries editing-only
- * affordances (remove buttons, selection outlines) that shouldn't end up in
- * an exported file.
+ * always-mounted read-only `InstructionCanvas` below, read through the
+ * `svgRef` `App` passes straight into it (2026-09-17 architecture
+ * remediation - see `InstructionCanvas`'s own `svgRef` doc comment) - never
+ * the visible editor canvas, which carries editing-only affordances (remove
+ * buttons, selection outlines) that shouldn't end up in an exported file.
  */
 async function handleExportSvg(svgElement: SVGSVGElement | null): Promise<void> {
   showExportResult(await runSvgExport({ svgElement, doc: document.value }));
@@ -303,9 +304,8 @@ export function App() {
   useTokenClipboardKeyboardShortcuts();
   useDocumentTitleSync();
   const importInputRef = useRef<HTMLInputElement>(null);
-  const exportCanvasRef = useRef<HTMLDivElement>(null);
-  const getExportSvgElement = () =>
-    exportCanvasRef.current?.querySelector<SVGSVGElement>(".instruction-canvas__svg") ?? null;
+  const exportSvgRef = useRef<SVGSVGElement>(null);
+  const getExportSvgElement = () => exportSvgRef.current;
 
   const isDesktop = useIsDesktop();
   const steps = document.value.steps;
@@ -444,8 +444,8 @@ export function App() {
       <DragGhost />
       <ImportConfirmDialog />
       <NewDocumentConfirmDialog />
-      <div class="app__export-canvas" aria-hidden="true" ref={exportCanvasRef}>
-        <InstructionCanvas readOnly layout={exportLayout} />
+      <div class="app__export-canvas" aria-hidden="true">
+        <InstructionCanvas readOnly layout={exportLayout} svgRef={exportSvgRef} />
       </div>
     </div>
   );
