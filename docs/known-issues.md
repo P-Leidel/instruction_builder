@@ -228,11 +228,11 @@ only - see
 
 - **What it is:** at the 390px mobile stacking order, `Token details` (an
   empty "Select a step, then click one of its tokens..." placeholder until
-  a token is actually picked) and the entire `Instructions` canvas sit
-  between `Step details` and `Add to step`. A first-time mobile user
-  scrolls past a placeholder with nothing in it before reaching the canvas
-  that actually shows what they've built - the one view that's the whole
-  point of the app.
+  a token is actually picked) and the entire instruction canvas sit between
+  `Step details` and `Add to step`. A first-time mobile user scrolls past a
+  placeholder with nothing in it before reaching the canvas that actually
+  shows what they've built - the one view that's the whole point of the
+  app.
 - **Why it's not fixed now:** found during a 2026-09-14 pre-launch UI
   review (see
   [phase-3/progress/pre-launch-file-and-ui-audit.md](./phase-3/progress/pre-launch-file-and-ui-audit.md))

@@ -11,7 +11,7 @@ pass, a pre-launch file/docs and UI audit, a follow-up canvas-specific
 architecture deepening, a step-management-onto-the-canvas UX rework, and an
 "Add to token"-into-Token-details UX rework), updated 2026-09-16 (a further
 architecture review remediation, plus title/description max length limits),
-updated 2026-09-17 (the `SvgButton` extraction, task 30's first four real
+updated 2026-09-17 (the `SvgButton` extraction, task 30's first six real
 user feedback passes, and the `CollapsedField`/structured-Quantity
 deepening)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
@@ -176,7 +176,27 @@ A fourth same-day feedback pass followed immediately: the collapsed
 from), which also fixed a second report for free - "+ Time" and
 "+ Quantity" now fit on one line in `TimeAndQuantityRow` without wrapping,
 where "+ Token time" and "+ Quantity" together hadn't. See
-[task-30-user-feedback-fixes-4.md](./task-30-user-feedback-fixes-4.md).
+[task-30-user-feedback-fixes-4.md](./task-30-user-feedback-fixes-4.md). A
+fifth same-day pass, settled via `/mattpocock-skills:grill-me`, covered three
+reports about the canvas heading: it now mirrors `document.value.meta.title`
+read-only (matching the browser tab) instead of a static "Instructions"
+label, gained a document-level total time (`sumDurations` over every step's
+`stepDisplayedTime`) rendered as `{time} - {title}` the same way a step's own
+duration already renders next to its title, and the `.instruction-canvas`
+backdrop was capped to the SVG's actual `clamp(480px, 100%, 960px)` width at
+wide viewports instead of overflowing to its right - the first cap attempt
+(`max-width` plus `margin-inline: auto`) collapsed the card to a fraction of
+its intended width instead, a CSS Grid shrink-to-fit/percentage-width
+circularity caught and fixed (an explicit `width: min(...)` instead of
+`max-width`) during verification, before the user ever saw it. See
+[task-30-user-feedback-fixes-5.md](./task-30-user-feedback-fixes-5.md). A
+sixth same-day pass, also grilled first, made `StepDetails`' "Tokens in this
+step" list - kept only as a keyboard-accessibility affordance, since the
+canvas's own token chips are pointer/touch-only - collapse into a native
+`<details>`/`<summary>`, collapsed by default and resetting per step
+(`key={step.id}`), so live-adding tokens to a step no longer visibly pushes
+the `TokenDetails` panel down the column. See
+[task-30-user-feedback-fixes-6.md](./task-30-user-feedback-fixes-6.md).
 
 ## What shipped
 
@@ -197,7 +217,7 @@ One file per task (or per notable pass), in task-number order:
 | — | Architecture: 2026-09-16 review remediation (`resolveTokenPointerOutcome` names the select/drag decision in `lib/pointer-drag.ts`; `attachToSelectedToken` deleted from `state/document.ts`) | [architecture-2026-09-16-review-remediation.md](./architecture-2026-09-16-review-remediation.md) |
 | — | Title/description max length limits (step and token Title capped at 50 characters, step Details and token Notes at 249) | [title-and-description-max-length.md](./title-and-description-max-length.md) |
 | — | Architecture: extract `SvgButton` (six duplicated keyboard-activatable SVG `<g role="button">` blocks in `InstructionCanvas.tsx` unified into one component; driver gained Enter/Space coverage for four sites) | [architecture-svgbutton-extraction.md](./architecture-svgbutton-extraction.md) |
-| 30 | Test Real Users (in progress - four feedback passes shipped) | [task-30-user-feedback-fixes.md](./task-30-user-feedback-fixes.md), [task-30-user-feedback-fixes-2.md](./task-30-user-feedback-fixes-2.md), [task-30-user-feedback-fixes-3.md](./task-30-user-feedback-fixes-3.md), [task-30-user-feedback-fixes-4.md](./task-30-user-feedback-fixes-4.md) |
+| 30 | Test Real Users (in progress - six feedback passes shipped) | [task-30-user-feedback-fixes.md](./task-30-user-feedback-fixes.md), [task-30-user-feedback-fixes-2.md](./task-30-user-feedback-fixes-2.md), [task-30-user-feedback-fixes-3.md](./task-30-user-feedback-fixes-3.md), [task-30-user-feedback-fixes-4.md](./task-30-user-feedback-fixes-4.md), [task-30-user-feedback-fixes-5.md](./task-30-user-feedback-fixes-5.md), [task-30-user-feedback-fixes-6.md](./task-30-user-feedback-fixes-6.md) |
 | — | Architecture: `CollapsedField<T>` extraction (DurationField/QuantityRow's duplicated collapsed/popover chrome unified) plus structured Quantity (`QuantityAttachment` replaces `splitQuantity`'s reverse-parse) | [architecture-2026-09-17-collapsedfield-and-structured-quantity.md](./architecture-2026-09-17-collapsedfield-and-structured-quantity.md) |
 | 31 | Refine UX | *not started* |
 
@@ -216,8 +236,8 @@ One file per task (or per notable pass), in task-number order:
   none - a component-only refactor with no new `lib`/`state` logic; the
   task 30 feedback passes updated 1 existing `canvas-layout.test.ts`
   assertion for the deleted `headerHeight` field (first pass) and added
-  none (second, third, and fourth passes - component-only refactors, same
-  as `SvgButton`), net 0 across all four; the `CollapsedField`/structured-
+  none (second through sixth passes - component-only/CSS refactors, same
+  as `SvgButton`), net 0 across all six; the `CollapsedField`/structured-
   Quantity deepening added none either - same kind of component/data-shape
   refactor with no new branchable logic), and `npm run build` all pass
   cleanly.

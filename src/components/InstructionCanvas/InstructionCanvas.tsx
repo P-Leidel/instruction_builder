@@ -40,6 +40,7 @@ import {
   computeCanvasLayout,
 } from "../../lib/canvas-layout";
 import type { TokenAttachment } from "../../model/instruction";
+import { sumDurations, stepDisplayedTime } from "../../lib/duration";
 import { SvgButton } from "./SvgButton";
 
 // Warning badge (see InstructionToken.warning): a small, fixed-corner
@@ -232,9 +233,25 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
   // past addStepRowY for it.
   const svgHeight = readOnly ? totalHeight : addStepRowY + ADD_STEP_ROW_HEIGHT + PADDING;
 
+  // Document-level echo of the step-title time pattern below (displayedTime
+  // + step title in one <text>): total is undefined - and hidden - unless at
+  // least one step has a time of its own to show, same "nothing to sum"
+  // floor as stepDisplayedTime/sumDurations already apply per step.
+  const totalTime = sumDurations(steps.map(stepDisplayedTime));
+
   return (
     <div class={`instruction-canvas${readOnly ? " instruction-canvas--readonly" : ""}`}>
-      <h2 class="instruction-canvas__heading">Instructions</h2>
+      <h2 class="instruction-canvas__heading">
+        {totalTime && (
+          <>
+            <span class="instruction-canvas__heading-time">{totalTime.label}</span>
+            {" - "}
+          </>
+        )}
+        <span class="instruction-canvas__heading-title">
+          {document.value.meta.title || "Untitled instructions"}
+        </span>
+      </h2>
       <svg
         ref={svgRef}
         class="instruction-canvas__svg"

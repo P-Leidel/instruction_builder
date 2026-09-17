@@ -482,6 +482,26 @@ button {
   /* The clamped min-width on .instruction-canvas__svg (below) can exceed a
      narrow mobile container - scroll horizontally rather than overflow the page. */
   overflow-x: auto;
+  /* Without a cap, this card stretches to fill its grid column (up to
+     `.app__main`'s full middle-column width) while .instruction-canvas__svg
+     inside it tops out at 960px - on a wide viewport that left the card's
+     background/border trailing off well past the SVG's actual right edge.
+     Capping the card at the SVG's own max (960px) plus this card's own
+     padding/border keeps the two in step; margin-inline centers the card in
+     any leftover column space once it hits that cap, rather than leaving it
+     flush left with the same dead space just moved outside the card. */
+  /* `width: min(...)` rather than `max-width` + default `width: auto`:
+     an auto-margin on a grid item with an auto width disables stretch
+     sizing entirely and falls back to a fit-content/shrink-to-fit size -
+     which can't be computed sensibly here, since .instruction-canvas__svg's
+     own width is itself a percentage of *this* box, a circular dependency
+     that (confirmed by driving the app) collapsed the card to a width far
+     narrower than even the SVG's own 480px floor. An explicit `width` value
+     is never "auto", so the item keeps its normal grid-area-resolved,
+     non-circular sizing, and the auto margins just center whatever that
+     resolves to. */
+  width: min(100%, calc(960px + 2rem + 2px));
+  margin-inline: auto;
 }
 
 .step-details,
@@ -506,6 +526,12 @@ button {
   margin: 0 0 0.75rem;
   font-size: 1rem;
 }
+
+/* .instruction-canvas__heading-time/-title (the document's own title,
+   optionally prefixed by the sum of every step's displayedTime) carry no
+   styling of their own - same "just a selectable sub-span of the heading
+   text" role as .instruction-canvas__step-time plays inside a step's title,
+   see that class's own comment below. */
 
 /* Step details */
 
@@ -553,6 +579,26 @@ button {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+}
+
+/* Collapsed by default (see StepDetails.tsx) so live-adding tokens doesn't
+   grow this list and push the TokenDetails panel further down the column.
+   A plain <details>/<summary> rather than a hand-rolled toggle - its native
+   marker/keyboard handling covers this section's sole purpose (a keyboard-
+   only path to select a token) for free. */
+.step-details__tokens-disclosure {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.step-details__tokens-disclosure > summary {
+  cursor: pointer;
+}
+
+.step-details__tokens-disclosure > summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .step-details__token-list {

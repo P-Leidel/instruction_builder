@@ -255,6 +255,24 @@ own doc comment), which also let "+ Time" and "+ Quantity" fit on one line
 in `TimeAndQuantityRow` without wrapping, fixing a second report for free.
 See
 [phase-3/progress/task-30-user-feedback-fixes-4.md](./phase-3/progress/task-30-user-feedback-fixes-4.md).
+A fifth same-day pass, settled via `/mattpocock-skills:grill-me`, covered
+three reports about the canvas heading: it now mirrors
+`document.value.meta.title` read-only (matching the browser tab) instead of
+a static "Instructions" label, gained a document-level total time
+(`sumDurations` over every step's `stepDisplayedTime`) rendered as
+`{time} - {title}` the same way a step's own duration already renders next
+to its title, and the canvas backdrop was capped to the SVG's actual width
+at wide viewports instead of overflowing to its right - catching and fixing
+a CSS Grid shrink-to-fit sizing bug in the first cap attempt during
+verification, before the user ever saw it. See
+[phase-3/progress/task-30-user-feedback-fixes-5.md](./phase-3/progress/task-30-user-feedback-fixes-5.md).
+A sixth same-day pass, also grilled first, made `StepDetails`' "Tokens in
+this step" list - kept only as a keyboard-accessibility affordance, since
+the canvas's own token chips are pointer/touch-only - collapse into a
+native `<details>`/`<summary>`, collapsed by default and resetting per
+step, so live-adding tokens to a step no longer pushes Token details down
+the column. See
+[phase-3/progress/task-30-user-feedback-fixes-6.md](./phase-3/progress/task-30-user-feedback-fixes-6.md).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
@@ -332,7 +350,7 @@ as "untitled-instructions.\<ext\>" because no UI lets the user set
 | 27 | Add Document Title UI | ✅ |
 | 28 | UI Polish Pass | ✅ |
 | 29 | Publish MVP | ✅ (live at <https://instructionbuilder-seven.vercel.app>) |
-| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), and [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md) feedback passes shipped) |
+| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), and [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md) feedback passes shipped) |
 | 31 | Refine UX | Not started |
 
 See [phase-3/progress/README.md](./phase-3/progress/README.md) for detail

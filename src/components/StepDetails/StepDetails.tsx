@@ -26,6 +26,12 @@ const DESCRIPTION_MAX_LENGTH = 249;
  * panel; the canvas's own SVG token chips remain pointer/touch-only, same as
  * before - so this list stays even though it no longer shows a description,
  * since it's still the only way a keyboard user can select a token at all.
+ *
+ * The list sits inside a native `<details>`, collapsed by default: adding
+ * tokens live otherwise grows this list and pushes the separate TokenDetails
+ * panel further down the same column. It doesn't force itself open when a
+ * token here is selected - selection is already visible on the canvas, so a
+ * keyboard user who wants this list just opens it themselves.
  */
 export function StepDetails() {
   const step = selectedStep.value;
@@ -77,28 +83,39 @@ export function StepDetails() {
       />
 
       <div class="step-details__tokens">
-        <span class="step-details__label">Tokens in this step</span>
         {step.tokens.length === 0 ? (
-          <p class="step-details__empty">No tokens yet - add some from the panel on the right.</p>
+          <>
+            <span class="step-details__label">Tokens in this step</span>
+            <p class="step-details__empty">No tokens yet - add some from the panel on the right.</p>
+          </>
         ) : (
-          <ul class="step-details__token-list">
-            {step.tokens.map((token) => {
-              const isSelected = token.id === selectedTokenId.value;
-              return (
-                <li key={token.id} class="step-details__token">
-                  <button
-                    type="button"
-                    class={`step-details__token-button${isSelected ? " step-details__token-button--selected" : ""}`}
-                    aria-current={isSelected ? "true" : undefined}
-                    onClick={() => selectToken(step.id, token.id)}
-                  >
-                    <Icon iconId={token.iconId} size={18} />
-                    <span class="step-details__token-label">{token.label ?? token.iconId}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          /* `key={step.id}`, like DurationField above: without it, Preact
+             reuses this <details> across a step switch and its open/closed
+             state leaks from the previously selected step into whichever
+             step is selected now, instead of resetting to collapsed. */
+          <details key={step.id} class="step-details__tokens-disclosure">
+            <summary class="step-details__label">
+              Tokens in this step ({step.tokens.length})
+            </summary>
+            <ul class="step-details__token-list">
+              {step.tokens.map((token) => {
+                const isSelected = token.id === selectedTokenId.value;
+                return (
+                  <li key={token.id} class="step-details__token">
+                    <button
+                      type="button"
+                      class={`step-details__token-button${isSelected ? " step-details__token-button--selected" : ""}`}
+                      aria-current={isSelected ? "true" : undefined}
+                      onClick={() => selectToken(step.id, token.id)}
+                    >
+                      <Icon iconId={token.iconId} size={18} />
+                      <span class="step-details__token-label">{token.label ?? token.iconId}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
         )}
       </div>
     </div>
