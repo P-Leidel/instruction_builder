@@ -35,9 +35,16 @@ interface ExportStep extends StepBounds {
  * serialize the live SVG node itself; this reads its step groups' own
  * `transform`/background-rect `height` instead of calling
  * `computeCanvasLayout` a second time with a possibly-stale `isDesktop`).
+ *
+ * Selects `[data-step-index]`, not `[data-step-id]` - `TokenChip` also
+ * carries `data-step-id` (for `pointer-drag.ts`'s drop-target resolution),
+ * so that selector would match every token group too, feeding pagination a
+ * pile of spurious zero-height "step" entries at each token's own local
+ * `transform` position. `data-step-index` is the attribute already unique
+ * to a step group (see `pointer-drag.ts`'s `resolveStepDropIndex`).
  */
 function readStepBounds(svg: SVGSVGElement): ExportStep[] {
-  const groups = Array.from(svg.querySelectorAll<SVGGElement>("[data-step-id]"));
+  const groups = Array.from(svg.querySelectorAll<SVGGElement>("[data-step-index]"));
   return groups
     .map((group) => {
       const translateMatch = /translate\(\s*[-\d.]+\s*,\s*([-\d.]+)\s*\)/.exec(

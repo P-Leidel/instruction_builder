@@ -275,6 +275,42 @@ task, which shipped keyboard alternatives for step reordering and token
   of reserving its slot unconditionally.
 - **First noted:** 2026-09-14.
 
+## PDF pagination selector fix has no driver regression test yet
+
+- **What it is:** `pdf-export.ts`'s `readStepBounds()` was selecting
+  `[data-step-id]`, an attribute both step groups and token groups carry,
+  so token groups could be read as spurious "step" entries and corrupt PDF
+  pagination on some documents - fixed by switching to `[data-step-index]`
+  (step groups only). See
+  [fixed-issues/pdf-pagination-step-bounds-selector-collision.md](./fixed-issues/pdf-pagination-step-bounds-selector-collision.md)
+  for the full root cause and fix. The fix itself is shipped and verified
+  by `lint`/`typecheck`/`test`/`build`; what's missing is an automated
+  regression test proving this specific bug can't come back.
+- **Why it's not fixed:** the obvious approach - strengthen the driver's
+  existing multi-page PDF check
+  (`.claude/skills/run-instruction-builder/driver.mjs`'s
+  `PDF_EXPORT_PRODUCES_MULTIPLE_PAGES`, which imports an 18-step/
+  4-tokens-per-step throwaway document) - doesn't work with that document
+  as it stands. It's maximally uniform (every step the same height, evenly
+  spaced), so the corrupted token entries the bug introduces get absorbed
+  into page 1's packing slack without ever shifting a real page-break
+  boundary: a byte-level diff confirmed the pre-fix and post-fix code
+  produce an *identical* multi-page PDF for this document, down to every
+  content stream and transform, differing only in the embedded
+  `/CreationDate` timestamp. Neither a page-count assertion nor a
+  step-title-text assertion (both tried) can distinguish buggy from fixed
+  output through a document that doesn't expose the bug in the first
+  place. Adding a `jsdom`/`happy-dom` unit test for `readStepBounds()`
+  directly was considered and deliberately rejected (2026-09-17 grilling
+  session) as a bigger deviation from this project's established
+  convention that DOM-touching export code (`svg-export.ts`/`png-export.ts`/
+  `pdf-export.ts`) is covered by the real-browser driver, not Vitest.
+- **Revisit when:** someone designs a non-uniform pagination test document
+  (e.g. steps with varying token counts, so token-local `top` values vary
+  enough to plausibly cross real step-card boundaries) - that redesign is
+  itself a fresh scoping decision, not yet made.
+- **First noted:** 2026-09-17.
+
 ## Persistence: an edit within ~200ms of closing/reloading the tab can be lost
 
 - **What it is:** `state/persistence.ts` (task 12) debounces saves to
