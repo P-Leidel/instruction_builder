@@ -37,7 +37,7 @@ describe("migrate", () => {
     expect(() => migrate(doc)).toThrow(/missing a schemaVersion/);
   });
 
-  it.each(["title", "domain", "createdAt", "updatedAt"])(
+  it.each(["title", "domain", "createdAt"])(
     "rejects meta missing %s",
     (field) => {
       const doc = validDoc();

@@ -123,7 +123,6 @@ export interface InstructionMeta {
   /** e.g. "recipe", "assembly", "safety" — a free string until Phase 4 turns it into a content-pack id. */
   domain: string;
   createdAt: string; // ISO 8601
-  updatedAt: string; // ISO 8601
 }
 
 /**
@@ -142,14 +141,12 @@ export function newId(): string {
 
 /** Creates a blank document for a fresh session. Used by state/document.ts. */
 export function createEmptyDocument(): InstructionDocument {
-  const now = new Date().toISOString();
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     meta: {
       title: "Untitled instructions",
       domain: "recipe",
-      createdAt: now,
-      updatedAt: now,
+      createdAt: new Date().toISOString(),
     },
     steps: [createEmptyStep()],
   };

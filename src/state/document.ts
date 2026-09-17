@@ -198,18 +198,17 @@ function repairSelection(session: DocumentSession, doc: InstructionDocument): vo
  * always resetting to "no token selected" the way every other mutation does.
  */
 function restoreDocument(session: DocumentSession, doc: InstructionDocument): void {
-  session.document.value = { ...doc, meta: { ...doc.meta, updatedAt: new Date().toISOString() } };
+  session.document.value = doc;
   repairSelection(session, doc);
 }
 
 /**
- * Applies a steps update to the document and refreshes `meta.updatedAt`.
- * Every mutator below goes through this so "last edited" stays accurate
- * once Phase 2 persistence/export starts reading it, and so undo/redo
- * history (see `recordHistory` above) only needs one funnel point to watch.
- * `coalesce: true` marks the change as part of a continuous edit (free-text
- * typing) that should merge into the last history entry instead of pushing
- * its own - see the comment on `COALESCE_WINDOW_MS`.
+ * Applies a steps update to the document. Every mutator below goes through
+ * this so undo/redo history (see `recordHistory` above) only needs one
+ * funnel point to watch. `coalesce: true` marks the change as part of a
+ * continuous edit (free-text typing) that should merge into the last
+ * history entry instead of pushing its own - see the comment on
+ * `COALESCE_WINDOW_MS`.
  */
 function setSteps(
   session: DocumentSession,
@@ -217,11 +216,7 @@ function setSteps(
   options?: { coalesce?: boolean },
 ): void {
   recordHistory(session, options?.coalesce ?? false);
-  session.document.value = {
-    ...session.document.value,
-    steps,
-    meta: { ...session.document.value.meta, updatedAt: new Date().toISOString() },
-  };
+  session.document.value = { ...session.document.value, steps };
 }
 
 /**
@@ -357,7 +352,7 @@ function redoCore(session: DocumentSession): void {
  */
 function replaceDocumentCore(session: DocumentSession, doc: InstructionDocument): void {
   recordHistory(session, false);
-  session.document.value = { ...doc, meta: { ...doc.meta, updatedAt: new Date().toISOString() } };
+  session.document.value = doc;
   selectStepCore(session, doc.steps[0]?.id ?? null);
   session.copiedToken.value = null;
 }
@@ -539,15 +534,15 @@ function removeTokenFromStepCore(session: DocumentSession, stepId: string, token
  * export filename is derived from (`lib/download.ts`'s `slugify`) -
  * previously stuck at its creation-time default forever since nothing
  * wrote to it (see docs/known-issues.md's former "every export downloads
- * as untitled-instructions" entry). Mirrors `setSteps`'s coalescing/
- * `updatedAt` handling but for `meta` instead of `steps`, since `setSteps`
- * only ever replaces the steps array.
+ * as untitled-instructions" entry). Mirrors `setSteps`'s coalescing but for
+ * `meta` instead of `steps`, since `setSteps` only ever replaces the steps
+ * array.
  */
 function updateTitleCore(session: DocumentSession, title: string): void {
   recordHistory(session, true);
   session.document.value = {
     ...session.document.value,
-    meta: { ...session.document.value.meta, title, updatedAt: new Date().toISOString() },
+    meta: { ...session.document.value.meta, title },
   };
 }
 

@@ -118,10 +118,9 @@ export function migrate(doc: unknown): InstructionDocument {
     !isPlainObject(doc.meta) ||
     typeof doc.meta.title !== "string" ||
     typeof doc.meta.domain !== "string" ||
-    typeof doc.meta.createdAt !== "string" ||
-    typeof doc.meta.updatedAt !== "string"
+    typeof doc.meta.createdAt !== "string"
   ) {
-    fail("missing or invalid meta (title/domain/createdAt/updatedAt)");
+    fail("missing or invalid meta (title/domain/createdAt)");
   }
 
   if (!Array.isArray(doc.steps) || !doc.steps.every(isValidStep)) {

@@ -20,9 +20,9 @@ describe("createEmptyDocument", () => {
     expect(a.steps[0].id).not.toBe(b.steps[0].id);
   });
 
-  it("sets createdAt and updatedAt to the same initial timestamp", () => {
+  it("sets createdAt to a valid ISO 8601 timestamp", () => {
     const doc = createEmptyDocument();
-    expect(doc.meta.createdAt).toBe(doc.meta.updatedAt);
+    expect(new Date(doc.meta.createdAt).toISOString()).toBe(doc.meta.createdAt);
   });
 });
 
