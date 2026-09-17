@@ -315,6 +315,24 @@ against an 18-step document (3 correctly-paginated pages, down from the
 `window.print()` baseline's 4 with a blank leading page and two steps cut
 mid-card). See
 [phase-3/progress/task-30-user-feedback-fixes-7.md](./phase-3/progress/task-30-user-feedback-fixes-7.md).
+An eighth same-day pass responded to a direct icon-library expansion
+request (not a bug report): up to 12 new generic action tokens and up to
+15 new ingredient tokens, using a placeholder icon where no relevant one
+exists. Settled via `/mattpocock-skills:grill-me` after two rounds of
+sub-agent fact-finding against Lucide's actual ~2,098-icon set (rather
+than guessing which words would resolve to a real icon). 12 actions
+shipped, all with distinct real icons: Add, Remove, Wait, Turn, Attach,
+Detach, Repeat, Measure, Open, Close, Check, Adjust - generic instruction
+verbs, not cooking techniques, distinct from the existing 18 `action.*`
+tokens. 15 ingredients shipped too, but real icon coverage turned out thin
+- only Cherry, Chicken, Ham, and Wheat (which reuses Flour's existing
+`wheat` icon) had a literal Lucide match; Rice, Pasta, Butter, Honey,
+Chocolate, Mushroom, Corn, Avocado, Cucumber, Cabbage, and Yogurt reuse the
+same shared `genericFood` fallback already used for Garlic/Tomato/Potato/
+Cheese/Bread/Salt/Pepper/Sugar, per the user's own explicit
+"use placeholders" instruction, rather than substituting in prepared
+dishes/drinks that happened to have better icon coverage. See
+[phase-3/progress/task-30-user-feedback-fixes-8.md](./phase-3/progress/task-30-user-feedback-fixes-8.md).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
@@ -392,7 +410,7 @@ as "untitled-instructions.\<ext\>" because no UI lets the user set
 | 27 | Add Document Title UI | ✅ |
 | 28 | UI Polish Pass | ✅ |
 | 29 | Publish MVP | ✅ (live at <https://instructionbuilder-seven.vercel.app>) |
-| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), and [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md) feedback passes shipped) |
+| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md), and [eighth](./phase-3/progress/task-30-user-feedback-fixes-8.md) feedback passes shipped) |
 | 31 | Refine UX | Not started |
 
 See [phase-3/progress/README.md](./phase-3/progress/README.md) for detail

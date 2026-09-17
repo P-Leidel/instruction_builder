@@ -27,6 +27,17 @@
  * of them - decided 2026-09-14 rather than omitting these common staples
  * entirely. Each import is named for the token it's used in, not the icon
  * file, since a name like `flame` would be misleading once it's reused.
+ *
+ * 2026-09-17: expanded again with 12 generic action verbs (Add, Remove,
+ * Wait, Turn, Attach, Detach, Repeat, Measure, Open, Close, Check, Adjust -
+ * usable across cooking, assembly, and general procedures, not just
+ * recipes) and 15 more ingredients, per real user testing feedback. Lucide
+ * has literal icons for only 4 of the 15 (Cherry, Chicken, Ham, Wheat -
+ * Wheat reuses Flour's existing `wheat` icon, same reuse pattern as above);
+ * the rest (Rice, Pasta, Butter, Honey, Chocolate, Mushroom, Corn, Avocado,
+ * Cucumber, Cabbage, Yogurt) fall back to the same shared `genericFood`
+ * icon already used for Garlic/Tomato/etc. above, rather than being
+ * omitted.
  */
 import chop from "lucide-static/icons/utensils-crossed.svg?raw";
 import stir from "lucide-static/icons/refresh-cw.svg?raw";
@@ -79,6 +90,23 @@ import clock from "lucide-static/icons/clock.svg?raw";
 
 import hot from "lucide-static/icons/thermometer.svg?raw";
 import sharp from "lucide-static/icons/triangle-alert.svg?raw";
+
+import add from "lucide-static/icons/plus.svg?raw";
+import remove from "lucide-static/icons/minus.svg?raw";
+import wait from "lucide-static/icons/hourglass.svg?raw";
+import turn from "lucide-static/icons/rotate-cw.svg?raw";
+import attach from "lucide-static/icons/paperclip.svg?raw";
+import detach from "lucide-static/icons/unlink.svg?raw";
+import repeatAction from "lucide-static/icons/repeat.svg?raw";
+import measure from "lucide-static/icons/ruler.svg?raw";
+import open from "lucide-static/icons/door-open.svg?raw";
+import close from "lucide-static/icons/door-closed.svg?raw";
+import check from "lucide-static/icons/search-check.svg?raw";
+import adjust from "lucide-static/icons/sliders-horizontal.svg?raw";
+
+import cherry from "lucide-static/icons/cherry.svg?raw";
+import chicken from "lucide-static/icons/drumstick.svg?raw";
+import ham from "lucide-static/icons/ham.svg?raw";
 
 // Every Quantity (any amount+unit) and every duration (any d/h/m/s value)
 // reuses one icon each - the actual value is shown as text (see
@@ -135,6 +163,18 @@ const RAW_ICONS: Record<string, string> = {
   "action.chill": chill,
   "action.freeze": freeze,
   "action.serve": serve,
+  "action.add": add,
+  "action.remove": remove,
+  "action.wait": wait,
+  "action.turn": turn,
+  "action.attach": attach,
+  "action.detach": detach,
+  "action.repeat": repeatAction,
+  "action.measure": measure,
+  "action.open": open,
+  "action.close": close,
+  "action.check": check,
+  "action.adjust": adjust,
 
   "object.onion": onion,
   "object.egg": egg,
@@ -164,6 +204,21 @@ const RAW_ICONS: Record<string, string> = {
   "object.salt": genericFood,
   "object.pepper": genericFood,
   "object.sugar": genericFood,
+  "object.cherry": cherry,
+  "object.chicken": chicken,
+  "object.ham": ham,
+  "object.wheat": flour,
+  "object.rice": genericFood,
+  "object.pasta": genericFood,
+  "object.butter": genericFood,
+  "object.honey": genericFood,
+  "object.chocolate": genericFood,
+  "object.mushroom": genericFood,
+  "object.corn": genericFood,
+  "object.avocado": genericFood,
+  "object.cucumber": genericFood,
+  "object.cabbage": genericFood,
+  "object.yogurt": genericFood,
 
   "tool.pan": pan,
   "tool.knife": knife,
