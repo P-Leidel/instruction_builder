@@ -48,6 +48,17 @@ noted and deliberately left alone.
   is installed, and this is now the accepted, understood state rather than a
   gap - revisit alongside the same eventual Vite major upgrade, not in
   isolation.
+- **Operational guardrails while this stays deferred** (added 2026-09-17,
+  per an independent external re-check - see
+  [phase-3/reviews/check/audit-evaluation-2026-09-17.md](./phase-3/reviews/check/audit-evaluation-2026-09-17.md)):
+  don't bind `npm run dev` to anything other than localhost (no `--host`, no
+  exposing it on a shared/untrusted network) - the `esbuild` advisory above
+  is exactly "any website a developer visits can send the dev server
+  requests," so this matters while the server is actually running, not just
+  in principle - and never run `vitest --ui` for this project, since that's
+  the one mode the critical `@vitest/mocker` advisory actually requires to be
+  exploitable (`npm test` only ever runs `vitest run`, which doesn't start
+  that server). Neither guardrail requires any dependency change.
 - **First noted:** 2026-09-13.
 
 ## Design debt flagged by an external architecture audit, one item still deferred
@@ -102,59 +113,69 @@ five files actually touched. See
 [phase-2/progress/architecture-drag-drop-protocol-collapse.md](./phase-2/progress/architecture-drag-drop-protocol-collapse.md) for the full file list.
 The remaining item is still deliberately deferred:
 
-- **Token/attachment vocabulary enumerated in several places** -
-  `TokenCategory` (`model/instruction.ts`) is hand-copied into
-  `TOKEN_CATEGORIES` (`model/migrate.ts`) and `STEP_TOKEN_CATEGORIES`
-  (`TokenPicker.tsx`), and `AttachmentKind` (`state/document.ts`) is a
-  separate, narrower type covering just the two attachable categories. (A
-  2026-09-15 rework that folded "Add to token" into `TokenDetails` resolved
-  one sub-instance of this: an `ATTACHMENT_CATEGORIES` array in the
-  now-deleted `TokenAttachmentPicker.tsx` and an `ATTACHMENT_KINDS` array in
-  `TokenDetails.tsx` used to list the same two values in reversed order -
-  both arrays are gone now, since `TokenDetails`' Quantity/Warning rows are
-  two fixed, hardcoded rows rather than a mapped list, so that particular
-  drift can't recur.) Separately, a Quantity's amount and unit are still
-  fused into one display string at attach time
-  (`` `${amount} ${unit}` `` in `TokenDetails.tsx`'s `QuantityRow`), stored
-  only in that joined form - not as separate `amount`/`unit` fields on
-  `TokenAttachment`. A 2026-09-15 rework made `QuantityRow` mirror
-  `DurationField`'s collapsed/edit-toggle interaction, which closed two
-  concrete gaps this used to describe (editing an attached value pre-filled
-  the form via a `splitQuantity` helper that re-parsed the joined label,
-  and Save replaced the old value in place without a remove first), but the
-  underlying representation gap remained: `splitQuantity` was a best-effort
-  re-parse of a display string, not a real inverse of a structured value,
-  and silently fell back to defaults for anything it didn't recognize (e.g.
-  a value from an older schema or a future unit list change). **Resolved
-  2026-09-17:** a fresh architecture audit
-  ([phase-3/audits/2026-09-17-canvas-tokenchip-and-field-shape-review.html](./phase-3/audits/2026-09-17-canvas-tokenchip-and-field-shape-review.html))
-  re-surfaced this candidate - despite its own prior assessment rating it
-  weaker than the others - once `TimeAndQuantityRow`'s mutual-exclusion
-  coupling (added by the 2026-09-15 rework above) made `QuantityRow` a less
-  isolated place for it to keep living. `InstructionToken.quantity` changed
-  from the generic `TokenAttachment` to a new `QuantityAttachment`
-  (`{ iconId, label, amount, unit }`, mirroring how `DurationAttachment`
-  already carries its raw `seconds` alongside the formatted `label`),
-  `splitQuantity` was deleted, and a new `lib/quantity.ts` (mirroring
-  `lib/duration.ts`) holds `MIN_QUANTITY`/`MAX_QUANTITY`/`buildQuantity`.
-  See
-  [phase-3/progress/architecture-2026-09-17-collapsedfield-and-structured-quantity.md](./phase-3/progress/architecture-2026-09-17-collapsedfield-and-structured-quantity.md)
-  for the full writeup. The broader `TokenCategory`-duplication problem
-  this bullet opened with is unaffected by this fix and remains deferred to
+- **Token/attachment vocabulary enumerated in several places - still open,
+  deferred to Phase 4 task 32.** `TokenCategory` (`model/instruction.ts`) is
+  hand-copied into `TOKEN_CATEGORIES` (`model/migrate.ts`) and
+  `STEP_TOKEN_CATEGORIES` (`TokenPicker.tsx`), and `AttachmentKind`
+  (`state/document.ts`) is a separate, narrower type covering just the two
+  attachable categories. (A 2026-09-15 rework that folded "Add to token"
+  into `TokenDetails` resolved one sub-instance of this: an
+  `ATTACHMENT_CATEGORIES` array in the now-deleted `TokenAttachmentPicker.tsx`
+  and an `ATTACHMENT_KINDS` array in `TokenDetails.tsx` used to list the same
+  two values in reversed order - both arrays are gone now, since
+  `TokenDetails`' Quantity/Warning rows are two fixed, hardcoded rows rather
+  than a mapped list, so that particular drift can't recur.) This is
+  unaffected by the quantity-representation fix below and remains deferred to
   Phase 4 task 32 (Formalize the Content-Pack Shape), per the 2026-09-14
   Phase 3/4 reprioritization (see
-  [project-plan.md](./project-plan.md#implementation-plan)), not Phase 3.
-  A 2026-09-14 internal architecture review (see
+  [project-plan.md](./project-plan.md#implementation-plan)), not Phase 3. A
+  2026-09-14 internal architecture review (see
   [phase-3/audits/2026-09-14-architecture-review.html](./phase-3/audits/2026-09-14-architecture-review.html))
   sharpened this further: `units.ts`'s and `instruction.ts`'s own comments
   ("a non-food domain can offer a different unit list without this file's
   shape needing to change," "kept generic so Phase 4 content packs can
-  extend it without changing this interface") are each accurate about
-  their own narrow scope, but neither warns that `TokenCategory` itself,
-  or any of its hand-copied arrays above, are *not* part of that swappable
-  surface - a real domain swap touches code in several places, not just a
-  data file. Worth keeping in mind when task 32 is scoped, so it doesn't
-  start from a rosier picture than what's actually there.
+  extend it without changing this interface") are each accurate about their
+  own narrow scope, but neither warns that `TokenCategory` itself, or any of
+  its hand-copied arrays above, are *not* part of that swappable surface - a
+  real domain swap touches code in several places, not just a data file.
+  Worth keeping in mind when task 32 is scoped, so it doesn't start from a
+  rosier picture than what's actually there.
+- **Quantity amount/unit representation - Resolved 2026-09-17.**
+  `InstructionToken.quantity` is now a structured `QuantityAttachment`
+  (`{ iconId, label, amount, unit }`, mirroring how `DurationAttachment`
+  already carries its raw `seconds` alongside the formatted `label`), built
+  and validated by a new `lib/quantity.ts` (mirroring `lib/duration.ts`) via
+  `MIN_QUANTITY`/`MAX_QUANTITY`/`buildQuantity`. See
+  [phase-3/progress/architecture-2026-09-17-collapsedfield-and-structured-quantity.md](./phase-3/progress/architecture-2026-09-17-collapsedfield-and-structured-quantity.md)
+  for the full writeup, and
+  [phase-3/reviews/check/audit-evaluation-2026-09-17.md](./phase-3/reviews/check/audit-evaluation-2026-09-17.md)
+  for an independent 2026-09-17 re-check confirming the fix in source
+  (`QuantityForm.tsx` already falls back to `value?.amount ?? 1` /
+  `value?.unit ?? EU_FOOD_UNITS[0].value` for a pre-fix imported document, so
+  the only remaining gap is test coverage, not a code defect - see that
+  review's item 5 for the recommended regression test).
+  <details><summary>History (the fused-string representation this replaced)</summary>
+
+  Before this fix, a Quantity's amount and unit were fused into one display
+  string at attach time (`` `${amount} ${unit}` `` in `TokenDetails.tsx`'s
+  `QuantityRow`), stored only in that joined form - not as separate
+  `amount`/`unit` fields on `TokenAttachment`. A 2026-09-15 rework made
+  `QuantityRow` mirror `DurationField`'s collapsed/edit-toggle interaction,
+  which closed two concrete gaps this used to describe (editing an attached
+  value pre-filled the form via a `splitQuantity` helper that re-parsed the
+  joined label, and Save replaced the old value in place without a remove
+  first), but the underlying representation gap remained: `splitQuantity` was
+  a best-effort re-parse of a display string, not a real inverse of a
+  structured value, and silently fell back to defaults for anything it didn't
+  recognize (e.g. a value from an older schema or a future unit list change).
+  A fresh architecture audit
+  ([phase-3/audits/2026-09-17-canvas-tokenchip-and-field-shape-review.html](./phase-3/audits/2026-09-17-canvas-tokenchip-and-field-shape-review.html))
+  re-surfaced this candidate - despite its own prior assessment rating it
+  weaker than the others - once `TimeAndQuantityRow`'s mutual-exclusion
+  coupling (added by the 2026-09-15 rework above) made `QuantityRow` a less
+  isolated place for it to keep living, which is what prompted the fix above.
+  `splitQuantity` was deleted once `QuantityAttachment` shipped.
+  </details>
 - **First noted:** 2026-09-13.
 
 ## Two accessibility gaps deliberately left for a later pass

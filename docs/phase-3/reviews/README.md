@@ -16,6 +16,13 @@ per run (`YYYY-MM-DD-code-review.md`).
   implementation found; its one real finding (a `known-issues.md` entry left
   describing the pre-`QuantityAttachment` data shape) was since resolved -
   see that file's "Resolved 2026-09-17" note.
+- [2026-09-17-external-audit-evaluation.md](./2026-09-17-external-audit-evaluation.md)
+  independently re-verified two documents from a source external to this
+  project (archived as-received in [check/](./check/)) against the actual
+  source rather than trusting their own claims of having done so. No
+  incorrect claims found; produced a big/medium/small remediation plan and
+  applied its two small, doc-only fixes directly (a `known-issues.md`
+  clarity fix and a dev-server operational-guardrails note).
 
-Still accurate as a historical record of what this review found at the
+Still accurate as a historical record of what each review found at the
 time.
