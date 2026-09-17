@@ -11,10 +11,10 @@ pass, a pre-launch file/docs and UI audit, a follow-up canvas-specific
 architecture deepening, a step-management-onto-the-canvas UX rework, and an
 "Add to token"-into-Token-details UX rework), updated 2026-09-16 (a further
 architecture review remediation, plus title/description max length limits),
-updated 2026-09-17 (the `SvgButton` extraction, task 30's first six real
+updated 2026-09-17 (the `SvgButton` extraction, task 30's first seven real
 user feedback passes, the `CollapsedField`/structured-Quantity deepening,
-and an external audit evaluation that fixed `TokenPicker`'s tab-semantics
-gap)
+an external audit evaluation that fixed `TokenPicker`'s tab-semantics gap,
+and a PDF export rework that closed out Phase 4 task 37 early)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
 [../../project-plan.md](../../project-plan.md#implementation-plan)'s Phase 3
@@ -211,6 +211,20 @@ in place. Running the full Playwright driver for this also surfaced and
 fixed an unrelated stale check (`TOKEN_SELECTED_VIA_KEYBOARD`, a driver bug
 from the `<details>` collapse rework above, not a product regression). See
 [accessibility-tokenpicker-radiogroup.md](./accessibility-tokenpicker-radiogroup.md).
+A seventh same-day feedback pass, settled via `/mattpocock-skills:grill-me`
+(a full 12-question design-tree interview), covered two unrelated reports:
+token time was inflating a step's size the same way step time once did -
+fixed the same way, by making `canvas-layout.ts`'s per-row time-label band
+unconditional instead of only reserved for rows with a timed token - and
+PDF export broke across multiple pages (steps cut in half, a blank leading
+page). The PDF fix replaces `window.print()` with a real generated PDF
+(jsPDF + svg2pdf.js, DIN A4, reusing the same hidden export canvas SVG/PNG
+export already build), paginated by a new pure `lib/pdf-pagination.ts` that
+greedily packs whole steps per page and never splits one - pulling forward
+Phase 4 task 37 (Add Vector PDF Export (Stretch)) a full phase early, since
+no print-CSS fix could satisfy "never cut a step" for content painted
+inside one shared SVG. See
+[task-30-user-feedback-fixes-7.md](./task-30-user-feedback-fixes-7.md).
 
 ## What shipped
 
@@ -231,14 +245,14 @@ One file per task (or per notable pass), in task-number order:
 | — | Architecture: 2026-09-16 review remediation (`resolveTokenPointerOutcome` names the select/drag decision in `lib/pointer-drag.ts`; `attachToSelectedToken` deleted from `state/document.ts`) | [architecture-2026-09-16-review-remediation.md](./architecture-2026-09-16-review-remediation.md) |
 | — | Title/description max length limits (step and token Title capped at 50 characters, step Details and token Notes at 249) | [title-and-description-max-length.md](./title-and-description-max-length.md) |
 | — | Architecture: extract `SvgButton` (six duplicated keyboard-activatable SVG `<g role="button">` blocks in `InstructionCanvas.tsx` unified into one component; driver gained Enter/Space coverage for four sites) | [architecture-svgbutton-extraction.md](./architecture-svgbutton-extraction.md) |
-| 30 | Test Real Users (in progress - six feedback passes shipped) | [task-30-user-feedback-fixes.md](./task-30-user-feedback-fixes.md), [task-30-user-feedback-fixes-2.md](./task-30-user-feedback-fixes-2.md), [task-30-user-feedback-fixes-3.md](./task-30-user-feedback-fixes-3.md), [task-30-user-feedback-fixes-4.md](./task-30-user-feedback-fixes-4.md), [task-30-user-feedback-fixes-5.md](./task-30-user-feedback-fixes-5.md), [task-30-user-feedback-fixes-6.md](./task-30-user-feedback-fixes-6.md) |
+| 30 | Test Real Users (in progress - seven feedback passes shipped) | [task-30-user-feedback-fixes.md](./task-30-user-feedback-fixes.md), [task-30-user-feedback-fixes-2.md](./task-30-user-feedback-fixes-2.md), [task-30-user-feedback-fixes-3.md](./task-30-user-feedback-fixes-3.md), [task-30-user-feedback-fixes-4.md](./task-30-user-feedback-fixes-4.md), [task-30-user-feedback-fixes-5.md](./task-30-user-feedback-fixes-5.md), [task-30-user-feedback-fixes-6.md](./task-30-user-feedback-fixes-6.md), [task-30-user-feedback-fixes-7.md](./task-30-user-feedback-fixes-7.md) |
 | — | Architecture: `CollapsedField<T>` extraction (DurationField/QuantityRow's duplicated collapsed/popover chrome unified) plus structured Quantity (`QuantityAttachment` replaces `splitQuantity`'s reverse-parse) | [architecture-2026-09-17-collapsedfield-and-structured-quantity.md](./architecture-2026-09-17-collapsedfield-and-structured-quantity.md) |
 | — | External audit evaluation (`reviews/check/` claims independently re-verified; two doc-only fixes applied; remediation plan produced) plus `TokenPicker`'s tab-semantics fix (`role="radiogroup"`/`role="radio"` with wrapping arrow-key nav) and a stale driver check fixed along the way | [reviews/2026-09-17-external-audit-evaluation.md](../reviews/2026-09-17-external-audit-evaluation.md), [accessibility-tokenpicker-radiogroup.md](./accessibility-tokenpicker-radiogroup.md) |
 | 31 | Refine UX | *not started* |
 
 ## Verification
 
-- `npm run lint`, `npm run typecheck`, `npm test` (131 tests - the
+- `npm run lint`, `npm run typecheck`, `npm test` (135 tests - the
   pre-launch audit only updated 3 existing `duration.test.ts` assertions'
   expected strings for the new human-readable format; the canvas deepening
   added 1 net new case to `canvas-layout.test.ts` while porting the rest
@@ -258,8 +272,11 @@ One file per task (or per notable pass), in task-number order:
   `TOKEN_CATEGORY_ARROW_KEY_NAV_WORKS` check, plus a stale
   `TOKEN_SELECTED_VIA_KEYBOARD` check fixed); the `CollapsedField`/structured-
   Quantity deepening added none either - same kind of component/data-shape
-  refactor with no new branchable logic), and `npm run build` all pass
-  cleanly.
+  refactor with no new branchable logic; the seventh feedback pass's token-
+  time fix rewrote `canvas-layout.test.ts`'s "token time labels" describe
+  block, net -2, and its PDF pagination rework added a new
+  `pdf-pagination.test.ts`, +6, for a net +4 that pass), and `npm run build`
+  all pass cleanly.
 - See each task's own file above for full verification detail
   (browser-driven checks, bundle size deltas, and the decisions made along
   the way).

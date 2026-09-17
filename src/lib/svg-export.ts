@@ -83,8 +83,12 @@ function bakeComputedStylesRecursive(
  * which matters both for opening the file directly and for PNG export
  * (task 16), which loads this markup into an `Image` and needs a real
  * natural size to rasterize from.
+ *
+ * Exported (not just used internally) so PDF export (task 17) can clone it
+ * once and then re-slice that single baked clone's `viewBox` per printed
+ * page, rather than re-baking styles against the live DOM once per page.
  */
-function cloneCanvasForExport(svg: SVGSVGElement): SVGSVGElement {
+export function cloneCanvasForExport(svg: SVGSVGElement): SVGSVGElement {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   const { width, height } = svg.viewBox.baseVal;
   clone.setAttribute("width", String(width));

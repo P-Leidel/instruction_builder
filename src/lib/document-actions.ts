@@ -4,6 +4,7 @@ import { exportDocumentAsJson, parseImportedDocument } from "./document-file";
 import { exportCanvasAsSvg } from "./svg-export";
 import { exportCanvasAsPng } from "./png-export";
 import { exportCanvasAsPdf } from "./pdf-export";
+import { sumDurations, stepDisplayedTime } from "./duration";
 
 /**
  * The export/import orchestration `App` used to own directly (five handler
@@ -79,16 +80,29 @@ export async function runPngExport(
 }
 
 /**
- * Task 17 (Print/PDF Export), baseline tier: opens the browser's print
- * dialog - "Save as PDF" is one of its built-in destinations on every
- * major browser/OS, which is what makes `window.print()` a legitimate MVP
- * PDF export rather than just a printing feature. What's on the printed
- * page is controlled entirely by the `@media print` rules in global.css,
- * not by anything here.
+ * Task 17 (Print/PDF Export), now on the jsPDF + svg2pdf.js "Phase 4
+ * stretch tier" (2026-09-17 remediation, replacing the `window.print()`
+ * baseline): serializes the same hidden, always-mounted read-only
+ * `InstructionCanvas` `svgElement` SVG/PNG export already use, paginated by
+ * `pdf-export.ts` into whole-step pages instead of relying on the browser's
+ * own (step-cutting, blank-page-prone) print pipeline. The title/total-time
+ * heading it draws on page 1 is computed here the same way
+ * `InstructionCanvas.tsx` computes its own on-screen heading, since that
+ * heading is a DOM sibling of the `<svg>` and never part of what gets
+ * serialized.
  */
-export function runPdfExport(doc: InstructionDocument): ExportResult {
-  exportCanvasAsPdf();
-  return { warning: incompleteStepsWarning(doc) };
+export async function runPdfExport(
+  svgElement: SVGSVGElement | null,
+  doc: InstructionDocument,
+): Promise<ExportResult> {
+  if (!svgElement) return {}; // the hidden export canvas hasn't mounted yet - shouldn't happen once past first render
+  try {
+    const totalTime = sumDurations(doc.steps.map(stepDisplayedTime));
+    await exportCanvasAsPdf(svgElement, doc.meta.title, totalTime?.label);
+    return { warning: incompleteStepsWarning(doc) };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not export a PDF." };
+  }
 }
 
 export type ImportFileResult =

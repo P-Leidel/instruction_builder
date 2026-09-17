@@ -739,27 +739,26 @@ const pngExportIsRasterizedAtPixelDensity =
 await page.screenshot({ path: path.join(OUT, "10-png-export-toast.png"), fullPage: true });
 await page.locator(".app__toast-dismiss").click();
 
-// Task 17 (Print/PDF Export): the baseline tier is just `window.print()`
-// (lib/pdf-export.ts) plus the @media print rules in global.css - no file
-// downloads, so there's nothing to save/inspect the way SVG/PNG have.
-// Two things worth confirming separately:
-//  (a) the button actually invokes `window.print()` - checked via the
-//      `beforeprint` event every browser fires around a real print, with
-//      no native OS print dialog to contend with in headless Chromium
-//      (Playwright's `dialog` event only covers alert/confirm/prompt/
-//      beforeunload, never `window.print()`'s native dialog).
-//  (b) the @media print rules produce the intended page - checked via
-//      Playwright's `emulateMedia`, which applies the same CSS a real
-//      print/"Save as PDF" would without opening any dialog: the toolbar
-//      and the whole editor grid hidden, and the hidden, always-mounted,
-//      read-only export canvas (the same one SVG/PNG export read from)
-//      switched from a 0x0 clipped box back into normal, visible flow.
-await page.evaluate(() => {
-  window.__printFired = false;
-  window.addEventListener("beforeprint", () => { window.__printFired = true; }, { once: true });
-});
-await page.getByRole("button", { name: "Export PDF", exact: true }).click();
-const pdfExportInvokedWindowPrint = await page.evaluate(() => window.__printFired);
+// Task 17 (Print/PDF Export), now the jsPDF + svg2pdf.js "Phase 4 stretch
+// tier" (2026-09-17 remediation, replacing the `window.print()` baseline):
+// the button downloads a real `.pdf` file directly, same mechanism as
+// SVG/PNG export above, so it's checked the same way (`page.waitForEvent
+// ("download")`) rather than the old `beforeprint`-event trick a
+// dialog-only, no-download `window.print()` call needed. Only a
+// single-page smoke check here, against the same small document SVG/PNG
+// export just used - a dedicated multi-page document further down
+// (PDF_EXPORT_PRODUCES_MULTIPLE_PAGES) is what actually exercises
+// pagination.
+const [pdfDownload] = await Promise.all([
+  page.waitForEvent("download"),
+  page.getByRole("button", { name: "Export PDF", exact: true }).click(),
+]);
+const pdfExportPath = path.join(OUT, "exported-canvas.pdf");
+await pdfDownload.saveAs(pdfExportPath);
+const pdfBuffer = fs.readFileSync(pdfExportPath);
+const isPdfSignatureValid = pdfBuffer.subarray(0, 5).toString("latin1") === "%PDF-";
+const pdfExportDownloadedValidPdf =
+  pdfDownload.suggestedFilename() === "untitled-instructions.pdf" && isPdfSignatureValid;
 const pdfToastText = await page.locator(".app__toast").textContent();
 const pdfExportWarnedAboutIncompleteSteps =
   expectedIncompleteCount > 0 &&
@@ -767,6 +766,15 @@ const pdfExportWarnedAboutIncompleteSteps =
   pdfToastText.includes(String(expectedIncompleteCount));
 await page.locator(".app__toast-dismiss").click();
 
+// The @media print rules in global.css still exist even though the button
+// above no longer uses `window.print()` - they're now a fallback purely
+// for a native Ctrl+P/File>Print bypassing the button (left as-is,
+// unsupported/undocumented - see the 2026-09-17 remediation grill's Q7).
+// Checked directly via `emulateMedia`, with no dialog and independent of
+// whatever the button does: the toolbar and editor grid hidden, and the
+// hidden, always-mounted, read-only export canvas (the same one SVG/PNG/
+// PDF export all read from) switched from a 0x0 clipped box back into
+// normal, visible flow.
 await page.emulateMedia({ media: "print" });
 const printLayout = await page.evaluate(() => {
   const toolbar = document.querySelector(".app__toolbar");
@@ -798,6 +806,73 @@ const printStylesheetIsolatesReadOnlyCanvas =
 
 // Remove the temporary empty step so the step count is back to what it was.
 await stepGroups.nth(2).locator(".instruction-canvas__step-remove").click();
+
+// PDF pagination (2026-09-17 remediation): the smoke check above only
+// proves Export PDF still downloads *a* valid PDF for a small document
+// that happens to fit on one page - it says nothing about pagination
+// itself. `lib/pdf-pagination.ts`'s `paginateSteps` (the actual page-break
+// logic: pack whole steps per page, never split one) is already
+// unit-tested in isolation (src/lib/pdf-pagination.test.ts), so this only
+// needs to confirm the real end-to-end pipeline - DOM bounds in, jsPDF +
+// svg2pdf.js out - genuinely produces more than one PDF page for a
+// document long enough to need it, the same way a prior live diagnostic
+// (before this fix) found an 18-step/4-tokens-per-step document produced
+// broken, step-splitting, blank-page-including multi-page output. Imported
+// as a throwaway document via the same hidden file input the real Import
+// tests below use, then undone right after so it doesn't affect anything
+// past this point.
+const summariesBeforePaginationTest = await stepTitles.allTextContents();
+const importFileInputForPagination = page.locator('input[type="file"]');
+const manyStepsDoc = {
+  schemaVersion: 1,
+  meta: {
+    title: "Pagination Test",
+    domain: "recipe",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  steps: Array.from({ length: 18 }, (_, stepIndex) => ({
+    id: `pagination-step-${stepIndex}`,
+    title: `Step ${stepIndex + 1}`,
+    tokens: Array.from({ length: 4 }, (_, tokenIndex) => ({
+      id: `pagination-step-${stepIndex}-token-${tokenIndex}`,
+      category: "action",
+      iconId: "chop",
+      label: `Token ${tokenIndex + 1}`,
+    })),
+  })),
+};
+await importFileInputForPagination.setInputFiles({
+  name: "pagination-test-import.json",
+  mimeType: "application/json",
+  buffer: Buffer.from(JSON.stringify(manyStepsDoc)),
+});
+await page.locator(".confirm-dialog").waitFor();
+await page.getByRole("button", { name: "Replace", exact: true }).click();
+await page.locator(".app__toast-dismiss").click();
+
+const [multiPagePdfDownload] = await Promise.all([
+  page.waitForEvent("download"),
+  page.getByRole("button", { name: "Export PDF", exact: true }).click(),
+]);
+const multiPagePdfPath = path.join(OUT, "exported-canvas-multipage.pdf");
+await multiPagePdfDownload.saveAs(multiPagePdfPath);
+const multiPagePdfText = fs.readFileSync(multiPagePdfPath).toString("latin1");
+// jsPDF's page objects are uncompressed text in the raw PDF bytes (no
+// stream compression enabled), so a plain regex over the whole file finds
+// every `/Type /Page` object - excluding `/Type /Pages` (the one page-tree
+// root object every PDF also has) via the negative lookahead.
+const multiPagePdfPageCount = (multiPagePdfText.match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
+const pdfExportProducesMultiplePages =
+  multiPagePdfText.startsWith("%PDF-") &&
+  multiPagePdfDownload.suggestedFilename() === "pagination-test.pdf" &&
+  multiPagePdfPageCount > 1;
+await page.screenshot({ path: path.join(OUT, "11b-pdf-export-multipage-doc.png"), fullPage: true });
+
+await page.keyboard.press("Control+z");
+const summariesAfterUndoingPaginationTest = await stepTitles.allTextContents();
+const paginationTestUndoRestoredDocument =
+  JSON.stringify(summariesAfterUndoingPaginationTest) === JSON.stringify(summariesBeforePaginationTest);
 
 // Task 19 (Import): a small valid document, imported via the hidden file
 // input (Playwright's setInputFiles fires the same `change` event a real
@@ -1048,9 +1123,13 @@ console.log("SVG_EXPORT_IS_SELF_CONTAINED_AND_STYLED=" + svgExportIsSelfContaine
 console.log("SVG_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + svgExportWarnedAboutIncompleteSteps);
 console.log("PNG_EXPORT_IS_RASTERIZED_AT_PIXEL_DENSITY=" + pngExportIsRasterizedAtPixelDensity);
 console.log("PNG_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + pngExportWarnedAboutIncompleteSteps);
-console.log("PDF_EXPORT_INVOKED_WINDOW_PRINT=" + pdfExportInvokedWindowPrint);
+console.log("PDF_EXPORT_DOWNLOADED_VALID_PDF=" + pdfExportDownloadedValidPdf);
 console.log("PDF_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + pdfExportWarnedAboutIncompleteSteps);
 console.log("PRINT_STYLESHEET_ISOLATES_READONLY_CANVAS=" + printStylesheetIsolatesReadOnlyCanvas);
+console.log(
+  "PDF_EXPORT_PRODUCES_MULTIPLE_PAGES=" + pdfExportProducesMultiplePages + " (page count: " + multiPagePdfPageCount + ")",
+);
+console.log("PAGINATION_TEST_UNDO_RESTORED_DOCUMENT=" + paginationTestUndoRestoredDocument);
 console.log("IMPORT_DIALOG_MENTIONS_STEP_COUNT=" + importDialogMentionsStepCount);
 console.log("IMPORT_UNDO_REDO_WORKED=" + importUndoRedoWorked);
 console.log("IMPORT_REJECTS_INVALID_FILE=" + importRejectsInvalidFile);

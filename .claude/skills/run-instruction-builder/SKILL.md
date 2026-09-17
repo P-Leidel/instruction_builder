@@ -1,6 +1,6 @@
 ---
 name: run-instruction-builder
-description: Build, start, and drive the Visual Instruction Builder Preact/Vite dev app in a real browser to check a UI change - screenshots the canvas/token-picker, exercises step/token select, category tabs in "Add to step", attaching a Quantity or Warning to a token via Token details' own fields and removing it (Quantity mirrors DurationField's collapsed/edit-toggle interaction, pre-filling from the current value on Edit and select-on-focus in its amount input; Warning stays an always-visible preset grid), changing an already-attached Quantity directly without removing it first, setting an independent duration on a token and a step via DurationField (and the step/token-switch-while-editing regression it once had), drag-and-drop (adding, moving, and reordering, including the live insertion-point marker), undo/redo (buttons and keyboard shortcuts, including that continuous typing coalesces into one undo step), JSON/SVG/PNG/PDF export and JSON import (including the incomplete-steps warning, the confirm-before-replace dialog, invalid-file rejection, that import goes through undo/redo too, that the downloaded SVG is self-contained with real colors baked in rather than just CSS classes, that the downloaded PNG is actually rasterized at its declared pixel density, and that Export PDF's print stylesheet isolates the hidden read-only canvas via `emulateMedia`), IndexedDB persistence across a reload (including a saved document with a mismatched schema version, seeded directly into IndexedDB), the token connector lines, the read-only preview toggle, an axe-core accessibility scan at several app states, keyboard-only step reordering and token selection, and the Import dialog's focus trap/Escape handling, and checks the console for errors. Also runs `npm test`, the Vitest unit suite covering the instruction model, the document session's undo/redo, and pure lib/ logic - and, via a separate `pwa-check.mjs` script against a real production build (not the dev server), the offline service worker: registration, runtime caching, and that the app actually still loads with no network at all. Use for "run the app," "screenshot the instruction builder," "check this UI change works," "does drag-and-drop work," "does token attachment work," "does step/token time work," "does undo/redo work," "does export/import work," "does SVG export look right," "does PNG export look right," "does print/PDF export work," "does persistence handle a bad/old save," "does the canvas render correctly," "does keyboard access/accessibility work," "does offline/PWA support work," or "run the unit tests."
+description: Build, start, and drive the Visual Instruction Builder Preact/Vite dev app in a real browser to check a UI change - screenshots the canvas/token-picker, exercises step/token select, category tabs in "Add to step", attaching a Quantity or Warning to a token via Token details' own fields and removing it (Quantity mirrors DurationField's collapsed/edit-toggle interaction, pre-filling from the current value on Edit and select-on-focus in its amount input; Warning stays an always-visible preset grid), changing an already-attached Quantity directly without removing it first, setting an independent duration on a token and a step via DurationField (and the step/token-switch-while-editing regression it once had), drag-and-drop (adding, moving, and reordering, including the live insertion-point marker), undo/redo (buttons and keyboard shortcuts, including that continuous typing coalesces into one undo step), JSON/SVG/PNG/PDF export and JSON import (including the incomplete-steps warning, the confirm-before-replace dialog, invalid-file rejection, that import goes through undo/redo too, that the downloaded SVG is self-contained with real colors baked in rather than just CSS classes, that the downloaded PNG is actually rasterized at its declared pixel density, that Export PDF downloads a real generated PDF (jsPDF + svg2pdf.js) that paginates a long document into multiple pages without cutting a step or leaving a blank page, and that the `@media print` stylesheet - now just an unsupported Ctrl+P fallback, independent of the Export PDF button - still isolates the hidden read-only canvas via `emulateMedia`), IndexedDB persistence across a reload (including a saved document with a mismatched schema version, seeded directly into IndexedDB), the token connector lines, the read-only preview toggle, an axe-core accessibility scan at several app states, keyboard-only step reordering and token selection, and the Import dialog's focus trap/Escape handling, and checks the console for errors. Also runs `npm test`, the Vitest unit suite covering the instruction model, the document session's undo/redo, and pure lib/ logic - and, via a separate `pwa-check.mjs` script against a real production build (not the dev server), the offline service worker: registration, runtime caching, and that the app actually still loads with no network at all. Use for "run the app," "screenshot the instruction builder," "check this UI change works," "does drag-and-drop work," "does token attachment work," "does step/token time work," "does undo/redo work," "does export/import work," "does SVG export look right," "does PNG export look right," "does print/PDF export work," "does persistence handle a bad/old save," "does the canvas render correctly," "does keyboard access/accessibility work," "does offline/PWA support work," or "run the unit tests."
 ---
 
 Paths below are relative to the project root (`instruction_builder/`).
@@ -168,20 +168,31 @@ the only one that needs the steps under "Run (agent path)".
    that are exactly the exported SVG's own width/height times the declared
    pixel density, confirming actual rasterization at that density rather
    than just "some PNG downloaded"; then clicks Export PDF (same temp
-   step, fourth format, fourth warning-toast check, dismissed
-   immediately since there's no file to inspect) and confirms two
-   things separately: a `beforeprint` listener attached before the
-   click fires (proving the button actually calls `window.print()` -
-   there's no downloaded file and no scriptable dialog for
-   `window.print()`'s native print dialog, unlike `alert`/`confirm`),
-   and, via `page.emulateMedia({ media: "print" })` (which applies the
-   same CSS a real print/"Save as PDF" would, no dialog involved), that
-   the toolbar and the whole editor grid are hidden while the hidden
-   export canvas is switched back into visible flow with its step
-   cards rendered and none of the editable canvas's remove-button
-   markup - screenshotted under that print-media emulation, then
-   restored to screen media before continuing. It removes the
-   temporary step again afterward. It then imports a small valid
+   step, fourth format, fourth warning-toast check) and confirms the
+   downloaded file (2026-09-17: a real generated PDF via jsPDF +
+   svg2pdf.js, not `window.print()` - see Gotchas) starts with the
+   `%PDF-` signature and downloads under the right filename, the same
+   `page.waitForEvent("download")` mechanism SVG/PNG export use. It
+   separately confirms, via `page.emulateMedia({ media: "print" })`
+   (which applies the same CSS a real print/"Save as PDF" would, no
+   dialog involved), that the `@media print` stylesheet - kept only as
+   an unsupported fallback for a user's own Ctrl+P/File>Print, entirely
+   independent of the Export PDF button now - still hides the toolbar
+   and the whole editor grid while switching the hidden export canvas
+   back into visible flow with its step cards rendered and none of the
+   editable canvas's remove-button markup - screenshotted under that
+   print-media emulation, then restored to screen media before
+   continuing. It removes the temporary step again afterward, then
+   imports a large throwaway 18-step document (4 tokens per step) the
+   same way the real Import tests below do, exports PDF again, and
+   counts `/Type /Page` objects straight out of the raw PDF bytes to
+   confirm pagination actually splits it into more than one page - with
+   no step cut across a page boundary and no blank page, the two things
+   `lib/pdf-pagination.ts`'s own unit tests already prove in isolation
+   for the pure algorithm, checked here end-to-end through the real
+   DOM-bounds-in/jsPDF-out pipeline - then undoes the import so the
+   document is back to what it was before this check ran. It then
+   imports a small valid
    document via the hidden file input (`setInputFiles`, which fires the same
    `change` event a real file picker would), confirms the confirm-before-
    replace dialog names the right step count, clicking Replace swaps the
@@ -239,9 +250,11 @@ the only one that needs the steps under "Run (agent path)".
    `SVG_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=...`,
    `PNG_EXPORT_IS_RASTERIZED_AT_PIXEL_DENSITY=...`,
    `PNG_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=...`,
-   `PDF_EXPORT_INVOKED_WINDOW_PRINT=...`,
+   `PDF_EXPORT_DOWNLOADED_VALID_PDF=...`,
    `PDF_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=...`,
    `PRINT_STYLESHEET_ISOLATES_READONLY_CANVAS=...`,
+   `PDF_EXPORT_PRODUCES_MULTIPLE_PAGES=...` (with the counted page
+   count), `PAGINATION_TEST_UNDO_RESTORED_DOCUMENT=...`,
    `IMPORT_DIALOG_MENTIONS_STEP_COUNT=...`, `IMPORT_UNDO_REDO_WORKED=...`,
    `IMPORT_REJECTS_INVALID_FILE=...`,
    `IMPORT_CANCEL_LEAVES_DOCUMENT_UNCHANGED=...`,
@@ -514,21 +527,37 @@ taken - watch the terminal output for the actual URL).
   a rasterization bug that silently fell back to 1x (or any other wrong
   scale) would still produce a valid, openable PNG, just the wrong size.
 
-- **`window.print()` has no downloaded file and no scriptable dialog to
-  wait on - test the CSS and the call separately.** Playwright's `dialog`
-  event only fires for `alert`/`confirm`/`prompt`/`beforeunload`, never
-  for `window.print()`'s native, OS-level print dialog, and headless
-  Chromium never actually shows that dialog at all. Two independent
-  checks stand in for it: attach a one-shot `beforeprint` listener via
-  `page.evaluate` *before* clicking "Export PDF" (every browser fires
-  `beforeprint`/`afterprint` around a real print call, dialog or not) to
-  confirm the button really invokes `window.print()`, and separately use
-  `page.emulateMedia({ media: "print" })` to apply the exact `@media
-  print` CSS a real print/"Save as PDF" would, with no dialog involved,
-  to confirm the *page* it would produce is correct. Don't forget to
-  `page.emulateMedia({ media: "screen" })` back afterward - a run that
-  skips this leaves every later screenshot rendered under print rules,
-  making everything past that point look broken.
+- **Export PDF downloads a real file now, checked the same way as SVG/PNG
+  - `window.print()` is gone from the button entirely (2026-09-17,
+  `task-30-user-feedback-fixes-7.md`).** `page.waitForEvent("download")`
+  plus a `%PDF-` signature check on the saved bytes is all "Export PDF"
+  needs now, same as every other export format - no more `beforeprint`
+  listener trick. The `@media print` stylesheet from the old baseline is
+  still real, but it's now purely an unsupported fallback for a user's own
+  Ctrl+P/File>Print, entirely disconnected from the button - checked
+  separately via `page.emulateMedia({ media: "print" })`, which applies the
+  exact CSS a real print/"Save as PDF" would with no dialog involved.
+  Don't forget to `page.emulateMedia({ media: "screen" })` back afterward -
+  a run that skips this leaves every later screenshot rendered under print
+  rules, making everything past that point look broken.
+- **A generated PDF's page count is readable straight out of the raw
+  bytes, no PDF-parsing library needed.** jsPDF writes each page as an
+  uncompressed `/Type /Page` object (no stream compression enabled), so
+  `pdfBuffer.toString("latin1").match(/\/Type\s*\/Page(?!s)/g)` over the
+  whole downloaded file counts real pages directly - the negative
+  lookahead excludes `/Type /Pages`, the one page-*tree* root object every
+  PDF also has, which would otherwise inflate the count by one.
+  `PDF_EXPORT_PRODUCES_MULTIPLE_PAGES` uses this against a dedicated
+  18-step/4-tokens-per-step throwaway document (imported the same way the
+  real Import tests further down do, then undone) to confirm pagination
+  genuinely splits long content into more than one page - `lib/
+  pdf-pagination.ts`'s own Vitest suite already proves the pure algorithm
+  never splits a step or leaves a blank page in isolation; this is the one
+  check that the real DOM-bounds-in/jsPDF-out pipeline does the same thing
+  end-to-end. Rendering the PDF's pages as images to eyeball step
+  boundaries directly would need `pdftoppm`/poppler-utils, which isn't
+  installed on this machine - not pursued, since the page-count check plus
+  the unit-tested algorithm together already cover the actual invariant.
 
 - **This file's own top-level `const URL = ...` (the dev server URL, from
   argv) shadows the global `URL` constructor for the rest of the module.**

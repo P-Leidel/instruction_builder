@@ -71,13 +71,19 @@ export const CONNECTOR_LEAD_OUT = 12;
 // Lucide's native viewBox is 24x24 - drawing at that size needs no rescale.
 export const ICON_DRAW_SIZE = 24;
 
-// Token-level duration label, drawn above a chip: a row only gets this extra
-// band when at least one of its tokens has its own `time`
-// (InstructionToken.time), and only that token's label actually renders
-// inside it - see computeRowStartYs below. A step's own duration (see
-// InstructionStep.time/stepDisplayedTime in lib/duration.ts) renders inline
-// before the step's title instead (InstructionCanvas.tsx), so it reserves no
-// layout room of its own here.
+// Token-level duration label, drawn above a chip - reserved for every row
+// unconditionally (see computeRowStartYs below), whether or not any token in
+// that row actually has its own `time` (InstructionToken.time) to show
+// there. It used to be reserved only for a row that actually had a timed
+// token, which meant a step's rendered height changed the moment someone
+// attached (or removed) a token's duration - the same class of bug a step's
+// own duration was already fixed to avoid (see stepDisplayedTime/lib/
+// duration.ts: a step's own time renders inline before its title instead,
+// in space that was already fixed regardless of data). A token chip has no
+// equivalent "already fixed" slot to borrow the way a step's title line
+// does, so here the fix is the opposite: make the reserved space itself
+// unconditional instead, so layout stops depending on which tokens happen
+// to have a time.
 export const CHIP_TIME_HEADER_HEIGHT = 14;
 
 // A step's left-edge control column (select badge, then drag handle, then
@@ -157,11 +163,12 @@ export interface ConnectorSegment {
 /**
  * The y (in step-local design units) where each row of chips starts,
  * indexed by row number - one entry per row, empty for a token-less step.
- * Ordinarily that's just `HEADER_HEIGHT + row * (CHIP_HEIGHT + CHIP_GAP)`,
- * but a row that contains at least one token with its own `time` reserves
- * an extra CHIP_TIME_HEADER_HEIGHT band above itself first - so every row's
- * start (and every row after it) shifts down by that band, not just the one
- * token that actually has a time. Not exported - see chipPosition's comment.
+ * Every row reserves a CHIP_TIME_HEADER_HEIGHT band above itself
+ * unconditionally, so `tokens` only decides row *count* (via chipsPerRow),
+ * never each row's own y - see CHIP_TIME_HEADER_HEIGHT's comment for why
+ * this stays unconditional rather than only reserving the band for rows
+ * that happen to have a timed token. Not exported - see chipPosition's
+ * comment.
  */
 function computeRowStartYs(tokens: InstructionToken[], chipsPerRow: number): number[] {
   if (tokens.length === 0) return [];
@@ -169,10 +176,7 @@ function computeRowStartYs(tokens: InstructionToken[], chipsPerRow: number): num
   const rowStartYs: number[] = [];
   let y = HEADER_HEIGHT;
   for (let row = 0; row < lines; row++) {
-    const start = row * chipsPerRow;
-    const end = Math.min(start + chipsPerRow, tokens.length);
-    const rowHasTime = tokens.slice(start, end).some((t) => t.time !== undefined);
-    if (rowHasTime) y += CHIP_TIME_HEADER_HEIGHT;
+    y += CHIP_TIME_HEADER_HEIGHT;
     rowStartYs.push(y);
     y += CHIP_HEIGHT + CHIP_GAP;
   }
@@ -318,7 +322,11 @@ export function insertionMarkerPosition(
   chipsPerRow: number,
 ): ChipPosition {
   if (chipPositions.length === 0) {
-    return { cx: 0, cy: HEADER_HEIGHT, col: 0, row: 0 };
+    // Matches computeRowStartYs' first row exactly (HEADER_HEIGHT + the
+    // unconditional CHIP_TIME_HEADER_HEIGHT band) - otherwise the marker
+    // would preview one y for an empty step's first drop, then the actual
+    // chip would land CHIP_TIME_HEADER_HEIGHT lower once dropped.
+    return { cx: 0, cy: HEADER_HEIGHT + CHIP_TIME_HEADER_HEIGHT, col: 0, row: 0 };
   }
   if (dropIndex < chipPositions.length) {
     return chipPositions[dropIndex];

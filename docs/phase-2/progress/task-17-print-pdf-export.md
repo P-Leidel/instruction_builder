@@ -3,6 +3,14 @@
 > 📌 **Doc status: CURRENT** — one file in the
 > [Phase 2 Progress Log](./README.md).
 
+> ⚠️ **Superseded 2026-09-17.** The `window.print()` baseline this file
+> describes was replaced by a real generated PDF (jsPDF + svg2pdf.js,
+> pulling Phase 4 task 37 forward early) after it turned out no print-CSS
+> fix could stop a step's card from being cut across a page boundary - see
+> [../../phase-3/progress/task-30-user-feedback-fixes-7.md](../../phase-3/progress/task-30-user-feedback-fixes-7.md).
+> This file is kept as-is below for the historical record of what task 17
+> originally shipped.
+
 - Ships the plan's baseline tier only, as specified: a dedicated `@media print` stylesheet plus `window.print()` - "Save as PDF" is a built-in destination in every major browser/OS print dialog, which is what makes this a legitimate MVP PDF export rather than just a printing feature. The vector-PDF stretch tier (jsPDF + svg2pdf.js) stays deferred to Phase 4 per the plan.
 - **Reuses the same hidden export canvas SVG/PNG export already read from**, rather than printing whatever the editor happens to be showing: `global.css`'s new `@media print` block hides `.app__toolbar`, `.app__main` (the whole editor grid or the preview canvas, whichever is active), toasts, the drag ghost, and the import dialog, then switches `.app__export-canvas` from its normal `position: absolute; width: 0; height: 0; overflow: hidden` clip back into plain visible flow for the duration of the print. The printed page is always that one clean, read-only rendering - no editing affordances, no toolbar chrome - regardless of whether the user was mid-edit or already in Preview mode when they clicked the button.
 - `lib/pdf-export.ts`'s `exportCanvasAsPdf()` is a single-line `window.print()` call, deliberately kept as its own module rather than inlined in `app.tsx` - it's the seam the Phase 4 stretch tier will swap out later without touching the toolbar button or its caller.

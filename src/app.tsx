@@ -56,15 +56,18 @@ async function handleExportPng(svgElement: SVGSVGElement | null): Promise<void> 
 }
 
 /**
- * Task 17 (Print/PDF Export), baseline tier: opens the browser's print
- * dialog - "Save as PDF" is one of its built-in destinations on every
- * major browser/OS, which is what makes `window.print()` a legitimate
- * MVP PDF export rather than just a printing feature. What's on the
- * printed page is controlled entirely by the `@media print` rules in
- * global.css, not by anything here.
+ * Task 17 (Print/PDF Export): serializes the same hidden, always-mounted
+ * read-only `InstructionCanvas` `svgElement` SVG/PNG export use (see their
+ * own comments above) into a real, paginated PDF file download - not
+ * `window.print()` any more (2026-09-17 remediation: see
+ * `lib/pdf-export.ts`'s own comment for why). A user who wants a physical
+ * copy prints the downloaded PDF from their own viewer, same as any other
+ * downloaded PDF; a native Ctrl+P/File>Print still falls back to this
+ * app's `@media print` rules (unchanged, left as an unsupported path - see
+ * the 2026-09-17 remediation grill's Q7).
  */
-function handleExportPdf(): void {
-  showExportResult(runPdfExport(document.value));
+async function handleExportPdf(svgElement: SVGSVGElement | null): Promise<void> {
+  showExportResult(await runPdfExport(svgElement, document.value));
 }
 
 /**
@@ -92,16 +95,18 @@ async function handleImportFileChange(event: Event): Promise<void> {
 
 /**
  * Task 27: keeps the browser tab title in sync with the document's own
- * `meta.title`, so the browser's native "Save as PDF" dialog (Export PDF,
- * task 17) suggests a filename that matches it instead of this app's
- * static title - the one export path `meta.title` couldn't reach before,
- * since `window.print()` has no filename of its own to derive (see
- * docs/known-issues.md's former "every export downloads as
- * untitled-instructions" entry). Uses `@preact/signals`' own `effect()`
- * (auto-tracks `document.value.meta.title`, reruns on every change)
- * rather than `useEffect`'s dependency array, since App doesn't otherwise
- * re-render on every document change - `effect()`'s disposer is returned
- * from `useEffect` so it's cleaned up the same way a normal effect would be.
+ * `meta.title`. Originally added so the browser's native "Save as PDF"
+ * dialog would suggest a matching filename for Export PDF - that path now
+ * downloads a `.pdf` directly via `slugify(meta.title)` instead (2026-09-17
+ * remediation, see `lib/pdf-export.ts`), so this effect's remaining reason
+ * to exist is the native Ctrl+P/File>Print fallback (`app.tsx`'s own
+ * `handleExportPdf` comment), which still goes through the browser's own
+ * dialog and still benefits from a matching tab title. Uses
+ * `@preact/signals`' own `effect()` (auto-tracks `document.value.meta.title`,
+ * reruns on every change) rather than `useEffect`'s dependency array, since
+ * App doesn't otherwise re-render on every document change - `effect()`'s
+ * disposer is returned from `useEffect` so it's cleaned up the same way a
+ * normal effect would be.
  */
 function useDocumentTitleSync(): void {
   useEffect(() => effect(() => {
@@ -181,13 +186,16 @@ function useHistoryKeyboardShortcuts(): void {
  * re-deriving anything - see `lib/svg-export.ts`'s
  * `rasterizeCanvasToPngBlob`.
  *
- * Task 17 (Print/PDF Export): that same hidden export canvas doubles as
- * the print source - `global.css`'s `@media print` block hides everything
- * else on the page (`.app__toolbar`, `.app__main`, toasts, dialogs) and
- * un-hides `.app__export-canvas` for the duration of the print, so
- * "Export PDF" (`window.print()`, `lib/pdf-export.ts`) prints the exact
- * same read-only rendering SVG/PNG export already use, rather than
- * whatever the editor happens to be showing.
+ * Task 17 (Print/PDF Export): "Export PDF" now serializes that same hidden
+ * export canvas's `svgElement` into a real, paginated PDF download
+ * (`lib/pdf-export.ts`, jsPDF + svg2pdf.js) exactly like SVG/PNG export do,
+ * rather than opening the browser's print dialog - see `handleExportPdf`'s
+ * own comment for why (2026-09-17 remediation). `global.css`'s `@media
+ * print` block still exists as a fallback for a native Ctrl+P/File>Print,
+ * which bypasses this button entirely and can't be intercepted from JS -
+ * that block still hides everything but `.app__export-canvas` for that
+ * unsupported path, even though the supported path (this button) no longer
+ * uses it at all.
  */
 export function App() {
   useHistoryKeyboardShortcuts();
@@ -253,7 +261,7 @@ export function App() {
           <button type="button" class="app__file-button" onClick={() => handleExportPng(getExportSvgElement())}>
             Export PNG
           </button>
-          <button type="button" class="app__file-button" onClick={handleExportPdf}>
+          <button type="button" class="app__file-button" onClick={() => handleExportPdf(getExportSvgElement())}>
             Export PDF
           </button>
           <button type="button" class="app__file-button" onClick={() => importInputRef.current?.click()}>

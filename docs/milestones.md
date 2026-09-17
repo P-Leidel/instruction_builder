@@ -293,6 +293,28 @@ stale check, `TOKEN_SELECTED_VIA_KEYBOARD`: a driver bug from the
 `<summary>` before trying to focus content inside it), not a product
 regression - confirmed by driving the real keyboard path directly. See
 [phase-3/progress/accessibility-tokenpicker-radiogroup.md](./phase-3/progress/accessibility-tokenpicker-radiogroup.md).
+A seventh same-day feedback pass, settled via `/mattpocock-skills:grill-me`
+(a full 12-question design-tree interview across several rounds), covered
+two unrelated reports: token time was inflating a step's size the same way
+step time once did, fixed the same way - `canvas-layout.ts`'s per-row
+time-label band is now reserved unconditionally instead of only for rows
+with a timed token - and PDF export broke across multiple pages (a step
+could be cut in half at a page boundary, and a stray blank page could
+appear). A live diagnostic confirmed CSS pagination can't fix this: every
+step is a `<g>` inside one shared `<svg>`'s own paint, never a block box in
+document flow, so `break-inside`/`page-break-*` has no boundary to see.
+The fix replaces `window.print()` with a real generated PDF - jsPDF +
+svg2pdf.js, DIN A4 (this app's target audience is European), reusing the
+same hidden export canvas SVG/PNG export already build - paginated by a
+new pure `lib/pdf-pagination.ts` that greedily packs whole steps per page
+and never splits one. This pulls Phase 4 task 37 (Add Vector PDF Export
+(Stretch)) forward a full phase early, since no print-CSS fix could have
+satisfied "never cut a step" for content painted inside one shared SVG.
+Verified with 6 new pagination unit tests plus a live Playwright run
+against an 18-step document (3 correctly-paginated pages, down from the
+`window.print()` baseline's 4 with a blank leading page and two steps cut
+mid-card). See
+[phase-3/progress/task-30-user-feedback-fixes-7.md](./phase-3/progress/task-30-user-feedback-fixes-7.md).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
@@ -328,7 +350,7 @@ interaction model. See [phase-1/status-report.md](./phase-1/status-report.md).
 | 14 | Implement Visual Validation | ✅ (the two rules already covered by the Phase 1 stub turned out to be the full applicable rule set; [phase-1/architecture.md](./phase-1/architecture.md)'s third rule, a numeric quantity `metadata` check, is superseded - not simply dropped - now that Quantity is a `TokenAttachment` with a fused display label rather than a token with numeric metadata - see below) |
 | 15 | Develop SVG Export | ✅ (also lifted the canvas's layout math into `lib/canvas-layout.ts`, per an external audit - see below) |
 | 16 | Develop PNG Export | ✅ (rasterizes the same SVG pipeline via an offscreen `<canvas>`, 2x pixel density) |
-| 17 | Implement Print/PDF Export | ✅ (baseline tier only - `window.print()` + `@media print`; vector PDF stretch tier deferred to Phase 4, per plan) |
+| 17 | Implement Print/PDF Export | ✅ (baseline tier shipped as `window.print()` + `@media print`, per plan; **superseded 2026-09-17** by task 37's vector PDF pulled forward early, once fixing a real multi-page bug report required it - see below) |
 | 18 | Implement JSON Export | ✅ (built ahead of 15–17, on request) |
 | 19 | Create Import System | ✅ (built ahead of 15–17, on request) |
 | 20 | Add Automated Testing | ✅ (Vitest, 107 tests over the instruction model/document session/pure `lib/` logic; export pipeline/persistence/components deliberately left to the Playwright driver - see [phase-2/plans/task-20-automated-testing-plan.md](./phase-2/plans/task-20-automated-testing-plan.md)) |
@@ -370,7 +392,7 @@ as "untitled-instructions.\<ext\>" because no UI lets the user set
 | 27 | Add Document Title UI | ✅ |
 | 28 | UI Polish Pass | ✅ |
 | 29 | Publish MVP | ✅ (live at <https://instructionbuilder-seven.vercel.app>) |
-| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), and [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md) feedback passes shipped) |
+| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), and [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md) feedback passes shipped) |
 | 31 | Refine UX | Not started |
 
 See [phase-3/progress/README.md](./phase-3/progress/README.md) for detail
@@ -385,7 +407,7 @@ as these tasks ship.
 | 34 | Build In-App Domain Switcher UI | Not started |
 | 35 | Create Theme System | Not started |
 | 36 | Continue Icon Library Expansion | Not started |
-| 37 | Add Vector PDF Export (Stretch) | Not started |
+| 37 | Add Vector PDF Export (Stretch) | ✅ (shipped early, from Phase 3 - see [phase-3/progress/task-30-user-feedback-fixes-7.md](./phase-3/progress/task-30-user-feedback-fixes-7.md)) |
 | 38 | Add Basic Gamification (Optional) | Not started |
 | 39 | Prepare Future Expansion | Not started |
 
