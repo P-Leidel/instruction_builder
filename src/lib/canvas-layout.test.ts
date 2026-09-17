@@ -293,6 +293,22 @@ describe("computeCanvasLayout", () => {
     expect(layout.layouts[0].isComplete).toBe(false);
   });
 
+  it("defers the persistent incomplete flag for an empty step, but not once it has a token", () => {
+    // shouldFlagIncomplete (2026-09-17 audit remediation, finding 5/item 10)
+    // mirrors model/validate.ts's shouldFlagIncompleteStep, called here where
+    // computeCanvasLayout already has the full validation result - a brand
+    // new step is `isComplete: false` but shouldn't flag itself before the
+    // user has added anything.
+    const empty = computeCanvasLayout([createEmptyStep()], true);
+    expect(empty.layouts[0].isComplete).toBe(false);
+    expect(empty.layouts[0].shouldFlagIncomplete).toBe(false);
+
+    const stepWithNoAction = { ...createEmptyStep(), tokens: [createToken("object", "onion")] };
+    const withToken = computeCanvasLayout([stepWithNoAction], true);
+    expect(withToken.layouts[0].isComplete).toBe(false);
+    expect(withToken.layouts[0].shouldFlagIncomplete).toBe(true);
+  });
+
   it("gives every step in the document one chip per row on mobile", () => {
     const step = {
       ...createEmptyStep(),

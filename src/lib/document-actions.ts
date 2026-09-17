@@ -4,7 +4,7 @@ import { exportDocumentAsJson, parseImportedDocument } from "./document-file";
 import { exportCanvasAsSvg } from "./svg-export";
 import { exportCanvasAsPng } from "./png-export";
 import { exportCanvasAsPdf } from "./pdf-export";
-import { sumDurations, stepDisplayedTime } from "./duration";
+import { documentTotalTime } from "./duration";
 
 /**
  * The export/import orchestration `App` used to own directly (five handler
@@ -97,7 +97,7 @@ export async function runPdfExport(
 ): Promise<ExportResult> {
   if (!svgElement) return {}; // the hidden export canvas hasn't mounted yet - shouldn't happen once past first render
   try {
-    const totalTime = sumDurations(doc.steps.map(stepDisplayedTime));
+    const totalTime = documentTotalTime(doc.steps);
     await exportCanvasAsPdf(svgElement, doc.meta.title, totalTime?.label);
     return { warning: incompleteStepsWarning(doc) };
   } catch (err) {

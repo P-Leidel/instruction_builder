@@ -1,4 +1,4 @@
-import { validateStep } from "../model/validate";
+import { validateStep, shouldFlagIncompleteStep } from "../model/validate";
 import { stepDisplayedTime } from "./duration";
 import type { InstructionStep, InstructionToken, DurationAttachment } from "../model/instruction";
 
@@ -123,6 +123,8 @@ export interface StepLayout {
   chipsPerRow: number;
   isComplete: boolean;
   issues: string[];
+  /** Whether the persistent "!" badge should render - see shouldFlagIncompleteStep (model/validate.ts). */
+  shouldFlagIncomplete: boolean;
   /** One entry per token, in order - where InstructionCanvas draws each chip. */
   chipPositions: ChipPosition[];
   /** One entry per consecutive token pair, in array order - see buildConnectors. */
@@ -375,6 +377,7 @@ export function computeCanvasLayout(steps: InstructionStep[], isDesktop: boolean
       chipsPerRow,
       isComplete: validation.isComplete,
       issues: validation.issues,
+      shouldFlagIncomplete: shouldFlagIncompleteStep(step, validation),
       chipPositions,
       connectors: buildConnectors(step.tokens.length, chipsPerRow, rowStartYs),
       // Filled in below, once canvasWidth (which depends on every step's

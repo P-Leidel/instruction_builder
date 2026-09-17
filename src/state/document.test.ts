@@ -179,6 +179,42 @@ describe("moveToken", () => {
 
     expect(session.document.value).toBe(before);
   });
+
+  it("is a no-op when dropped back exactly where it started (2026-09-17 audit remediation, finding 2/B5)", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const a = createToken("action", "a");
+    const b = createToken("action", "b");
+    sessionActions.addTokenToStep(session, stepId, a);
+    sessionActions.addTokenToStep(session, stepId, b);
+    const before = session.document.value;
+    const historyLength = session.past.value.length;
+
+    // [a, b] - a is already at index 0, so dropping it back at index 0
+    // shouldn't record a history entry or wipe redo.
+    sessionActions.moveToken(session, stepId, a.id, stepId, 0);
+
+    expect(session.document.value).toBe(before);
+    expect(session.past.value).toHaveLength(historyLength);
+  });
+
+  it("repairs selection when the currently-selected token moves to a different step (2026-09-17 audit remediation, finding 2/B5)", () => {
+    const session = createDocumentSession();
+    sessionActions.addStep(session);
+    const [step1, step2] = session.document.value.steps;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, step1.id, token);
+    sessionActions.selectToken(session, step1.id, token.id);
+
+    sessionActions.moveToken(session, step1.id, token.id, step2.id, 0);
+
+    // Before the fix, selectedStepId kept pointing at step1 (the token's old
+    // step) with no repair at all - repairSelection resolves it the same
+    // way restoreDocument does: step1 still exists, so it stays selected,
+    // but it no longer contains the moved token, so token selection clears.
+    expect(session.selectedStepId.value).toBe(step1.id);
+    expect(session.selectedTokenId.value).toBeNull();
+  });
 });
 
 describe("reorderSteps", () => {
@@ -222,6 +258,22 @@ describe("reorderSteps", () => {
     sessionActions.reorderSteps(session, 5, 0);
 
     expect(session.document.value).toBe(before);
+  });
+
+  it("is a no-op when dropped back exactly where it started (2026-09-17 audit remediation, finding 2/B5)", () => {
+    const session = createDocumentSession();
+    sessionActions.addStep(session);
+    sessionActions.addStep(session);
+    const before = session.document.value;
+    const historyLength = session.past.value.length;
+
+    // [s1, s2, s3] - drop-before index 1 (pre-removal) for s1 (index 0)
+    // resolves to its own current position, so this shouldn't record a
+    // history entry or wipe redo.
+    sessionActions.reorderSteps(session, 0, 1);
+
+    expect(session.document.value).toBe(before);
+    expect(session.past.value).toHaveLength(historyLength);
   });
 });
 
@@ -289,17 +341,61 @@ describe("attachments", () => {
     const token = createToken("action", "knife");
     sessionActions.addTokenToStep(session, stepId, token);
 
-    sessionActions.attachToToken(session, stepId, token.id, "warning", { iconId: "warn" });
+    sessionActions.attachToToken(session, stepId, token.id, { kind: "warning", value: { iconId: "warn" } });
     let attached = session.document.value.steps[0].tokens[0];
     expect(attached.warning).toEqual({ iconId: "warn" });
 
-    sessionActions.attachToToken(session, stepId, token.id, "warning", { iconId: "warn-2" });
+    sessionActions.attachToToken(session, stepId, token.id, { kind: "warning", value: { iconId: "warn-2" } });
     attached = session.document.value.steps[0].tokens[0];
     expect(attached.warning).toEqual({ iconId: "warn-2" });
 
     sessionActions.removeTokenAttachment(session, stepId, token.id, "warning");
     attached = session.document.value.steps[0].tokens[0];
     expect(attached.warning).toBeUndefined();
+  });
+
+  it("is a no-op when re-attaching an already-attached value (2026-09-17 audit remediation, finding 2/B5)", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, stepId, token);
+    sessionActions.attachToToken(session, stepId, token.id, { kind: "warning", value: { iconId: "warn" } });
+    const before = session.document.value;
+    const historyLength = session.past.value.length;
+
+    sessionActions.attachToToken(session, stepId, token.id, { kind: "warning", value: { iconId: "warn" } });
+
+    expect(session.document.value).toBe(before);
+    expect(session.past.value).toHaveLength(historyLength);
+  });
+
+  it("is a no-op when removing an attachment that isn't set", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, stepId, token);
+    const before = session.document.value;
+
+    sessionActions.removeTokenAttachment(session, stepId, token.id, "warning");
+
+    expect(session.document.value).toBe(before);
+  });
+
+  it("ties `kind` to its payload type at compile time (2026-09-17 audit remediation, finding 6/item 8)", () => {
+    // Regression test for the type-safety gap `TokenAttachmentSpec`
+    // (state/document.ts) closes: `kind: "quantity"` now requires a full
+    // `QuantityAttachment` (amount/unit included), not just any
+    // `TokenAttachment`-shaped object - this used to type-check silently.
+    // `@ts-expect-error` makes this a compile error *if the gap ever
+    // reopens* (e.g. `TokenAttachmentSpec` loosening back to a flat union) -
+    // `npm run typecheck`/`build` fail if the next line stops erroring.
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, stepId, token);
+
+    // @ts-expect-error - "quantity" requires a QuantityAttachment (amount/unit), not a bare TokenAttachment
+    sessionActions.attachToToken(session, stepId, token.id, { kind: "quantity", value: { iconId: "x" } });
   });
 });
 
@@ -335,7 +431,7 @@ describe("copyToken / pasteToken", () => {
     const stepId = session.document.value.steps[0].id;
     const token = createToken("action", "knife", "Chop");
     sessionActions.addTokenToStep(session, stepId, token);
-    sessionActions.attachToToken(session, stepId, token.id, "warning", { iconId: "warn" });
+    sessionActions.attachToToken(session, stepId, token.id, { kind: "warning", value: { iconId: "warn" } });
 
     sessionActions.copyToken(session, stepId, token.id);
 

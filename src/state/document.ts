@@ -21,6 +21,25 @@ import {
  */
 export type AttachmentKind = "quantity" | "warning";
 
+/**
+ * Ties an attachment's `kind` to its payload type at the type level - see
+ * docs/phase-3/reviews/2026-09-17-whole-codebase-audit-evaluation.md, finding
+ * 6/item 8. Before this, `attachToTokenCore` took `kind`/`attachment` as two
+ * independent parameters (`AttachmentKind` and a flat `TokenAttachment |
+ * QuantityAttachment`), so `attachToToken(id, id, "quantity", { iconId: "x"
+ * })` - a bare `TokenAttachment`, missing `amount`/`unit` - type-checked even
+ * though `"quantity"` requires a full `QuantityAttachment`; confirmed against
+ * `document.test.ts`, which called `attachToToken` with a bare
+ * `TokenAttachment` for `"warning"` with no compile error either way, but
+ * would now also fail to compile if it tried that for `"quantity"`. Only
+ * `attachToTokenCore` (the one call that carries a payload) uses this -
+ * `removeTokenAttachmentCore` takes a bare `AttachmentKind` still, since
+ * removal has no payload to mismatch.
+ */
+export type TokenAttachmentSpec =
+  | { kind: "quantity"; value: QuantityAttachment }
+  | { kind: "warning"; value: TokenAttachment };
+
 const MAX_HISTORY = 100;
 /**
  * Free-text fields (step/token title and notes) call their mutator on every
@@ -145,6 +164,31 @@ function recordHistory(session: DocumentSession, coalesce: boolean): void {
 }
 
 /**
+ * Re-resolves the session's selection against `doc`: keeps the currently
+ * selected step if it still exists there (falling back to the document's
+ * first step otherwise), and keeps the currently selected token only if
+ * it's still within that step - clearing it otherwise. Shared by
+ * `restoreDocument` (undo/redo, the "genuinely general repair" this was
+ * originally written for) and `moveTokenCore` below (2026-09-17 audit
+ * remediation, finding 2/B5): dragging the currently-selected token to a
+ * different step used to leave `selectedStepId` pointing at its old step
+ * with no repair at all, so `TokenDetails` and `StepDetails` each ended up
+ * reporting "not selected" for two different, both-wrong reasons (a `null`
+ * computed `selectedToken` in one, a stale-but-still-truthy
+ * `selectedTokenId` read directly in the other).
+ */
+function repairSelection(session: DocumentSession, doc: InstructionDocument): void {
+  const stepId = doc.steps.some((s) => s.id === session.selectedStepId.value)
+    ? session.selectedStepId.value
+    : doc.steps[0]?.id ?? null;
+  session.selectedStepId.value = stepId;
+  const step = doc.steps.find((s) => s.id === stepId);
+  session.selectedTokenId.value = step?.tokens.some((t) => t.id === session.selectedTokenId.value)
+    ? session.selectedTokenId.value
+    : null;
+}
+
+/**
  * Restores a history snapshot as the live document, re-resolving selection
  * against it rather than assigning `selectedStepId`/`selectedTokenId`
  * directly via `selectStepCore`/`selectTokenCore` (see the note on those
@@ -155,14 +199,7 @@ function recordHistory(session: DocumentSession, coalesce: boolean): void {
  */
 function restoreDocument(session: DocumentSession, doc: InstructionDocument): void {
   session.document.value = { ...doc, meta: { ...doc.meta, updatedAt: new Date().toISOString() } };
-  const stepId = doc.steps.some((s) => s.id === session.selectedStepId.value)
-    ? session.selectedStepId.value
-    : doc.steps[0]?.id ?? null;
-  session.selectedStepId.value = stepId;
-  const step = doc.steps.find((s) => s.id === stepId);
-  session.selectedTokenId.value = step?.tokens.some((t) => t.id === session.selectedTokenId.value)
-    ? session.selectedTokenId.value
-    : null;
+  repairSelection(session, doc);
 }
 
 /**
@@ -214,9 +251,47 @@ function insertToken(
 }
 
 /**
+ * True if `a`/`b` hold the same tokens in the same order - every element in
+ * both arrays is an existing token object (never cloned by `insertToken`'s
+ * slice/spread or `Array.filter`), so identity comparison per slot is enough.
+ * Used by `moveTokenCore`'s no-op guard below (2026-09-17 audit remediation,
+ * finding 2/B5): dropping a token back exactly where it started used to still
+ * record a history entry and wipe redo.
+ */
+function tokensEqual(a: InstructionToken[], b: InstructionToken[]): boolean {
+  return a.length === b.length && a.every((token, i) => token === b[i]);
+}
+
+/**
+ * Shallow value-equality for a token attachment - `TokenAttachment`/
+ * `QuantityAttachment` are both flat, primitive-only shapes (see
+ * model/instruction.ts), so comparing own-enumerable-key/value pairs is
+ * enough; no nested objects to recurse into. Used by `setTokenAttachment`'s
+ * no-op guard below (2026-09-17 audit remediation, finding 2/B5):
+ * re-attaching an already-attached warning/quantity used to still record a
+ * history entry and wipe redo.
+ */
+function attachmentsEqual(
+  a: TokenAttachment | QuantityAttachment | undefined,
+  b: TokenAttachment | QuantityAttachment | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const aEntries = Object.entries(a);
+  const bRecord = b as unknown as Record<string, unknown>;
+  return (
+    aEntries.length === Object.keys(b).length &&
+    aEntries.every(([key, value]) => bRecord[key] === value)
+  );
+}
+
+/**
  * Sets or clears one attachment kind on a token - at most one of each kind
  * at a time, so setting one where a value already exists replaces it,
- * rather than the token accumulating several of the same kind.
+ * rather than the token accumulating several of the same kind. No-ops
+ * (skipping `setSteps`, so no history entry and no redo wipe) when
+ * `attachment` already matches the token's current value for `kind` -
+ * finding 2/B5's guard against e.g. re-attaching an already-attached preset.
  */
 function setTokenAttachment(
   session: DocumentSession,
@@ -225,6 +300,10 @@ function setTokenAttachment(
   kind: AttachmentKind,
   attachment: TokenAttachment | QuantityAttachment | undefined,
 ): void {
+  const step = session.document.value.steps.find((s) => s.id === stepId);
+  const token = step?.tokens.find((t) => t.id === tokenId);
+  if (token && attachmentsEqual(token[kind], attachment)) return;
+
   setSteps(
     session,
     session.document.value.steps.map((step) =>
@@ -333,6 +412,19 @@ function addTokenToSelectedStepCore(session: DocumentSession, token: Instruction
  * Moves an existing token to `index` within `toStepId`, removing it from
  * `fromStepId` first - covers both reordering within a step (fromStepId ===
  * toStepId) and moving between steps, via a drag on the canvas (task 9).
+ *
+ * No-ops (skipping `setSteps`, so no history entry and no redo wipe) when
+ * `fromStepId === toStepId` and the drop resolves back to the token's
+ * current position - finding 2/B5's guard against dropping a token back
+ * exactly where it started. Moving between two different steps is always a
+ * real change (the token relocates either way), so that case skips the
+ * `tokensEqual` check.
+ *
+ * Also re-resolves selection afterward via `repairSelection` - finding
+ * 2/B5's fix for the token that was selected before the move no longer
+ * being found under its old step, with nothing correcting
+ * `selectedStepId`/`selectedTokenId` for it (see `repairSelection`'s own
+ * comment for the full bug).
  */
 function moveTokenCore(
   session: DocumentSession,
@@ -345,24 +437,28 @@ function moveTokenCore(
   const token = fromStep?.tokens.find((t) => t.id === tokenId);
   if (!token) return;
 
-  setSteps(
-    session,
-    session.document.value.steps.map((step) => {
-      if (step.id === fromStepId && step.id === toStepId) {
-        const fromIndex = step.tokens.findIndex((t) => t.id === tokenId);
-        const withoutToken = step.tokens.filter((t) => t.id !== tokenId);
-        const adjustedIndex = adjustIndexForRemoval(fromIndex, index);
-        return { ...step, tokens: insertToken(withoutToken, token, adjustedIndex) };
-      }
-      if (step.id === fromStepId) {
-        return { ...step, tokens: step.tokens.filter((t) => t.id !== tokenId) };
-      }
-      if (step.id === toStepId) {
-        return { ...step, tokens: insertToken(step.tokens, token, index) };
-      }
-      return step;
-    }),
-  );
+  let changed = fromStepId !== toStepId;
+  const steps = session.document.value.steps.map((step) => {
+    if (step.id === fromStepId && step.id === toStepId) {
+      const fromIndex = step.tokens.findIndex((t) => t.id === tokenId);
+      const withoutToken = step.tokens.filter((t) => t.id !== tokenId);
+      const adjustedIndex = adjustIndexForRemoval(fromIndex, index);
+      const tokens = insertToken(withoutToken, token, adjustedIndex);
+      if (!tokensEqual(tokens, step.tokens)) changed = true;
+      return { ...step, tokens };
+    }
+    if (step.id === fromStepId) {
+      return { ...step, tokens: step.tokens.filter((t) => t.id !== tokenId) };
+    }
+    if (step.id === toStepId) {
+      return { ...step, tokens: insertToken(step.tokens, token, index) };
+    }
+    return step;
+  });
+  if (!changed) return;
+
+  setSteps(session, steps);
+  repairSelection(session, session.document.value);
 }
 
 /**
@@ -375,6 +471,13 @@ function moveTokenCore(
  * `InstructionCanvas.tsx`'s drag handler is the one remaining direct caller,
  * since its drop index already comes out of `resolveStepDropIndex` in that
  * same pre-removal convention.
+ *
+ * No-ops (skipping `setSteps`, so no history entry and no redo wipe) when
+ * the drop resolves back to `fromIndex` - finding 2/B5's guard against
+ * dropping a step back exactly where it started. Removing the step at
+ * `fromIndex` and reinserting it at that same index reconstructs the
+ * original order exactly, so `clamped === fromIndex` is a precise stand-in
+ * for a full array-value-equality check, not just an approximation of one.
  */
 function reorderStepsCore(session: DocumentSession, fromIndex: number, toIndex: number): void {
   const steps = [...session.document.value.steps];
@@ -382,6 +485,7 @@ function reorderStepsCore(session: DocumentSession, fromIndex: number, toIndex: 
   const [moved] = steps.splice(fromIndex, 1);
   const adjustedToIndex = adjustIndexForRemoval(fromIndex, toIndex);
   const clamped = Math.max(0, Math.min(adjustedToIndex, steps.length));
+  if (clamped === fromIndex) return;
   steps.splice(clamped, 0, moved);
   setSteps(session, steps);
 }
@@ -508,10 +612,9 @@ function attachToTokenCore(
   session: DocumentSession,
   stepId: string,
   tokenId: string,
-  kind: AttachmentKind,
-  attachment: TokenAttachment | QuantityAttachment,
+  attachment: TokenAttachmentSpec,
 ): void {
-  setTokenAttachment(session, stepId, tokenId, kind, attachment);
+  setTokenAttachment(session, stepId, tokenId, attachment.kind, attachment.value);
 }
 
 function removeTokenAttachmentCore(

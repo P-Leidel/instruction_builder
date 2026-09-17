@@ -124,11 +124,18 @@ export async function initPersistence(): Promise<void> {
   }
 
   effect(() => {
-    pendingDoc = document.value;
+    // Read `document.value` unconditionally, even on a skipped run - an
+    // early return that never reads it would leave this effect subscribed
+    // to nothing, so it would never fire again on any future edit
+    // (`@preact/signals` effects only re-run on signals they actually read
+    // last time). `pendingDoc` is only armed with it below, so a skip never
+    // leaves a stale/empty doc sitting there for `flushPendingSave` to write.
+    const doc = document.value;
     if (skipNextAutosave) {
       skipNextAutosave = false;
       return;
     }
+    pendingDoc = doc;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(flushPendingSave, SAVE_DEBOUNCE_MS);
   });

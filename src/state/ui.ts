@@ -1,5 +1,6 @@
 import { signal } from "@preact/signals";
-import type { InstructionDocument, TokenCategory } from "../model/instruction";
+import type { InstructionDocument, InstructionStep, InstructionToken, TokenCategory } from "../model/instruction";
+import { copyToken } from "./document";
 
 /**
  * Phase 2 task 8 (Live Preview): a document-wide view mode, separate from
@@ -32,6 +33,18 @@ export interface Toast {
   tone: ToastTone;
 }
 export const toast = signal<Toast | null>(null);
+
+/**
+ * Copies `token` and shows the confirmation toast - the shared shape behind
+ * both TokenDetails' Copy button and the global Ctrl/Cmd+C shortcut
+ * (app.tsx), which used to each independently write out this same
+ * `copyToken` + toast sequence (2026-09-17 audit remediation, finding
+ * 4/item 11).
+ */
+export function copyTokenWithToast(step: InstructionStep, token: InstructionToken): void {
+  copyToken(step.id, token.id);
+  toast.value = { text: `Copied ${token.label || token.iconId}`, tone: "info" };
+}
 
 /**
  * A parsed, shape-validated file waiting on the user's explicit confirmation

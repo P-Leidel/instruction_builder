@@ -8,14 +8,14 @@ import {
   removeTokenAttachment,
   attachToToken,
   setTokenTime,
-  copyToken,
 } from "../../state/document";
-import { toast } from "../../state/ui";
+import { copyTokenWithToast } from "../../state/ui";
 import { SAMPLE_TOKENS } from "../../data/sample-tokens";
 import { Icon } from "../Icon/Icon";
 import { CollapsedField } from "../CollapsedField/CollapsedField";
 import { DurationField } from "../DurationField/DurationField";
 import { QuantityForm } from "./QuantityForm";
+import { MOD_KEY_LABEL } from "../../lib/platform";
 
 const TITLE_MAX_LENGTH = 18;
 const NOTE_MAX_LENGTH = 249;
@@ -64,7 +64,7 @@ function QuantityRow({
         <QuantityForm
           value={token.quantity}
           onSave={(next) => {
-            attachToToken(step.id, token.id, "quantity", next);
+            attachToToken(step.id, token.id, { kind: "quantity", value: next });
             close();
           }}
           onCancel={close}
@@ -150,7 +150,10 @@ function WarningRow({ step, token }: { step: InstructionStep; token: Instruction
               token.warning?.iconId === sample.iconId ? " token-picker__button--active" : ""
             }`}
             onClick={() =>
-              attachToToken(step.id, token.id, "warning", { iconId: sample.iconId, label: sample.label })
+              attachToToken(step.id, token.id, {
+                kind: "warning",
+                value: { iconId: sample.iconId, label: sample.label },
+              })
             }
           >
             <Icon iconId={sample.iconId} size={22} />
@@ -160,12 +163,6 @@ function WarningRow({ step, token }: { step: InstructionStep; token: Instruction
       </div>
     </div>
   );
-}
-
-/** Copy button's handler - also the keyboard `Ctrl+C` path's shared shape (see app.tsx). */
-function handleCopy(step: InstructionStep, token: InstructionToken): void {
-  copyToken(step.id, token.id);
-  toast.value = { text: `Copied ${token.label ?? token.iconId}`, tone: "info" };
 }
 
 /**
@@ -212,8 +209,8 @@ export function TokenDetails() {
         <button
           type="button"
           class="token-details__copy-button"
-          title="Copy (Ctrl+C)"
-          onClick={() => handleCopy(step, token)}
+          title={`Copy (${MOD_KEY_LABEL}+C)`}
+          onClick={() => copyTokenWithToast(step, token)}
         >
           Copy
         </button>

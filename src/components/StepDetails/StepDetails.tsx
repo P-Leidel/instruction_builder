@@ -10,6 +10,7 @@ import {
 } from "../../state/document";
 import { Icon } from "../Icon/Icon";
 import { DurationField } from "../DurationField/DurationField";
+import { MOD_KEY_LABEL } from "../../lib/platform";
 
 const TITLE_MAX_LENGTH = 50;
 const DESCRIPTION_MAX_LENGTH = 249;
@@ -68,7 +69,7 @@ export function StepDetails() {
         <button
           type="button"
           class="step-details__paste-button"
-          title="Paste (Ctrl+V)"
+          title={`Paste (${MOD_KEY_LABEL}+V)`}
           disabled={!copiedToken.value}
           onClick={() => pasteToken()}
         >
@@ -136,7 +137,7 @@ export function StepDetails() {
                       onClick={() => selectToken(step.id, token.id)}
                     >
                       <Icon iconId={token.iconId} size={18} />
-                      <span class="step-details__token-label">{token.label ?? token.iconId}</span>
+                      <span class="step-details__token-label">{token.label || token.iconId}</span>
                     </button>
                   </li>
                 );

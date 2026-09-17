@@ -97,7 +97,7 @@ export function TokenChip({
   isTokenSelected,
   readOnly,
 }: TokenChipProps) {
-  const label = token.label ?? token.iconId;
+  const label = token.label || token.iconId;
 
   return (
     <g

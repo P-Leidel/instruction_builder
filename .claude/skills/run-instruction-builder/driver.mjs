@@ -556,6 +556,47 @@ const undoRedoWorkedEndToEnd =
   keyboardShortcutsWork &&
   historyTestLeftStateUnchanged;
 
+// Copy/Paste tokens: Ctrl/Cmd+C copies the selected token, Ctrl/Cmd+V pastes
+// onto the selected step - the same actions as TokenDetails'/StepDetails'
+// own Copy/Paste buttons (see app.tsx's own comment). Never previously
+// exercised by this driver at all. Also the regression test for the
+// 2026-09-17 audit remediation (finding 4/item 11): the Copy button and the
+// Ctrl+C shortcut used to each independently write out `copyToken` + a
+// "Copied ..." toast; they now share one `copyTokenWithToast` (state/ui.ts)
+// - exercising both call paths here proves the shared function actually
+// wires up correctly from both places, not just that the source no longer
+// looks duplicated.
+await editableCanvas.locator(".instruction-canvas__badge").first().click();
+const tokenToCopy = editableCanvas.locator(".instruction-canvas__token").first();
+await tokenToCopy.click();
+await page.locator(".token-details__copy-button").click();
+const toastAfterCopyButtonClick = await page.locator(".app__toast").textContent();
+const copyButtonShowsToast = toastAfterCopyButtonClick.startsWith("Copied ");
+await page.locator(".app__toast-dismiss").click();
+
+const secondStepTokenCountBeforePaste = await stepGroups.nth(1).locator(".instruction-canvas__token").count();
+await editableCanvas.locator(".instruction-canvas__badge").nth(1).click(); // select step 2 (no token click - stays step-selected)
+await page.locator(".step-details__paste-button").click();
+const secondStepTokenCountAfterButtonPaste = await stepGroups.nth(1).locator(".instruction-canvas__token").count();
+const pasteButtonWorked = secondStepTokenCountAfterButtonPaste === secondStepTokenCountBeforePaste + 1;
+await page.keyboard.press("Control+z"); // undo the button paste, restoring step 2's token count
+
+// Same two actions again, but via the keyboard paths instead of the buttons.
+await editableCanvas.locator(".instruction-canvas__badge").first().click();
+await tokenToCopy.click();
+await page.keyboard.press("Control+c");
+const toastAfterCtrlC = await page.locator(".app__toast").textContent();
+const ctrlCShowsToast = toastAfterCtrlC.startsWith("Copied ");
+await page.locator(".app__toast-dismiss").click();
+
+await editableCanvas.locator(".instruction-canvas__badge").nth(1).click();
+await page.keyboard.press("Control+v");
+const secondStepTokenCountAfterCtrlVPaste = await stepGroups.nth(1).locator(".instruction-canvas__token").count();
+const ctrlVWorked = secondStepTokenCountAfterCtrlVPaste === secondStepTokenCountBeforePaste + 1;
+await page.keyboard.press("Control+z"); // undo the Ctrl+V paste too, leaving step 2 exactly as this block found it
+
+const copyPasteWorkedEndToEnd = copyButtonShowsToast && pasteButtonWorked && ctrlCShowsToast && ctrlVWorked;
+
 // Task 8 (Live Preview): toggling it swaps the editor for a read-only canvas.
 // Waits for `.app__main--preview` specifically, not `.instruction-canvas--readonly`
 // - since Task 15 (SVG Export) added a second, permanently-mounted, hidden,
@@ -573,6 +614,18 @@ const previewHidesEditingControls =
   (await editableCanvas.locator(".instruction-canvas__step-drag-handle").count()) === 0 &&
   (await editableCanvas.locator(".instruction-canvas__add-step").count()) === 0;
 await page.screenshot({ path: path.join(OUT, "06-preview-mode.png"), fullPage: true });
+
+// 2026-09-17 audit remediation, finding 4: Preview's read-only canvas never
+// unmounted app.tsx's global keydown listeners, so Ctrl+Z here used to
+// mutate the same document signal Preview is supposed to be a read-only
+// view of. `stepTitles` still resolves under Preview - StepCard renders the
+// same markup either way, just with `readOnly` set - so it's a valid probe
+// here too.
+const summariesBeforePreviewShortcutProbe = await stepTitles.allTextContents();
+await page.keyboard.press("Control+z");
+const shortcutsSuspendedInPreview =
+  JSON.stringify(await stepTitles.allTextContents()) === JSON.stringify(summariesBeforePreviewShortcutProbe);
+
 await page.locator(".app__preview-toggle").click();
 await page.waitForSelector(".instruction-canvas__add-step");
 
@@ -911,6 +964,19 @@ await page.keyboard.press("Tab");
 const focusWrappedBackToCancel = await page.evaluate(
   () => document.activeElement?.className === "confirm-dialog-cancel",
 );
+
+// 2026-09-17 audit remediation, finding 4: `useHistoryKeyboardShortcuts`
+// used to have no idea this dialog (or any confirm dialog) was open - every
+// key besides Escape/Tab bubbled past its own focus trap
+// (`dialog-focus-trap.ts`, which only handles those two) straight to
+// app.tsx's window-level listener, so Ctrl+Z could undo the document
+// sitting behind it. Probed here, in the same open-dialog window the
+// focus-trap check above already established, before Escape below closes
+// the dialog.
+await page.keyboard.press("Control+z");
+const undoSuspendedBehindImportDialog =
+  JSON.stringify(await stepTitles.allTextContents()) === JSON.stringify(summariesBeforeImportTest);
+
 await page.keyboard.press("Escape");
 const escapeClosedDialogWithNoChange =
   (await page.locator(".confirm-dialog").count()) === 0 &&
@@ -920,6 +986,31 @@ const importDialogTrapsFocusAndEscapeCloses =
   focusedReplaceAfterOneTab === "confirm-dialog-confirm" &&
   focusWrappedBackToCancel &&
   escapeClosedDialogWithNoChange;
+
+// NewDocumentConfirmDialog (task 28) - never previously exercised by this
+// driver at all. Reuses the same suspended-shortcuts guard
+// (app.tsx's keyboardShortcutsSuspended) as the Import dialog above, probed
+// here via Ctrl+V instead of Ctrl+Z so both window-level listeners
+// (useHistoryKeyboardShortcuts/useTokenClipboardKeyboardShortcuts) each get
+// their guard exercised at least once. `copiedToken` still holds the token
+// copied in the Copy/Paste block earlier in this file, so a real,
+// unguarded Ctrl+V here would visibly add a token.
+const tokenCountBeforeNewDocDialog = await editableCanvas.locator(".instruction-canvas__token").count();
+await page.getByRole("button", { name: "New", exact: true }).click();
+await page.locator(".confirm-dialog").waitFor();
+await page.keyboard.press("Control+v");
+const tokenCountAfterCtrlVBehindNewDocDialog = await editableCanvas.locator(".instruction-canvas__token").count();
+const pasteSuspendedBehindNewDocDialog = tokenCountAfterCtrlVBehindNewDocDialog === tokenCountBeforeNewDocDialog;
+await page.getByRole("button", { name: "Cancel", exact: true }).click();
+const newDocDialogCancelLeavesDocumentUnchanged =
+  (await page.locator(".confirm-dialog").count()) === 0 &&
+  JSON.stringify(await stepTitles.allTextContents()) === JSON.stringify(summariesBeforeImportTest);
+
+// Combines the three suspended-shortcuts probes above (Preview mode, the
+// Import dialog, the New Document dialog) into the one guard function
+// (app.tsx's keyboardShortcutsSuspended) they're all really testing.
+const keyboardShortcutsSuspendedBehindModals =
+  shortcutsSuspendedInPreview && undoSuspendedBehindImportDialog && pasteSuspendedBehindNewDocDialog;
 
 await importFileInput.setInputFiles({
   name: "import.json",
@@ -1087,6 +1178,62 @@ const autosaveResumesAfterRealEdit =
 const versionMismatchHandledSafely =
   versionMismatchShowsErrorToast && oldSaveNotClobberedOnLoad && autosaveResumesAfterRealEdit;
 
+// Sibling regression test for a second, worse bug in the same area (2026-09-17
+// audit remediation): the autosave effect used to arm `pendingDoc =
+// document.value` *before* checking `skipNextAutosave`, so even though the
+// debounced write was correctly skipped after a failed load, `pendingDoc` was
+// still left pointing at the throwaway empty document. `flushPendingSave`
+// (called directly from `visibilitychange`/`pagehide`, independent of the
+// debounce timer) doesn't check `skipNextAutosave` at all - it only checks
+// `pendingDoc !== undefined` - so hiding the tab any time before the user's
+// first real edit after a failed load silently overwrote the still-intact
+// old save with nothing. `versionMismatchHandledSafely` above can't catch
+// this: it checks storage immediately after reload (before any hide) and
+// only ever edits, never hides. This seeds a fresh corrupted record,
+// reloads, and instead of editing, simulates the tab being hidden - the
+// exact sequence the bug needed - then asserts the original record is still
+// on disk. Deliberately its own check (not folded into
+// versionMismatchHandledSafely above) so a failure here points at the hide
+// path specifically rather than conflating it with the toast/edit assertions.
+await page.waitForTimeout(300); // let the previous check's own autosave settle first
+
+const corruptedSaveDocForHideTest = {
+  schemaVersion: 2,
+  meta: { title: "From the future (hide test)", domain: "recipe", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  steps: [{ id: "future-step-hide", title: "Future step", tokens: [] }],
+};
+await page.evaluate((doc) => {
+  return new Promise((resolve, reject) => {
+    const openReq = indexedDB.open("keyval-store");
+    openReq.onsuccess = () => {
+      const db = openReq.result;
+      const tx = db.transaction("keyval", "readwrite");
+      tx.objectStore("keyval").put(doc, "instruction-builder:document");
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => reject(tx.error);
+    };
+    openReq.onerror = () => reject(openReq.error);
+  });
+}, corruptedSaveDocForHideTest);
+
+await page.reload({ waitUntil: "networkidle" });
+await page.waitForSelector(".instruction-canvas__svg");
+await page.locator(".app__toast").waitFor();
+
+// Simulate the tab being hidden - no real edit, no toast dismiss - via the
+// same event the app's own `visibilitychange` listener reacts to. A real
+// OS-level tab switch isn't needed: this exercises the app's event-handler
+// logic directly (where the bug actually lives) without depending on
+// Chromium's real focus/backgrounding behavior in a headless run.
+await page.evaluate(() => {
+  Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+});
+
+const storedAfterHide = await readStoredDocument();
+const autosaveNotClobberedByTabHide =
+  storedAfterHide?.schemaVersion === 2 && storedAfterHide?.meta?.title === "From the future (hide test)";
+
 await browser.close();
 
 console.log("SCREENSHOTS_DIR=" + OUT);
@@ -1111,6 +1258,7 @@ console.log("FORWARD_TOKEN_DRAG_LANDS_AT_DROP_POINT=" + forwardTokenDragLandsAtD
 console.log("STEPS_REORDERED_VIA_DRAG=" + stepsReordered);
 console.log("HISTORY_BUTTONS_DISABLED_INITIALLY=" + historyButtonsDisabledInitially);
 console.log("UNDO_REDO_WORKED_END_TO_END=" + undoRedoWorkedEndToEnd);
+console.log("COPY_PASTE_WORKED_END_TO_END=" + copyPasteWorkedEndToEnd);
 console.log("FORWARD_STEP_DRAG_LANDS_AT_DROP_POINT=" + forwardStepDragLandsAtDropPoint);
 console.log("PREVIEW_HIDES_EDITING_CONTROLS=" + previewHidesEditingControls);
 console.log("PERSISTED_ACROSS_RELOAD=" + persistedAcrossReload);
@@ -1134,7 +1282,10 @@ console.log("IMPORT_DIALOG_MENTIONS_STEP_COUNT=" + importDialogMentionsStepCount
 console.log("IMPORT_UNDO_REDO_WORKED=" + importUndoRedoWorked);
 console.log("IMPORT_REJECTS_INVALID_FILE=" + importRejectsInvalidFile);
 console.log("IMPORT_CANCEL_LEAVES_DOCUMENT_UNCHANGED=" + importCancelLeavesDocumentUnchanged);
+console.log("NEW_DOC_DIALOG_CANCEL_LEAVES_DOCUMENT_UNCHANGED=" + newDocDialogCancelLeavesDocumentUnchanged);
+console.log("KEYBOARD_SHORTCUTS_SUSPENDED_BEHIND_MODALS=" + keyboardShortcutsSuspendedBehindModals);
 console.log("VERSION_MISMATCH_HANDLED_SAFELY=" + versionMismatchHandledSafely);
+console.log("AUTOSAVE_NOT_CLOBBERED_BY_TAB_HIDE=" + autosaveNotClobberedByTabHide);
 console.log("STEP_REORDERED_VIA_KEYBOARD=" + stepReorderedViaKeyboard);
 console.log("STEP_MOVE_BUTTONS_DISABLED_AT_BOUNDARIES=" + stepMoveButtonsDisabledAtBoundaries);
 console.log("TOKEN_SELECTED_VIA_KEYBOARD=" + tokenSelectedViaKeyboard);

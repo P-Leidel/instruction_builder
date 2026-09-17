@@ -7,7 +7,7 @@ import { TokenPicker } from "./components/TokenPicker/TokenPicker";
 import { DragGhost } from "./components/DragGhost/DragGhost";
 import { ImportConfirmDialog } from "./components/ImportConfirmDialog/ImportConfirmDialog";
 import { NewDocumentConfirmDialog } from "./components/NewDocumentConfirmDialog/NewDocumentConfirmDialog";
-import { previewMode, toast, pendingImport, confirmingNewDocument } from "./state/ui";
+import { previewMode, toast, pendingImport, confirmingNewDocument, copyTokenWithToast } from "./state/ui";
 import { persistenceStatus } from "./state/persistence";
 import {
   document,
@@ -19,7 +19,6 @@ import {
   selectedStep,
   selectedToken,
   copiedToken,
-  copyToken,
   pasteToken,
 } from "./state/document";
 import {
@@ -30,6 +29,7 @@ import {
   readImportFile,
   type ExportResult,
 } from "./lib/document-actions";
+import { MOD_KEY_LABEL } from "./lib/platform";
 
 const DOCUMENT_TITLE_MAX_LENGTH = 50;
 
@@ -127,6 +127,23 @@ function useDocumentTitleSync(): void {
 }
 
 /**
+ * Whether the global keyboard shortcuts below (undo/redo, copy/paste)
+ * should stay dormant: a confirm dialog (Import/New document) is open, or
+ * Preview mode is showing a read-only canvas. Both `window`-level listeners
+ * used to ignore all three - the confirm dialogs' own focus trap
+ * (`dialog-focus-trap.ts`) only handles Escape/Tab, so every other key
+ * bubbled past their focused Cancel button up to these listeners, letting
+ * e.g. Ctrl+Z undo the document sitting behind an open dialog, or Ctrl+V
+ * paste into Preview's supposedly read-only canvas (2026-09-17 audit
+ * remediation, finding 4). Checked here, at the source, rather than by
+ * making the focus trap swallow every keystroke - that would be a second,
+ * redundant place enforcing the same rule.
+ */
+function keyboardShortcutsSuspended(): boolean {
+  return pendingImport.value !== null || confirmingNewDocument.value || previewMode.value;
+}
+
+/**
  * Task 13 (Undo/Redo): Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z are the standard
  * bindings; Ctrl/Cmd+Y is also wired to redo since that's the common
  * Windows convention. `preventDefault` stops the browser's own per-field
@@ -137,7 +154,7 @@ function useHistoryKeyboardShortcuts(): void {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
       const meta = event.ctrlKey || event.metaKey;
-      if (!meta) return;
+      if (!meta || keyboardShortcutsSuspended()) return;
       const key = event.key.toLowerCase();
       if (key === "z" && event.shiftKey) {
         event.preventDefault();
@@ -178,15 +195,14 @@ function useTokenClipboardKeyboardShortcuts(): void {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
       const meta = event.ctrlKey || event.metaKey;
-      if (!meta || isTextEntryTarget(event.target)) return;
+      if (!meta || isTextEntryTarget(event.target) || keyboardShortcutsSuspended()) return;
       const key = event.key.toLowerCase();
       if (key === "c") {
         const step = selectedStep.value;
         const token = selectedToken.value;
         if (!step || !token) return;
         event.preventDefault();
-        copyToken(step.id, token.id);
-        toast.value = { text: `Copied ${token.label ?? token.iconId}`, tone: "info" };
+        copyTokenWithToast(step, token);
       } else if (key === "v") {
         if (!copiedToken.value) return;
         event.preventDefault();
@@ -285,7 +301,7 @@ export function App() {
             onClick={undo}
             disabled={!canUndo.value}
             aria-label="Undo"
-            title="Undo (Ctrl+Z)"
+            title={`Undo (${MOD_KEY_LABEL}+Z)`}
           >
             Undo
           </button>
@@ -295,7 +311,7 @@ export function App() {
             onClick={redo}
             disabled={!canRedo.value}
             aria-label="Redo"
-            title="Redo (Ctrl+Shift+Z)"
+            title={`Redo (${MOD_KEY_LABEL}+Shift+Z)`}
           >
             Redo
           </button>

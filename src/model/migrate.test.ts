@@ -99,6 +99,69 @@ describe("migrate", () => {
     time: true,
   };
 
+  describe("repairLegacyQuantity (2026-09-17 audit remediation)", () => {
+    // Regression tests for the live-production data-corruption window
+    // between 580d5e6 and 9ab8e64: a saved quantity from that window is
+    // label-only ({ iconId, label }), missing the amount/unit fields
+    // QuantityAttachment now requires, but CURRENT_SCHEMA_VERSION never
+    // bumped - see docs/known-issues.md's "Quantity amount/unit
+    // representation" entry and migrate.ts's repairLegacyQuantity.
+
+    it("recovers amount/unit from a label-only legacy quantity", () => {
+      const doc = validDoc({
+        steps: [
+          {
+            id: "s1",
+            tokens: [
+              {
+                id: "t1",
+                iconId: "knife",
+                category: "action",
+                quantity: { iconId: "quantity-icon", label: "3 kg" },
+              },
+            ],
+          },
+        ],
+      });
+      const migrated = migrate(doc);
+      expect(migrated.steps[0].tokens[0].quantity).toEqual({
+        iconId: "quantity-icon",
+        label: "3 kg",
+        amount: 3,
+        unit: "kg",
+      });
+    });
+
+    it("leaves an already-structured quantity unchanged", () => {
+      const quantity = { iconId: "quantity-icon", label: "3 kg", amount: 3, unit: "kg" };
+      const doc = validDoc({
+        steps: [{ id: "s1", tokens: [{ id: "t1", iconId: "knife", category: "action", quantity }] }],
+      });
+      expect(migrate(doc).steps[0].tokens[0].quantity).toEqual(quantity);
+    });
+
+    it("drops a legacy quantity whose label can't be losslessly recovered", () => {
+      const doc = validDoc({
+        steps: [
+          {
+            id: "s1",
+            tokens: [
+              { id: "t1", iconId: "knife", category: "action", quantity: { iconId: "x", label: "a lot" } },
+            ],
+          },
+        ],
+      });
+      expect(migrate(doc).steps[0].tokens[0].quantity).toBeUndefined();
+    });
+
+    it("leaves tokens with no quantity at all unaffected", () => {
+      const doc = validDoc({
+        steps: [{ id: "s1", tokens: [{ id: "t1", iconId: "knife", category: "action" }] }],
+      });
+      expect(migrate(doc).steps[0].tokens[0].quantity).toBeUndefined();
+    });
+  });
+
   it.each(Object.keys(allTokenCategories) as TokenCategory[])(
     // Regression test for the still-open known-issues.md item ("token/
     // attachment vocabulary enumerated in seven places, two of them already

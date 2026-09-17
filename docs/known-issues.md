@@ -140,7 +140,8 @@ The remaining item is still deliberately deferred:
   real domain swap touches code in several places, not just a data file.
   Worth keeping in mind when task 32 is scoped, so it doesn't start from a
   rosier picture than what's actually there.
-- **Quantity amount/unit representation - Resolved 2026-09-17.**
+- **Quantity amount/unit representation - Resolved 2026-09-17, migration gap
+  closed the same day.**
   `InstructionToken.quantity` is now a structured `QuantityAttachment`
   (`{ iconId, label, amount, unit }`, mirroring how `DurationAttachment`
   already carries its raw `seconds` alongside the formatted `label`), built
@@ -149,11 +150,26 @@ The remaining item is still deliberately deferred:
   [phase-3/progress/architecture-2026-09-17-collapsedfield-and-structured-quantity.md](./phase-3/progress/architecture-2026-09-17-collapsedfield-and-structured-quantity.md)
   for the full writeup, and
   [phase-3/reviews/check/audit-evaluation-2026-09-17.md](./phase-3/reviews/check/audit-evaluation-2026-09-17.md)
-  for an independent 2026-09-17 re-check confirming the fix in source
-  (`QuantityForm.tsx` already falls back to `value?.amount ?? 1` /
-  `value?.unit ?? EU_FOOD_UNITS[0].value` for a pre-fix imported document, so
-  the only remaining gap is test coverage, not a code defect - see that
-  review's item 5 for the recommended regression test).
+  for an independent same-day re-check confirming the fix in source.
+  **Correction (later the same day):** that re-check, and this entry's own
+  earlier wording, understated the exposure as "a pre-fix imported
+  document" - a same-day whole-codebase audit
+  ([phase-3/reviews/2026-09-17-whole-codebase-audit-evaluation.md](./phase-3/reviews/2026-09-17-whole-codebase-audit-evaluation.md),
+  finding 6) traced via `git log`/`git show` that the live production
+  deploy (`580d5e6`) saved this label-only shape for about 2 days 16 hours
+  before the structured-quantity fix (`9ab8e64`) shipped, without
+  `CURRENT_SCHEMA_VERSION` ever bumping - so real documents *autosaved* by
+  the live app during that window (not just hand-crafted imports) carry this
+  shape too, and were silently mishandled on load: `QuantityForm.tsx`'s
+  `value?.amount ?? 1` / `value?.unit ?? EU_FOOD_UNITS[0].value` fallback
+  meant opening such a token's Quantity for editing showed "1 g" instead of
+  the real historical value. Closed by giving `migrate()` a real, tested
+  repair step (`repairLegacyQuantity`, `src/model/migrate.ts`, covered by
+  `src/model/migrate.test.ts`): every label in that window was always built
+  as exactly `${amount} ${unit}` from a validated integer and a space-free
+  unit, so splitting on the first space losslessly recovers the original
+  value on both load and import, rather than needing a regression test to
+  merely document the gap.
   <details><summary>History (the fused-string representation this replaced)</summary>
 
   Before this fix, a Quantity's amount and unit were fused into one display

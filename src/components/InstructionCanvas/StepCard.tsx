@@ -50,21 +50,20 @@ interface StepCardProps {
  * part of.
  */
 export function StepCard({ layout, index, stepCount, canvasWidth, readOnly, svgRef }: StepCardProps) {
-  const { step, cardY, displayedTime, height, chipsPerRow, isComplete, issues, chipPositions, connectors, tokensOffsetX } =
+  const { step, cardY, displayedTime, height, chipsPerRow, issues, shouldFlagIncomplete, chipPositions, connectors, tokensOffsetX } =
     layout;
 
   const isSelected = !readOnly && step.id === selectedStepId.value;
   const isDropTarget = !readOnly && dropTarget.value?.stepId === step.id;
   const dropIndex = isDropTarget ? Math.min(dropTarget.value!.index, step.tokens.length) : null;
   const stepNumber = index + 1;
-  // See model/validate.ts's shouldFlagIncompleteStep: a step with zero
-  // tokens is always technically incomplete, but the persistent badge (and
-  // this label) is deferred until the user has actually added one, so a
-  // brand-new document doesn't flag itself before anything has been built.
-  // Export's own incomplete-step warning toast still checks `isComplete`
-  // directly and is unaffected.
-  const showIncompleteFlag = !isComplete && step.tokens.length > 0;
-  const selectLabel = showIncompleteFlag
+  // shouldFlagIncomplete (canvas-layout.ts, via model/validate.ts's
+  // shouldFlagIncompleteStep): a step with zero tokens is always technically
+  // incomplete, but the persistent badge (and this label) is deferred until
+  // the user has actually added one, so a brand-new document doesn't flag
+  // itself before anything has been built. Export's own incomplete-step
+  // warning toast still checks `isComplete` directly and is unaffected.
+  const selectLabel = shouldFlagIncomplete
     ? `Select step ${stepNumber}, incomplete: ${issues.join(", ")}`
     : `Select step ${stepNumber}`;
 
@@ -113,7 +112,7 @@ export function StepCard({ layout, index, stepCount, canvasWidth, readOnly, svgR
         )}
         <tspan class="instruction-canvas__step-title-text">{step.title || "Untitled step"}</tspan>
       </text>
-      {showIncompleteFlag && (
+      {shouldFlagIncomplete && (
         <g aria-hidden="true">
           <text
             class="instruction-canvas__flag"

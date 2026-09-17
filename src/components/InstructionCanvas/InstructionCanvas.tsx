@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { document, addStep } from "../../state/document";
 import { DESKTOP_QUERY, PADDING, ADD_STEP_ROW_HEIGHT, computeCanvasLayout } from "../../lib/canvas-layout";
-import { sumDurations, stepDisplayedTime } from "../../lib/duration";
+import { documentTotalTime } from "../../lib/duration";
 import { SvgButton } from "./SvgButton";
 import { StepCard } from "./StepCard";
 
@@ -129,7 +129,7 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
   // + step title in one <text>): total is undefined - and hidden - unless at
   // least one step has a time of its own to show, same "nothing to sum"
   // floor as stepDisplayedTime/sumDurations already apply per step.
-  const totalTime = sumDurations(steps.map(stepDisplayedTime));
+  const totalTime = documentTotalTime(steps);
 
   return (
     <div class={`instruction-canvas${readOnly ? " instruction-canvas--readonly" : ""}`}>
