@@ -1,19 +1,16 @@
 import { confirmingNewDocument, toast } from "../../state/ui";
 import { replaceDocument } from "../../state/document";
 import { createEmptyDocument } from "../../model/instruction";
-import { useConfirmDialogFocusTrap } from "../../lib/dialog-focus-trap";
+import { ConfirmDialog } from "../ConfirmDialog/ConfirmDialog";
 
 /**
  * Task 28 (UI Polish Pass): a confirmation gate before starting a new,
  * blank document - added because there was previously no way to do this at
  * all short of clearing browser storage (`createEmptyDocument` existed only
  * as the document session's own throwaway default before a saved document
- * loads). Rendered once at the app root, same as `ImportConfirmDialog`,
- * which this deliberately mirrors: same overlay/dialog styling
- * (`.confirm-dialog-*`) and the same shared `useConfirmDialogFocusTrap`
- * (`lib/dialog-focus-trap.ts`) for focus-on-open/Tab-trap/Escape behavior,
- * since this is the same "confirm a destructive replace" shape Import
- * already established.
+ * loads). Renders the shared `ConfirmDialog` shell (also used by
+ * `ImportConfirmDialog` - 2026-09-17 remediation, item 15) with this
+ * dialog's own heading/body/confirm logic.
  *
  * Goes through `replaceDocument` - the same session action Import uses -
  * so starting over is recorded in undo history like any other document
@@ -26,10 +23,6 @@ export function NewDocumentConfirmDialog() {
     confirmingNewDocument.value = false;
   }
 
-  const { dialogProps, cancelButtonProps, confirmButtonProps } = useConfirmDialogFocusTrap(open, cancel);
-
-  if (!open) return null;
-
   function confirm(): void {
     replaceDocument(createEmptyDocument());
     confirmingNewDocument.value = false;
@@ -37,28 +30,14 @@ export function NewDocumentConfirmDialog() {
   }
 
   return (
-    <div class="confirm-dialog-overlay">
-      <div
-        class="confirm-dialog"
-        role="alertdialog"
-        aria-labelledby="new-document-confirm-heading"
-        aria-describedby="new-document-confirm-body"
-        {...dialogProps}
-      >
-        <h2 id="new-document-confirm-heading">Start a new document?</h2>
-        <p id="new-document-confirm-body">
-          This will replace everything in the editor right now with a blank
-          document. You can undo this afterward.
-        </p>
-        <div class="confirm-dialog-actions">
-          <button type="button" class="confirm-dialog-cancel" onClick={cancel} {...cancelButtonProps}>
-            Cancel
-          </button>
-          <button type="button" class="confirm-dialog-confirm" onClick={confirm} {...confirmButtonProps}>
-            Start New
-          </button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      open={open}
+      idPrefix="new-document-confirm"
+      heading="Start a new document?"
+      body="This will replace everything in the editor right now with a blank document. You can undo this afterward."
+      confirmLabel="Start New"
+      onCancel={cancel}
+      onConfirm={confirm}
+    />
   );
 }
