@@ -430,7 +430,7 @@ as "untitled-instructions.\<ext\>" because no UI lets the user set
 | 27 | Add Document Title UI | ✅ |
 | 28 | UI Polish Pass | ✅ |
 | 29 | Publish MVP | ✅ (live at <https://instructionbuilder-seven.vercel.app>) |
-| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md), [eighth](./phase-3/progress/task-30-user-feedback-fixes-8.md), [ninth](./phase-3/progress/task-30-user-feedback-fixes-9.md), and [tenth](./phase-3/progress/task-30-user-feedback-fixes-10.md) feedback passes shipped) |
+| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md), [eighth](./phase-3/progress/task-30-user-feedback-fixes-8.md), [ninth](./phase-3/progress/task-30-user-feedback-fixes-9.md), and [tenth](./phase-3/progress/task-30-user-feedback-fixes-10.md) feedback passes shipped; testers work through [manual-testing-checklist.md](./manual-testing-checklist.md)) |
 | 31 | Refine UX | Not started |
 
 See [phase-3/progress/README.md](./phase-3/progress/README.md) for detail
@@ -465,7 +465,8 @@ to find out whether it still describes the real app:
 - **📌 CURRENT** — actively trusted. Either a *living* doc that gets
   updated in the same change that makes it stale (this file,
   [known-issues.md](./known-issues.md), [fixed-issues/README.md](./fixed-issues/README.md),
-  [planned-additions.md](./planned-additions.md), and whichever
+  [planned-additions.md](./planned-additions.md),
+  [manual-testing-checklist.md](./manual-testing-checklist.md), and whichever
   `phase-N/progress/README.md` covers the in-progress phase), or a *reference*
   doc that doesn't change per-task but whose content is still accurate
   ([project-plan.md](./project-plan.md)).
