@@ -12,8 +12,9 @@ architecture deepening, a step-management-onto-the-canvas UX rework, and an
 "Add to token"-into-Token-details UX rework), updated 2026-09-16 (a further
 architecture review remediation, plus title/description max length limits),
 updated 2026-09-17 (the `SvgButton` extraction, task 30's first six real
-user feedback passes, and the `CollapsedField`/structured-Quantity
-deepening)
+user feedback passes, the `CollapsedField`/structured-Quantity deepening,
+and an external audit evaluation that fixed `TokenPicker`'s tab-semantics
+gap)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
 [../../project-plan.md](../../project-plan.md#implementation-plan)'s Phase 3
@@ -197,6 +198,19 @@ canvas's own token chips are pointer/touch-only - collapse into a native
 (`key={step.id}`), so live-adding tokens to a step no longer visibly pushes
 the `TokenDetails` panel down the column. See
 [task-30-user-feedback-fixes-6.md](./task-30-user-feedback-fixes-6.md).
+A same-day external audit evaluation (see
+[reviews/2026-09-17-external-audit-evaluation.md](../reviews/2026-09-17-external-audit-evaluation.md))
+independently re-verified a batch of claims from two documents dropped into
+`reviews/check/`, applied two small doc-only fixes directly, and produced a
+big/medium/small remediation plan; its first medium item was picked up the
+same day, scoped via `/mattpocock-skills:grilling`: `TokenPicker`'s category
+switcher, previously a half-implemented `role="tablist"`/`role="tab"`, is
+now `role="radiogroup"`/`role="radio"` with real wrapping Left/Right
+arrow-key navigation, a closer semantic fit than completing the tabs pattern
+in place. Running the full Playwright driver for this also surfaced and
+fixed an unrelated stale check (`TOKEN_SELECTED_VIA_KEYBOARD`, a driver bug
+from the `<details>` collapse rework above, not a product regression). See
+[accessibility-tokenpicker-radiogroup.md](./accessibility-tokenpicker-radiogroup.md).
 
 ## What shipped
 
@@ -219,6 +233,7 @@ One file per task (or per notable pass), in task-number order:
 | — | Architecture: extract `SvgButton` (six duplicated keyboard-activatable SVG `<g role="button">` blocks in `InstructionCanvas.tsx` unified into one component; driver gained Enter/Space coverage for four sites) | [architecture-svgbutton-extraction.md](./architecture-svgbutton-extraction.md) |
 | 30 | Test Real Users (in progress - six feedback passes shipped) | [task-30-user-feedback-fixes.md](./task-30-user-feedback-fixes.md), [task-30-user-feedback-fixes-2.md](./task-30-user-feedback-fixes-2.md), [task-30-user-feedback-fixes-3.md](./task-30-user-feedback-fixes-3.md), [task-30-user-feedback-fixes-4.md](./task-30-user-feedback-fixes-4.md), [task-30-user-feedback-fixes-5.md](./task-30-user-feedback-fixes-5.md), [task-30-user-feedback-fixes-6.md](./task-30-user-feedback-fixes-6.md) |
 | — | Architecture: `CollapsedField<T>` extraction (DurationField/QuantityRow's duplicated collapsed/popover chrome unified) plus structured Quantity (`QuantityAttachment` replaces `splitQuantity`'s reverse-parse) | [architecture-2026-09-17-collapsedfield-and-structured-quantity.md](./architecture-2026-09-17-collapsedfield-and-structured-quantity.md) |
+| — | External audit evaluation (`reviews/check/` claims independently re-verified; two doc-only fixes applied; remediation plan produced) plus `TokenPicker`'s tab-semantics fix (`role="radiogroup"`/`role="radio"` with wrapping arrow-key nav) and a stale driver check fixed along the way | [reviews/2026-09-17-external-audit-evaluation.md](../reviews/2026-09-17-external-audit-evaluation.md), [accessibility-tokenpicker-radiogroup.md](./accessibility-tokenpicker-radiogroup.md) |
 | 31 | Refine UX | *not started* |
 
 ## Verification
@@ -237,7 +252,11 @@ One file per task (or per notable pass), in task-number order:
   task 30 feedback passes updated 1 existing `canvas-layout.test.ts`
   assertion for the deleted `headerHeight` field (first pass) and added
   none (second through sixth passes - component-only/CSS refactors, same
-  as `SvgButton`), net 0 across all six; the `CollapsedField`/structured-
+  as `SvgButton`), net 0 across all six; the `TokenPicker` radiogroup fix
+  added none either - same kind of component-only change, with new
+  coverage instead going into the Playwright driver (a new
+  `TOKEN_CATEGORY_ARROW_KEY_NAV_WORKS` check, plus a stale
+  `TOKEN_SELECTED_VIA_KEYBOARD` check fixed); the `CollapsedField`/structured-
   Quantity deepening added none either - same kind of component/data-shape
   refactor with no new branchable logic), and `npm run build` all pass
   cleanly.

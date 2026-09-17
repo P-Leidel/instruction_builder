@@ -31,10 +31,23 @@ const dragGuard = createClickAfterDragGuard();
  *
  * As the vocabulary grows past a handful of icons per category, showing
  * every category's grid at once (the original fieldset/legend layout)
- * stops scaling - so categories are tabs instead: one active category's
- * grid is rendered at a time, switching is a plain click, and every
- * existing token button (click-to-add, drag-to-drop) is unaffected by
- * which tab is active, since it's the exact same button in a smaller list.
+ * stops scaling - so categories are a single-select filter instead: one
+ * active category's grid is rendered at a time, switching is a plain
+ * click (or Left/Right arrow, see below), and every existing token button
+ * (click-to-add, drag-to-drop) is unaffected by which category is active,
+ * since it's the exact same button in a smaller list.
+ *
+ * The category switcher is `role="radiogroup"`/`role="radio"`, not tabs -
+ * despite looking tab-like, it doesn't show independent tabbed *content*,
+ * it filters one grid, so a plain single-select ARIA pattern fits better
+ * than the tab/tabpanel relationship a `role="tab"` implies (and used to
+ * only half-implement: no roving tabindex or arrow-key nav, an accessibility
+ * gap tracked in known-issues.md until this fix). Left/Right arrow moves
+ * focus and selection together (wrapping at both ends), matching a native
+ * `<input type="radio">` fieldset's keyboard behavior; `tabIndex` is derived
+ * straight from `active` rather than tracked separately, since that's
+ * already this component's one source of truth for which category is
+ * selected.
  */
 export function TokenPicker() {
   const active = activeTokenCategory.value ?? CATEGORIES_WITH_SAMPLES[0];
@@ -43,22 +56,31 @@ export function TokenPicker() {
   return (
     <div class="token-picker">
       <h2 class="token-picker__heading">Add to step</h2>
-      <div class="token-picker__tabs" role="tablist" aria-label="Token category">
-        {CATEGORIES_WITH_SAMPLES.map((category) => (
+      <div class="token-picker__tabs" role="radiogroup" aria-label="Token category">
+        {CATEGORIES_WITH_SAMPLES.map((category, index) => (
           <button
             type="button"
             key={category}
-            role="tab"
-            aria-selected={category === active}
-            aria-controls="token-picker-panel"
+            role="radio"
+            aria-checked={category === active}
+            tabIndex={category === active ? 0 : -1}
             class={`token-picker__tab${category === active ? " token-picker__tab--active" : ""}`}
             onClick={() => (activeTokenCategory.value = category)}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+              event.preventDefault();
+              const length = CATEGORIES_WITH_SAMPLES.length;
+              const delta = event.key === "ArrowRight" ? 1 : -1;
+              const nextIndex = (index + delta + length) % length;
+              activeTokenCategory.value = CATEGORIES_WITH_SAMPLES[nextIndex];
+              (event.currentTarget.parentElement?.children[nextIndex] as HTMLElement | undefined)?.focus();
+            }}
           >
             {CATEGORY_LABELS[category]}
           </button>
         ))}
       </div>
-      <div class="token-picker__grid" role="tabpanel" id="token-picker-panel">
+      <div class="token-picker__grid">
         {tokensInCategory.map((sample: SampleToken) => (
           <button
             type="button"

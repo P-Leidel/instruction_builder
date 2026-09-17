@@ -95,7 +95,7 @@ against source.
    card), each verified against the existing Playwright driver before
    starting the next, per the check/ documents' recommended sequence.
 2. **Keyboard token movement** (currently drag-and-drop only, tracked in
-   [`known-issues.md`](../../known-issues.md#two-accessibility-gaps-deliberately-left-for-a-later-pass)).
+   [`known-issues.md`](../../known-issues.md#one-accessibility-gap-deliberately-left-for-a-later-pass)).
    Needs its own small interaction design (a "Move token" action/menu,
    moving within a step and to another step), not a mechanical refactor.
 

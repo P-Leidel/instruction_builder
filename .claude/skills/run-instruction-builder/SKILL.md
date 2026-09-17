@@ -369,7 +369,9 @@ taken - watch the terminal output for the actual URL).
   `getByRole` with a guessed name. Locate everything by scoping through
   `page.locator(".token-details")`, not `.token-attachment-picker`
   (deleted) or a `getByRole("tab", ...)` call (no tabs exist here anymore -
-  `TokenPicker`'s own "Add to step" tabs are unrelated and still tabbed).
+  `TokenPicker`'s own "Add to step" category switcher is unrelated and, as
+  of 2026-09-17, `role="radiogroup"`/`role="radio"`, not tabs - locate its
+  options with `getByRole("radio", ...)`).
 - **`netstat`'s state column is localized** ("ABHÖREN" instead of
   "LISTENING" on this German-Windows install), so `grep LISTENING`
   silently finds nothing. Use PowerShell's `Get-NetTCPConnection
@@ -536,6 +538,23 @@ taken - watch the terminal output for the actual URL).
   Resolve module-relative paths with `path.join(path.dirname(fileURLToPath(import.meta.url)), ...)`
   (`node:url`'s `fileURLToPath` + `node:path`) instead, never `new URL(...)`,
   anywhere in this file.
+- **Content inside a closed native `<details>` isn't focusable - a driver
+  check assuming otherwise fails silently (`false`), not with a thrown
+  error.** `StepDetails`' "Tokens in this step" list lives inside a
+  `<details>`, collapsed by default since the 2026-09-17 rework (see
+  `task-30-user-feedback-fixes-6.md`). `.focus()`/`.press(...)` on a button
+  inside a *closed* `<details>` resolve without throwing (Playwright's
+  actionability check doesn't catch this the way it catches a genuinely
+  `display: none` element), but focus never actually moves - so a check
+  built on "focus it, press Enter, assert the result" silently reports
+  `false` instead of failing loudly, exactly the kind of false negative
+  that's easy to miss since nothing in the run looks broken.
+  `TOKEN_SELECTED_VIA_KEYBOARD` was wrong for this reason - confirmed by a
+  standalone script directly comparing `document.activeElement` with and
+  without first opening the `<summary>`. Fixed by having the driver open
+  the `<summary>` (focus it, press Enter) before trying to focus anything
+  inside the `<details>`, matching the real keyboard path a screen reader
+  or keyboard-only user would actually take.
 - **The canvas's SVG token chips are deliberately pointer/touch-only, even
   after task 22 - token *selection* has a keyboard path, but it's a
   different element.** `StepDetails.tsx`'s "Tokens in this step" list

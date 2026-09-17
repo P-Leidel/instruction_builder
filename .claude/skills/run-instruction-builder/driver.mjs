@@ -78,23 +78,52 @@ await page.locator(".step-details__field textarea").fill("Use a sharp knife on a
 await page.locator("body").click({ position: { x: 5, y: 5 } }); // blur the field
 
 const picker = page.locator(".token-picker");
-async function selectTab(label) {
-  await picker.getByRole("tab", { name: label, exact: true }).click();
+async function selectCategory(label) {
+  await picker.getByRole("radio", { name: label, exact: true }).click();
 }
 
-// Category tabs: only the active category's tokens are in the DOM/visible
-// at a time, so a real user (and this driver) must switch tabs to reach
-// tokens outside the default-active category ("Actions", the first one
-// with samples).
+// Category switcher: only the active category's tokens are in the
+// DOM/visible at a time, so a real user (and this driver) must switch
+// categories to reach tokens outside the default-active one ("Actions", the
+// first one with samples).
 const objectsTabCountBeforeSwitch = await picker.locator(".token-picker__grid").getByRole("button").count();
 await picker.getByRole("button", { name: "Chop", exact: true }).click();
-await selectTab("Objects");
+await selectCategory("Objects");
 const objectsTabCount = await picker.locator(".token-picker__grid").getByRole("button").count();
 const tabsFilterTokens = objectsTabCount !== objectsTabCountBeforeSwitch;
 await picker.getByRole("button", { name: "Onion", exact: true }).click();
-await selectTab("Tools");
+await selectCategory("Tools");
 await picker.getByRole("button", { name: "Knife", exact: true }).click();
-await selectTab("Actions");
+await selectCategory("Actions");
+
+// Fixed 2026-09-17 (docs/known-issues.md's "TokenPicker tab roving focus"
+// gap): the category switcher is role="radiogroup"/role="radio", not tabs -
+// Left/Right arrow should move focus and selection together, wrapping at
+// both ends, same as a native <input type="radio"> fieldset. Checked
+// against real ARIA/focus state, not just a screenshot; ends back on
+// "Actions" so it doesn't disturb the category the rest of this driver
+// assumes is active (e.g. the "Boil" drag-and-drop below).
+const actionsRadio = picker.getByRole("radio", { name: "Actions", exact: true });
+const objectsRadio = picker.getByRole("radio", { name: "Objects", exact: true });
+const toolsRadio = picker.getByRole("radio", { name: "Tools", exact: true });
+async function isCheckedAndFocused(radio) {
+  return (
+    (await radio.getAttribute("aria-checked")) === "true" &&
+    (await radio.evaluate((el) => el === document.activeElement))
+  );
+}
+await actionsRadio.focus();
+await page.keyboard.press("ArrowRight"); // Actions -> Objects
+const arrowRightMovesSelection = await isCheckedAndFocused(objectsRadio);
+await page.keyboard.press("ArrowRight"); // Objects -> Tools
+await page.keyboard.press("ArrowRight"); // Tools -> wraps to Actions
+const arrowRightWraps = await isCheckedAndFocused(actionsRadio);
+await page.keyboard.press("ArrowLeft"); // Actions -> wraps to Tools
+const arrowLeftWraps = await isCheckedAndFocused(toolsRadio);
+await page.keyboard.press("ArrowLeft"); // Tools -> Objects
+await page.keyboard.press("ArrowLeft"); // Objects -> Actions (restore)
+const tokenCategoryArrowKeyNavWorks =
+  arrowRightMovesSelection && arrowRightWraps && arrowLeftWraps && (await isCheckedAndFocused(actionsRadio));
 await page.screenshot({ path: path.join(OUT, "02-desktop-after-edit.png"), fullPage: true });
 
 // Connector lines: a plain line between each pair of consecutive tokens
@@ -123,12 +152,22 @@ await page.screenshot({ path: path.join(OUT, "02b-token-details.png"), fullPage:
 // InstructionCanvas.tsx's doc comment) - StepDetails' "Tokens in this
 // step" list is the keyboard-operable path to the same TokenDetails panel
 // (it only renders once a step is already selected, so the canvas's
-// two-stage select rule is automatically satisfied). Step 1 is already
-// selected here, so its list is already showing; select its 2nd token
-// (Onion) via keyboard and confirm TokenDetails opens for it and the
-// button reflects `aria-current`, then click back to the 1st token
-// (pointer) so the rest of the flow below continues to operate on
-// `firstToken` as before.
+// two-stage select rule is automatically satisfied). The list lives inside
+// a native <details>, collapsed by default (a same-day task 30 rework - see
+// known-issues.md), so a real keyboard user reaches it by first Tab-ing to
+// its <summary> and pressing Enter to open it - skipping that step used to
+// make this whole check a false negative (content inside a closed
+// <details> isn't focusable, so the button-focus below silently did
+// nothing, `aria-current` never got set, and the flow's own actions never
+// threw): confirmed by driving both paths directly before fixing this.
+// Step 1 is already selected here, so its list is already present (closed);
+// open it, then select its 2nd token (Onion) via keyboard and confirm
+// TokenDetails opens for it and the button reflects `aria-current`, then
+// click back to the 1st token (pointer) so the rest of the flow below
+// continues to operate on `firstToken` as before.
+const stepDetailsTokensSummary = page.locator(".step-details__tokens-disclosure summary");
+await stepDetailsTokensSummary.focus();
+await stepDetailsTokensSummary.press("Enter");
 const secondStepDetailsTokenButton = page.locator(".step-details__token-button").nth(1);
 await secondStepDetailsTokenButton.focus();
 await secondStepDetailsTokenButton.press("Enter");
@@ -977,6 +1016,7 @@ await browser.close();
 
 console.log("SCREENSHOTS_DIR=" + OUT);
 console.log("TABS_FILTER_TOKENS=" + tabsFilterTokens);
+console.log("TOKEN_CATEGORY_ARROW_KEY_NAV_WORKS=" + tokenCategoryArrowKeyNavWorks);
 console.log("TOKEN_SELECTED_AFTER_FIRST_CLICK=" + tokenSelectedAfterFirstClick);
 console.log("TOKEN_LABEL_UPDATED=" + tokenLabelUpdated);
 console.log("ATTACHMENTS_WORKED_END_TO_END=" + attachmentsWorkedEndToEnd);

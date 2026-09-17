@@ -178,12 +178,12 @@ The remaining item is still deliberately deferred:
   </details>
 - **First noted:** 2026-09-13.
 
-## Two accessibility gaps deliberately left for a later pass
+## One accessibility gap deliberately left for a later pass
 
 Raised and scoped with the user before task 22 (Add Accessibility
-Features) started; both were explicitly out of scope for that task, which
-shipped keyboard alternatives for step reordering and token *selection*
-only - see
+Features) started; both items below were explicitly out of scope for that
+task, which shipped keyboard alternatives for step reordering and token
+*selection* only - see
 [phase-2/progress/task-22-accessibility-features.md](./phase-2/progress/task-22-accessibility-features.md).
 
 - **No keyboard way to reorder a token within a step, or move it to a
@@ -192,18 +192,21 @@ only - see
   called it out by name; token movement didn't, and doing it well (moving
   *to* a specific step, not just up/down within one) needs its own small
   design pass rather than reusing the step pattern as-is.
-- **`TokenPicker`'s category tabs (`role="tablist"`/`role="tab"`) don't
-  implement the WAI-ARIA APG Tabs pattern's roving tabindex + arrow-key
-  navigation** - every tab sits in the normal Tab order and activates on
-  Enter/Space like a plain button, so they're fully keyboard-operable, just
-  not via the idiomatic Left/Right-arrow-to-switch, Tab-to-leave convention
-  some screen reader users expect once they hear `role="tab"` announced.
-  (`TokenAttachmentPicker` had the same gap on its own tabs until a
-  2026-09-15 rework folded it into `TokenDetails` and deleted it entirely -
-  `TokenPicker`'s are now the only tabs left in the app.) Deferred as
-  lower-impact than the two functional gaps task 22 did fix (color
-  contrast, the token/import-input keyboard paths); worth revisiting if a
-  real screen-reader user reports friction with it.
+- **`TokenPicker`'s category switcher didn't implement real keyboard
+  navigation - Resolved 2026-09-17.** It used to be `role="tablist"`/
+  `role="tab"` without the WAI-ARIA APG Tabs pattern's roving tabindex +
+  arrow-key navigation - keyboard-operable via Tab/Enter/Space, but not the
+  idiomatic Left/Right-arrow-to-switch convention some screen reader users
+  expect once they hear `role="tab"` announced. Fixed by re-modeling it as
+  `role="radiogroup"`/`role="radio"` instead of fixing the tabs pattern in
+  place - a closer semantic match, since it filters one grid rather than
+  showing independent tabbed content - which gets correct roving-tabindex +
+  wrapping arrow-key behavior as a property of the pattern itself. See
+  [phase-3/reviews/2026-09-17-external-audit-evaluation.md](./phase-3/reviews/2026-09-17-external-audit-evaluation.md)
+  for the evaluation that scoped this fix, and
+  [`TokenPicker.tsx`](../src/components/TokenPicker/TokenPicker.tsx)'s own
+  doc comment for the shipped shape. Covered by a new
+  `TOKEN_CATEGORY_ARROW_KEY_NAV_WORKS` driver check.
 - **First noted:** 2026-09-14.
 
 ## Full canvas re-render on any edit anywhere in the document

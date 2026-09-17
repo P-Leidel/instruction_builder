@@ -273,6 +273,26 @@ native `<details>`/`<summary>`, collapsed by default and resetting per
 step, so live-adding tokens to a step no longer pushes Token details down
 the column. See
 [phase-3/progress/task-30-user-feedback-fixes-6.md](./phase-3/progress/task-30-user-feedback-fixes-6.md).
+A same-day external audit evaluation (two documents dropped into
+`phase-3/reviews/check/` from a source external to this project) was
+independently re-verified against source rather than trusted at face
+value - no incorrect claims found, two small doc-only fixes applied
+directly, and a big/medium/small remediation plan produced; see
+[phase-3/reviews/2026-09-17-external-audit-evaluation.md](./phase-3/reviews/2026-09-17-external-audit-evaluation.md).
+Its first medium item was picked up the same day, scoped via
+`/mattpocock-skills:grilling`: `TokenPicker`'s category switcher, a
+half-implemented `role="tablist"`/`role="tab"` since 2026-09-14, is now
+`role="radiogroup"`/`role="radio"` - a closer semantic fit than completing
+the tabs pattern, since it filters one grid rather than showing
+independent tabbed content - with real wrapping Left/Right arrow-key
+navigation. Running the full Playwright driver for this (the first full
+run in a while - see the audit evaluation's own note that dependencies
+weren't installed to run it earlier) also surfaced and fixed an unrelated
+stale check, `TOKEN_SELECTED_VIA_KEYBOARD`: a driver bug from the
+`<details>` collapse rework in the paragraph above (it never opened the
+`<summary>` before trying to focus content inside it), not a product
+regression - confirmed by driving the real keyboard path directly. See
+[phase-3/progress/accessibility-tokenpicker-radiogroup.md](./phase-3/progress/accessibility-tokenpicker-radiogroup.md).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
