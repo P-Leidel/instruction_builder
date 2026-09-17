@@ -19,6 +19,8 @@ import {
   type ExportResult,
 } from "./lib/document-actions";
 
+const DOCUMENT_TITLE_MAX_LENGTH = 50;
+
 /**
  * Turns a `lib/document-actions.ts` result into the one toast this app
  * ever shows at a time - the one piece of export orchestration that
@@ -207,6 +209,7 @@ export function App() {
               type="text"
               value={document.value.meta.title}
               placeholder="Untitled instructions"
+              maxLength={DOCUMENT_TITLE_MAX_LENGTH}
               onInput={(event) => updateTitle(event.currentTarget.value)}
             />
           </label>

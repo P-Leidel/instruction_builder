@@ -117,22 +117,32 @@ The remaining item is still deliberately deferred:
   fused into one display string at attach time
   (`` `${amount} ${unit}` `` in `TokenDetails.tsx`'s `QuantityRow`), stored
   only in that joined form - not as separate `amount`/`unit` fields on
-  `TokenAttachment`. A later 2026-09-15 rework made `QuantityRow` mirror
-  `DurationField`'s collapsed/edit-toggle interaction, which closed the two
-  concrete gaps this used to describe (editing an attached value now
-  pre-fills the form via a `splitQuantity` helper that re-parses the joined
-  label, and Save replaces the old value in place without a remove first),
-  but the underlying representation gap remains: `splitQuantity` is a
-  best-effort re-parse of a display string, not a real inverse of a
-  structured value, and silently falls back to defaults for anything it
-  doesn't recognize (e.g. a value from an older schema or a future unit
-  list change). Deferred - the
-  audit's own assessment is that this is weaker than the other candidates
-  (deleting it moves the complexity back into several render sites rather
-  than removing it) and it earns its keep more clearly once a real
-  content-pack system needs one place to extend the vocabulary - now Phase
-  4 task 32 (Formalize the Content-Pack Shape), per the 2026-09-14 Phase
-  3/4 reprioritization (see
+  `TokenAttachment`. A 2026-09-15 rework made `QuantityRow` mirror
+  `DurationField`'s collapsed/edit-toggle interaction, which closed two
+  concrete gaps this used to describe (editing an attached value pre-filled
+  the form via a `splitQuantity` helper that re-parsed the joined label,
+  and Save replaced the old value in place without a remove first), but the
+  underlying representation gap remained: `splitQuantity` was a best-effort
+  re-parse of a display string, not a real inverse of a structured value,
+  and silently fell back to defaults for anything it didn't recognize (e.g.
+  a value from an older schema or a future unit list change). **Resolved
+  2026-09-17:** a fresh architecture audit
+  ([phase-3/audits/2026-09-17-canvas-tokenchip-and-field-shape-review.html](./phase-3/audits/2026-09-17-canvas-tokenchip-and-field-shape-review.html))
+  re-surfaced this candidate - despite its own prior assessment rating it
+  weaker than the others - once `TimeAndQuantityRow`'s mutual-exclusion
+  coupling (added by the 2026-09-15 rework above) made `QuantityRow` a less
+  isolated place for it to keep living. `InstructionToken.quantity` changed
+  from the generic `TokenAttachment` to a new `QuantityAttachment`
+  (`{ iconId, label, amount, unit }`, mirroring how `DurationAttachment`
+  already carries its raw `seconds` alongside the formatted `label`),
+  `splitQuantity` was deleted, and a new `lib/quantity.ts` (mirroring
+  `lib/duration.ts`) holds `MIN_QUANTITY`/`MAX_QUANTITY`/`buildQuantity`.
+  See
+  [phase-3/progress/architecture-2026-09-17-collapsedfield-and-structured-quantity.md](./phase-3/progress/architecture-2026-09-17-collapsedfield-and-structured-quantity.md)
+  for the full writeup. The broader `TokenCategory`-duplication problem
+  this bullet opened with is unaffected by this fix and remains deferred to
+  Phase 4 task 32 (Formalize the Content-Pack Shape), per the 2026-09-14
+  Phase 3/4 reprioritization (see
   [project-plan.md](./project-plan.md#implementation-plan)), not Phase 3.
   A 2026-09-14 internal architecture review (see
   [phase-3/audits/2026-09-14-architecture-review.html](./phase-3/audits/2026-09-14-architecture-review.html))

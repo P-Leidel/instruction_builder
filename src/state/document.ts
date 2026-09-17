@@ -6,6 +6,7 @@ import {
   type InstructionStep,
   type InstructionToken,
   type TokenAttachment,
+  type QuantityAttachment,
   type DurationAttachment,
 } from "../model/instruction";
 
@@ -213,7 +214,7 @@ function setTokenAttachment(
   stepId: string,
   tokenId: string,
   kind: AttachmentKind,
-  attachment: TokenAttachment | undefined,
+  attachment: TokenAttachment | QuantityAttachment | undefined,
 ): void {
   setSteps(
     session,
@@ -498,7 +499,7 @@ function attachToTokenCore(
   stepId: string,
   tokenId: string,
   kind: AttachmentKind,
-  attachment: TokenAttachment,
+  attachment: TokenAttachment | QuantityAttachment,
 ): void {
   setTokenAttachment(session, stepId, tokenId, kind, attachment);
 }

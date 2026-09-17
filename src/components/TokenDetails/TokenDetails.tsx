@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import type { InstructionStep, InstructionToken, TokenAttachment } from "../../model/instruction";
+import type { InstructionStep, InstructionToken } from "../../model/instruction";
 import {
   selectedStep,
   selectedToken,
@@ -9,159 +9,104 @@ import {
   attachToToken,
   setTokenTime,
 } from "../../state/document";
-import { SAMPLE_TOKENS, descriptionFor } from "../../data/sample-tokens";
-import { QUANTITY_ICON_ID } from "../../data/icon-library";
-import { EU_FOOD_UNITS } from "../../data/units";
+import { SAMPLE_TOKENS } from "../../data/sample-tokens";
 import { Icon } from "../Icon/Icon";
+import { CollapsedField } from "../CollapsedField/CollapsedField";
 import { DurationField } from "../DurationField/DurationField";
+import { QuantityForm } from "./QuantityForm";
 
-const MIN_QUANTITY = 1;
-const MAX_QUANTITY = 99999;
-
-const TITLE_MAX_LENGTH = 50;
+const TITLE_MAX_LENGTH = 18;
 const NOTE_MAX_LENGTH = 249;
 
 const WARNING_TOKENS = SAMPLE_TOKENS.filter((t) => t.category === "warning");
 
 /**
- * Splits a "3 kg"-shaped label back into its amount/unit parts, for
- * pre-filling the edit form when editing an already-attached quantity -
- * mirrors lib/duration.ts's splitDuration. Falls back to 1/first-unit for
- * an unset or unrecognized value (e.g. a value from an older schema).
+ * The "Quantity" field: collapsed to one line (a value with Edit/Remove, or
+ * a "+ Quantity" button when unset) - the same `CollapsedField` chrome as
+ * `DurationField`'s "+ Time" above it, supplying only its own value
+ * display and `QuantityForm`. Unlike `DurationField`'s static aria-labels (a
+ * step/token only ever has one time), Edit/Remove stay dynamic (e.g.
+ * "Remove 3 kg") since a quantity's actual value is more distinguishing
+ * information than "there's a quantity set" - passed via `ariaLabels`. No
+ * visible "Quantity" label is shown at all - the same "the button already
+ * says what it does" reasoning behind `DurationField`'s `showLabel={false}`
+ * - so this passes `showLabel={false}` explicitly. `editing`/`onEditingChange`
+ * are controlled by TimeAndQuantityRow below so opening this closes Token
+ * time, and vice versa.
  */
-function splitQuantity(attachment: TokenAttachment | undefined): { amountText: string; unit: string } {
-  const fallback = { amountText: "1", unit: EU_FOOD_UNITS[0].value };
-  if (!attachment?.label) return fallback;
-  const [amountText, ...unitParts] = attachment.label.split(" ");
-  const unit = unitParts.join(" ");
-  return EU_FOOD_UNITS.some((u) => u.value === unit) ? { amountText, unit } : fallback;
+function QuantityRow({
+  step,
+  token,
+  editing,
+  onEditingChange,
+}: {
+  step: InstructionStep;
+  token: InstructionToken;
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
+}) {
+  return (
+    <CollapsedField
+      label="Quantity"
+      showLabel={false}
+      value={token.quantity}
+      editing={editing}
+      onEditingChange={onEditingChange}
+      renderValue={(v) => v.label}
+      ariaLabels={
+        token.quantity
+          ? { edit: `Edit ${token.quantity.label}`, remove: `Remove ${token.quantity.label}` }
+          : undefined
+      }
+      renderForm={(close) => (
+        <QuantityForm
+          value={token.quantity}
+          onSave={(next) => {
+            attachToToken(step.id, token.id, "quantity", next);
+            close();
+          }}
+          onCancel={close}
+        />
+      )}
+      onRemove={() => removeTokenAttachment(step.id, token.id, "quantity")}
+    />
+  );
 }
 
 /**
- * The "Quantity" field: collapsed to one line (a value with Edit/Remove, or
- * a "+ Quantity" button when unset) with a separate committed edit mode
- * (Save/Cancel) - the same collapsed/edit-toggle interaction as
- * `DurationField`'s "Token time" above it, duplicated here rather than
- * shared (Quantity's edit form - amount + unit - is different enough from
- * Duration's four d/h/m/s inputs that a shared component would mostly be
- * passing through props; revisit if a third value-editor like this shows
- * up). Editing an already-attached value pre-fills the form from it, same
- * as DurationField's `startEditing`. Unlike DurationField's static
- * aria-labels (a step/token only ever has one time), Edit/Remove/Save stay
- * dynamic (e.g. "Remove 3 kg") since a quantity's actual value is more
- * distinguishing information than "there's a time set".
+ * Wraps Token time and Quantity in one row and coordinates them so opening
+ * either's edit form closes the other's - two testers-requested changes at
+ * once: the "+ Quantity" button sits inline next to "+ Time" (a shared flex
+ * row, `.token-details__time-quantity-row`, rather than two stacked fields),
+ * and only one of the two can be mid-edit at a time. The `openField` state
+ * that makes the second part possible has to live above both fields since
+ * they used to manage their own `editing` state independently; a normal
+ * Save or Cancel in either still closes it the same way it always closed
+ * that field's own state, since `onEditingChange` is just where that state
+ * now lives. Keyed by `token.id` in TokenDetails below, same reason
+ * DurationField/QuantityRow were already individually keyed - so switching
+ * tokens can't leave a stale field open or leak one token's in-progress
+ * edit into the next.
  */
-function QuantityRow({ step, token }: { step: InstructionStep; token: InstructionToken }) {
-  const [editing, setEditing] = useState(false);
-  const [amountText, setAmountText] = useState("1");
-  const [unit, setUnit] = useState(EU_FOOD_UNITS[0].value);
-
-  const amount = Number(amountText);
-  const isValid = Number.isInteger(amount) && amount >= MIN_QUANTITY && amount <= MAX_QUANTITY;
-
-  function startEditing() {
-    const draft = splitQuantity(token.quantity);
-    setAmountText(draft.amountText);
-    setUnit(draft.unit);
-    setEditing(true);
-  }
-
-  function save() {
-    if (!isValid) return;
-    attachToToken(step.id, token.id, "quantity", { iconId: QUANTITY_ICON_ID, label: `${amount} ${unit}` });
-    setEditing(false);
-  }
-
-  if (editing) {
-    return (
-      <div class="token-details__field">
-        <span class="token-details__label">Quantity</span>
-        <div class="token-details__quantity-form">
-          <label class="token-details__quantity-field">
-            <span>Amount</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={amountText}
-              onInput={(e) => setAmountText(e.currentTarget.value)}
-              onFocus={(e) => e.currentTarget.select()}
-            />
-          </label>
-          <label class="token-details__quantity-field">
-            <span>Unit</span>
-            <select value={unit} onChange={(e) => setUnit(e.currentTarget.value)}>
-              {EU_FOOD_UNITS.map((u) => (
-                <option key={u.value} value={u.value}>
-                  {u.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {!isValid && (
-            <p class="token-details__quantity-error">
-              Enter a whole number from {MIN_QUANTITY} to {MAX_QUANTITY}.
-            </p>
-          )}
-          <div class="token-details__quantity-actions">
-            <button
-              type="button"
-              class="token-details__quantity-save"
-              disabled={!isValid}
-              aria-label={isValid ? `Save ${amount} ${unit}` : "Save quantity"}
-              onClick={save}
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              class="token-details__quantity-cancel"
-              aria-label="Cancel editing quantity"
-              onClick={() => setEditing(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (token.quantity) {
-    return (
-      <div class="token-details__field">
-        <span class="token-details__label">Quantity</span>
-        <div class="token-details__quantity-display">
-          <span class="token-details__quantity-value">{token.quantity.label}</span>
-          <div class="token-details__quantity-display-actions">
-            <button
-              type="button"
-              class="token-details__quantity-edit"
-              aria-label={`Edit ${token.quantity.label}`}
-              onClick={startEditing}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              class="token-details__quantity-remove"
-              aria-label={`Remove ${token.quantity.label}`}
-              onClick={() => removeTokenAttachment(step.id, token.id, "quantity")}
-            >
-              Remove
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+function TimeAndQuantityRow({ step, token }: { step: InstructionStep; token: InstructionToken }) {
+  const [openField, setOpenField] = useState<"time" | "quantity" | null>(null);
 
   return (
-    <div class="token-details__field">
-      <span class="token-details__label">Quantity</span>
-      <button type="button" class="token-details__quantity-add" aria-label="Add quantity" onClick={startEditing}>
-        + Quantity
-      </button>
+    <div class="token-details__time-quantity-row">
+      <DurationField
+        label="Time"
+        value={token.time}
+        onChange={(time) => setTokenTime(step.id, token.id, time)}
+        showLabel={false}
+        editing={openField === "time"}
+        onEditingChange={(next) => setOpenField(next ? "time" : null)}
+      />
+      <QuantityRow
+        step={step}
+        token={token}
+        editing={openField === "quantity"}
+        onEditingChange={(next) => setOpenField(next ? "quantity" : null)}
+      />
     </div>
   );
 }
@@ -219,18 +164,18 @@ function WarningRow({ step, token }: { step: InstructionStep; token: Instruction
  * Editor for the currently selected token - see InstructionCanvas's
  * two-stage select behavior: a token only becomes selectable, and shows up
  * here, once its step is already selected. Mirrors StepDetails: a
- * user-editable title/notes pair, plus the read-only app-given description
- * from sample-tokens.ts.
+ * user-editable title/notes pair.
  *
  * What used to be a separate TokenAttachmentPicker panel ("Add to token",
- * right column) is now two of this panel's own fields: Quantity (right
- * below Token time, sharing DurationField's collapsed/edit-toggle
- * interaction - see QuantityRow) and Warning (the last field, keeping the
- * older always-visible chip+preset-grid look - see WarningRow). There's no
- * longer a shared "Attachments" wrapper around them; each is its own
- * standalone field like Title/Notes/Token time. `QuantityRow`/`WarningRow`
- * are keyed by `token.id` for the same reason DurationField is below - so
- * switching tokens doesn't leak one token's in-progress edit into the next.
+ * right column) is now two of this panel's own fields: Quantity (sharing
+ * DurationField's collapsed/edit-toggle interaction - see QuantityRow) and
+ * Warning (the last field, keeping the older always-visible chip+preset-grid
+ * look - see WarningRow). There's no longer a shared "Attachments" wrapper
+ * around them; each is its own standalone field like Title/Notes. Token time
+ * and Quantity specifically sit in one row and are mutually exclusive when
+ * editing - see TimeAndQuantityRow. `TimeAndQuantityRow`/`WarningRow` are
+ * keyed by `token.id` so switching tokens doesn't leak one token's
+ * in-progress edit into the next.
  */
 export function TokenDetails() {
   const step = selectedStep.value;
@@ -250,10 +195,6 @@ export function TokenDetails() {
   return (
     <div class="token-details">
       <h2 class="token-details__heading">Token details</h2>
-
-      <p class="token-details__summary">
-        <Icon iconId={token.iconId} size={18} /> {descriptionFor(token.iconId)}
-      </p>
 
       <label class="token-details__field">
         <span class="token-details__label">Title</span>
@@ -277,20 +218,7 @@ export function TokenDetails() {
         />
       </label>
 
-      {/* `key={token.id}` forces a fresh instance per token - without it,
-          Preact reuses the same DurationField across a token switch and its
-          internal `editing` state (e.g. mid-edit, unsaved) leaks from the
-          previously selected token into whichever token is selected now,
-          showing a stale editing form instead of the new token's actual
-          time (or lack of one). */}
-      <DurationField
-        key={token.id}
-        label="Token time"
-        value={token.time}
-        onChange={(time) => setTokenTime(step.id, token.id, time)}
-      />
-
-      <QuantityRow key={`quantity-${token.id}`} step={step} token={token} />
+      <TimeAndQuantityRow key={token.id} step={step} token={token} />
       <WarningRow key={`warning-${token.id}`} step={step} token={token} />
     </div>
   );

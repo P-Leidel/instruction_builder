@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review for instruction_builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; }
+      .deep {
+        background: linear-gradient(135deg, #0f172a, #1e293b);
+      }
+      .module-box {
+        border: 2px solid #cbd5e1;
+        border-radius: 0.5rem;
+        background: #fff;
+      }
+      .shallow-fill { background: repeating-linear-gradient(135deg, #fef2f2, #fef2f2 6px, #fee2e2 6px, #fee2e2 12px); }
+      .arrow {
+        position: absolute;
+        border-top: 2px dashed #94a3b8;
+      }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+      <header class="space-y-3 border-b border-slate-200 pb-6">
+        <p class="text-xs uppercase tracking-wider text-slate-500">Architecture review</p>
+        <h1 class="font-serif text-3xl">instruction_builder</h1>
+        <p class="text-sm text-slate-500">2026-09-17 — scoped to the canvas token/step interaction and the shared field-editing shape, the two areas with the most git churn over the last 40 commits.</p>
+        <div class="flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-500 pt-2">
+          <span class="inline-flex items-center gap-2"><span class="inline-block w-4 h-4 border-2 border-slate-400 rounded"></span>module</span>
+          <span class="inline-flex items-center gap-2"><span class="inline-block w-4 h-0 border-t-2 border-dashed border-slate-400"></span>seam</span>
+          <span class="inline-flex items-center gap-2"><span class="inline-block w-4 h-0 border-t-2 border-red-500"></span>leakage</span>
+          <span class="inline-flex items-center gap-2"><span class="inline-block w-4 h-4 rounded deep"></span>deep module</span>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-14">
+
+        <!-- Candidate 1 -->
+        <article id="candidate-1" class="space-y-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="font-serif text-2xl">Give the canvas a <code>TokenChip</code> module</h2>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Strong</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">src/components/InstructionCanvas/InstructionCanvas.tsx (585 lines) · src/lib/pointer-drag.ts · src/state/drag.ts</p>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-2">Before</p>
+              <pre class="mermaid">
+flowchart TB
+  IC["InstructionCanvas<br/>.map over step.tokens"]
+  PD["onPointerDown closure<br/>(inline, per token)"]
+  BPD[beginPointerDrag]
+  RTD[resolveTokenDropTarget]
+  EQ["hand-written equality guard<br/>vs dropTarget.value"]
+  RPO[resolveTokenPointerOutcome]
+  SW{switch outcome.kind}
+  SS[selectStep]
+  ST[selectToken]
+  MT[moveToken]
+  IC --> PD
+  PD --> BPD
+  BPD -.leak.-> EQ
+  BPD --> RTD
+  RTD --> RPO
+  RPO --> SW
+  SW --> SS
+  SW --> ST
+  SW --> MT
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class EQ leak
+              </pre>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 flex items-center justify-center">
+              <div class="w-full">
+                <p class="text-xs uppercase tracking-wider text-slate-500 mb-2">After</p>
+                <div class="deep rounded-lg p-5 text-center">
+                  <p class="text-white text-sm font-medium">TokenChip</p>
+                  <p class="text-slate-300 text-xs mt-1 font-mono">{ token, position, isSelected, onSelect, onMove, onRemove }</p>
+                  <div class="mt-3 border-t border-white/20 pt-3 text-left space-y-1 opacity-50">
+                    <p class="text-slate-300 text-xs font-mono">beginPointerDrag →</p>
+                    <p class="text-slate-300 text-xs font-mono">resolveTokenDropTarget →</p>
+                    <p class="text-slate-300 text-xs font-mono">resolveTokenPointerOutcome →</p>
+                    <p class="text-slate-300 text-xs font-mono">switch → onSelect/onMove</p>
+                  </div>
+                </div>
+                <p class="text-center text-xs text-slate-500 mt-2">InstructionCanvas: one small render loop calling it</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <p><span class="font-medium">Problem:</span> the token's whole drag/select decision tree lives inside an inline <code>onPointerDown</code> closure three JSX levels deep — there's no <code>TokenChip</code> module to delete, so nothing concentrates when you imagine removing it.</p>
+            <p><span class="font-medium">Solution:</span> extract a <code>TokenChip</code> (and a matching <code>StepCard</code> for the step-handle drag closure at lines 371–391) that owns pointer wiring and exposes only selection/move/remove callbacks.</p>
+          </div>
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Leverage: one interface for select, move, and remove — three call sites collapse to one</li>
+            <li>Locality: the drop-target equality guard moves next to the drag logic it protects</li>
+            <li>Testability: "a drag ending over slot X moves the token" becomes reachable without Playwright</li>
+          </ul>
+          <div class="rounded border border-amber-200 bg-amber-50 text-amber-900 text-sm px-3 py-2">
+            This is the 2026-09-15 canvas-followup review's candidate #2 (<code>docs/phase-3/progress/architecture-svgbutton-extraction.md</code>: "splitting <code>&lt;StepCard&gt;</code>/<code>&lt;TokenChip&gt;</code> … remains unexplored"), deliberately deferred once already. Re-surfacing it because the file hasn't shrunk since — it's still 585 lines after the <code>SvgButton</code> extraction closed out the sibling candidate.
+          </div>
+        </article>
+
+        <!-- Candidate 2 -->
+        <article id="candidate-2" class="space-y-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="font-serif text-2xl">Deepen the collapsed/popover shape into one <code>CollapsibleField</code></h2>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Worth exploring</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">src/components/DurationField/DurationField.tsx (lines 160–214) · src/components/TokenDetails/TokenDetails.tsx's QuantityRow (lines 145–197)</p>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+              <p class="text-xs uppercase tracking-wider text-slate-500">Before — two stacked bands, same chrome</p>
+              <div class="space-y-1">
+                <div class="h-12 border-l-4 border-red-400 shallow-fill rounded flex items-center px-3 text-xs">DurationField: trigger + field-popover-anchor + FieldPopover + Save/Cancel</div>
+                <div class="h-12 border-l-4 border-red-400 shallow-fill rounded flex items-center px-3 text-xs">QuantityRow: trigger + field-popover-anchor + FieldPopover + Save/Cancel</div>
+              </div>
+              <p class="text-xs text-slate-500">~90 lines of identical structure, differing only in form contents. Both now also expose an identical controlled <code>editing</code>/<code>onEditingChange</code> pair just so <code>TimeAndQuantityRow</code> can keep them mutually exclusive.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-2">After — one thick band</p>
+              <div class="h-24 border-l-4 border-emerald-500 bg-emerald-50 rounded flex flex-col justify-center px-3">
+                <p class="text-sm font-medium">CollapsibleField</p>
+                <p class="text-xs text-slate-600 font-mono mt-1">{ trigger label, editing, onEditingChange, children: form }</p>
+              </div>
+              <p class="text-xs text-slate-500 mt-2">DurationField and QuantityRow each shrink to just their form body, passed as children.</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <p><span class="font-medium">Problem:</span> the trigger/popover/collapsed-vs-editing chrome is duplicated across two modules that already share a controlled-editing interface in practice.</p>
+            <p><span class="font-medium">Solution:</span> pull that chrome into a <code>CollapsibleField</code> module; DurationField and QuantityRow become thin adapters supplying only their form.</p>
+          </div>
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Interface shrinks: one popover/focus-trap wiring, not two</li>
+            <li>Locality: a future third field-editor gets the shape for free</li>
+            <li>Two adapters (duration form, quantity form) justify the seam</li>
+          </ul>
+          <div class="rounded border border-amber-200 bg-amber-50 text-amber-900 text-sm px-3 py-2">
+            Goes against <code>DurationField.tsx</code>'s own recorded rationale (lines 39–42): "a four-number duration and a two-field amount+unit form don't share enough shape to be worth a common prop surface." Worth reopening because that call predates <code>TimeAndQuantityRow</code>, which now forces both modules to expose the same controlled-editing contract anyway — the shared shape it argued against already exists.
+          </div>
+        </article>
+
+        <!-- Candidate 3 -->
+        <article id="candidate-3" class="space-y-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="font-serif text-2xl">Revisit <code>splitQuantity</code>'s best-effort reverse-parse</h2>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Speculative</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">src/components/TokenDetails/TokenDetails.tsx's QuantityRow · docs/known-issues.md</p>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-2">Before</p>
+              <div class="flex items-end gap-3 h-28">
+                <div class="w-1/2 h-full border-2 border-red-300 shallow-fill rounded flex items-end justify-center pb-1 text-xs">interface<br/>(splitQuantity)</div>
+                <div class="w-1/2 h-[85%] border-2 border-slate-300 rounded flex items-end justify-center pb-1 text-xs">implementation<br/>(re-parse "amount unit")</div>
+              </div>
+              <p class="text-xs text-slate-500 mt-2">Interface height nearly matches implementation — a re-parse of a joined display string, not an inverse of a structured value.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-2">After</p>
+              <div class="flex items-end gap-3 h-28">
+                <div class="w-1/3 h-[20%] border-2 border-emerald-400 bg-emerald-50 rounded flex items-end justify-center pb-1 text-xs">interface</div>
+                <div class="w-2/3 h-full border-2 border-slate-300 rounded flex items-end justify-center pb-1 text-xs">implementation<br/>(structured amount/unit)</div>
+              </div>
+              <p class="text-xs text-slate-500 mt-2"><code>TokenAttachment</code> stores <code>amount</code>/<code>unit</code> directly; the join becomes a display-time concern.</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <p><span class="font-medium">Problem:</span> <code>splitQuantity</code> silently falls back to defaults for any label it can't recognize (an older schema, a future unit-list change) — the deletion test already leans toward "concentrates."</p>
+            <p><span class="font-medium">Solution:</span> store <code>amount</code>/<code>unit</code> as fields on the attachment; join only for display.</p>
+          </div>
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Removes a silent-fallback failure mode entirely</li>
+            <li>Locality: no more re-parsing a display string to edit it</li>
+          </ul>
+          <div class="rounded border border-amber-200 bg-amber-50 text-amber-900 text-sm px-3 py-2">
+            Already tracked in <code>docs/known-issues.md</code> and deliberately deferred to Phase 4 task 32 — the audit's own prior assessment rated it weaker than other candidates. Not new; re-noted only because <code>TimeAndQuantityRow</code>'s mutual-exclusion coupling (candidate 2) makes <code>QuantityRow</code> a slightly less isolated place for this to keep living.
+          </div>
+        </article>
+
+      </section>
+
+      <section id="top-recommendation">
+        <div class="rounded-xl border-2 border-emerald-600 bg-emerald-50 p-6">
+          <p class="text-xs uppercase tracking-wider text-emerald-700 mb-1">Top recommendation</p>
+          <h2 class="font-serif text-xl mb-2"><a href="#candidate-1" class="underline decoration-emerald-600">Give the canvas a <code>TokenChip</code> module</a></h2>
+          <p class="text-sm text-slate-700">It's the only candidate with zero locality today — the drag/select decision tree for a token has no seam separate from the render closure it's tangled in, so it can only be exercised through Playwright. It was already identified and deferred once; deferring it a second time lets <code>InstructionCanvas.tsx</code> keep growing every time canvas interaction changes.</p>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>

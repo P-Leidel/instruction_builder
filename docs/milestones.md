@@ -198,6 +198,63 @@ The same day, on request, a step's Title and a token's Title were capped at
 50 characters and a step's Details and a token's Notes at 249, via a plain
 `maxLength` prop on each field. See
 [phase-3/progress/title-and-description-max-length.md](./phase-3/progress/title-and-description-max-length.md).
+While task 30 (Test Real Users) is underway, a 2026-09-17 pass picked up
+the 2026-09-15 canvas-followup review's other candidate - the six
+hand-rolled keyboard-activatable SVG `<g role="button">` blocks in
+`InstructionCanvas.tsx` - deliberately choosing it over the mobile-layout
+known-issue also on the table, since it's a zero-UI-impact refactor safe
+to ship while real users are mid-session. All six now share one new
+`SvgButton` component, and the Playwright driver gained Enter/Space
+keyboard coverage for the four sites it previously only clicked. See
+[phase-3/progress/architecture-svgbutton-extraction.md](./phase-3/progress/architecture-svgbutton-extraction.md).
+The same day, task 30 produced its first real batch of user feedback: five
+items settled via `/mattpocock-skills:grilling` before any code changed -
+the document title gained a 50-char cap it never had, Token Title's cap
+dropped from 50 to 18, a step's own duration moved from an external
+reserved gap above its card to inline before its title (removing that
+reservation entirely, so the canvas gets more compact rather than just
+visually rearranged), Token details' read-only icon-description line was
+removed as redundant with the user's own Notes field and deleted as dead
+code, and a scrollbar-triggered desktop layout shift was fixed with a
+`scrollbar-gutter: stable` scoped to the same `min-width: 800px` breakpoint
+as the `vw`-based grid columns it protects (an unscoped first attempt broke
+the existing mobile-overflow regression guard). See
+[phase-3/progress/task-30-user-feedback-fixes.md](./phase-3/progress/task-30-user-feedback-fixes.md).
+A second same-day feedback batch targeted Token details' Token time/Quantity
+pair: their "TOKEN TIME"/"QUANTITY" labels were removed as redundant with
+the fields' own controls, and "+ Quantity" moved inline next to "+ Time" in
+a new `TimeAndQuantityRow` wrapper that also makes the two fields mutually
+exclusive while editing (opening one closes the other, via a single
+`openField` state lifted above both). See
+[phase-3/progress/task-30-user-feedback-fixes-2.md](./phase-3/progress/task-30-user-feedback-fixes-2.md).
+A third same-day pass followed up: putting Token time and Quantity in one
+row had introduced a reflow bug (opening either one's inline edit form
+shoved the other's collapsed button around) and surfaced a pre-existing
+`DurationField` bug (its four day/hour/minute/second inputs don't fit on
+one line at the sidebar's actual width - also true of Step details' own
+Token time, not just the paired row). Both moved to a new `FieldPopover` -
+a small floating panel anchored below their trigger button, extending
+`useConfirmDialogFocusTrap`'s keyboard pattern - instead of expanding in
+place, removing the edit form from document flow entirely. See
+[phase-3/progress/task-30-user-feedback-fixes-3.md](./phase-3/progress/task-30-user-feedback-fixes-3.md).
+A same-day architecture pass then deepened two of that work's own
+follow-on candidates together, via `/mattpocock-skills:grilling`:
+`DurationField`/`QuantityRow`'s duplicated collapsed/popover chrome moved
+into one shared `CollapsedField<T>` module (each field now supplies only
+its own value display and a small `DurationForm`/`QuantityForm`), and
+`QuantityRow`'s best-effort `splitQuantity` reverse-parse was replaced by a
+new `QuantityAttachment` storing `amount`/`unit` as structured fields,
+mirroring how `DurationAttachment` already carries its raw `seconds`
+alongside its formatted label. See
+[phase-3/progress/architecture-2026-09-17-collapsedfield-and-structured-quantity.md](./phase-3/progress/architecture-2026-09-17-collapsedfield-and-structured-quantity.md).
+A fourth same-day feedback pass followed immediately: the collapsed
+button's text, now driven uniformly by `CollapsedField`'s `label` prop,
+read "+ Token time" - shortened back to "+ Time" (`StepDetails`/
+`TokenDetails` now pass `label="Time"` to `DurationField`, matching its
+own doc comment), which also let "+ Time" and "+ Quantity" fit on one line
+in `TimeAndQuantityRow` without wrapping, fixing a second report for free.
+See
+[phase-3/progress/task-30-user-feedback-fixes-4.md](./phase-3/progress/task-30-user-feedback-fixes-4.md).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
@@ -275,7 +332,7 @@ as "untitled-instructions.\<ext\>" because no UI lets the user set
 | 27 | Add Document Title UI | ✅ |
 | 28 | UI Polish Pass | ✅ |
 | 29 | Publish MVP | ✅ (live at <https://instructionbuilder-seven.vercel.app>) |
-| 30 | Test Real Users | Not started |
+| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), and [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md) feedback passes shipped) |
 | 31 | Refine UX | Not started |
 
 See [phase-3/progress/README.md](./phase-3/progress/README.md) for detail

@@ -10,7 +10,10 @@ Date: 2026-09-14, updated 2026-09-15 (tasks 25-29, an architecture review
 pass, a pre-launch file/docs and UI audit, a follow-up canvas-specific
 architecture deepening, a step-management-onto-the-canvas UX rework, and an
 "Add to token"-into-Token-details UX rework), updated 2026-09-16 (a further
-architecture review remediation, plus title/description max length limits)
+architecture review remediation, plus title/description max length limits),
+updated 2026-09-17 (the `SvgButton` extraction, task 30's first four real
+user feedback passes, and the `CollapsedField`/structured-Quantity
+deepening)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
 [../../project-plan.md](../../project-plan.md#implementation-plan)'s Phase 3
@@ -113,6 +116,67 @@ The same day, on request, a step's Title and a token's Title were capped at
 50 characters and a step's Details and a token's Notes at 249, via a plain
 `maxLength` prop on each field - see
 [title-and-description-max-length.md](./title-and-description-max-length.md).
+A 2026-09-17 pass picked up the 2026-09-15 canvas-followup review's other
+candidate - the six hand-rolled keyboard-activatable SVG `<g role="button">`
+blocks in `InstructionCanvas.tsx` - specifically because it's a
+zero-UI-impact refactor, safe to ship while task 30 (Test Real Users) is
+underway, unlike the mobile-layout known-issue also on the table. All six
+are now a new `SvgButton` component, and
+`.claude/skills/run-instruction-builder/driver.mjs` gained keyboard
+(Enter/Space) coverage for the four sites it previously only clicked - see
+[architecture-svgbutton-extraction.md](./architecture-svgbutton-extraction.md).
+The same day, task 30 (Test Real Users) produced its first batch of actual
+user feedback - five items, settled via `/mattpocock-skills:grilling` before
+any code changed: the document title gained a 50-char cap (it had none), a
+token's Title cap dropped from 50 to 18, a step's own duration moved from an
+external reserved gap above its card to inline before its title (and that
+external reservation is now gone, so the canvas is more compact, not just
+visually rearranged), Token details' read-only icon-description line was
+removed as redundant with the user's own Notes field (and deleted as dead
+code, since nothing else rendered it), and a scrollbar-triggered desktop
+layout shift was fixed with a breakpoint-scoped `scrollbar-gutter: stable`
+(a first, unscoped attempt broke the mobile-overflow regression guard - see
+the doc for why). See
+[task-30-user-feedback-fixes.md](./task-30-user-feedback-fixes.md). A
+second same-day batch targeted Token details' Token time/Quantity pair
+specifically: their "TOKEN TIME"/"QUANTITY" labels were removed as
+redundant with the fields' own controls (`DurationField` gained a
+`showLabel` prop, defaulting to `true` so `StepDetails`' "Step time" keeps
+its label), and "+ Quantity" moved inline next to "+ Time" in a new
+`TimeAndQuantityRow` wrapper that also makes the two fields mutually
+exclusive - opening one's edit form now closes the other's, via a single
+`openField` state lifted above both. See
+[task-30-user-feedback-fixes-2.md](./task-30-user-feedback-fixes-2.md). A
+third same-day pass followed up on that fix: putting the two fields in one
+row had introduced a reflow bug (opening either one's inline edit form
+visibly shoved the other's collapsed button around), and separately
+surfaced a pre-existing `DurationField` bug (its four day/hour/minute/
+second inputs don't fit on one line at the sidebar's actual width, also
+true of Step details' own Token time, not just the paired row). Both were
+verified against the running dev server before being grilled into a fix:
+Token time (everywhere it's used) and Quantity now open their edit forms
+in a new `FieldPopover` - a small floating panel anchored below their
+trigger button, extending `useConfirmDialogFocusTrap`'s keyboard pattern
+to more than two controls - instead of expanding in place, which removes
+the form from document flow entirely so a sibling field can no longer be
+affected by it, and gives it enough width to lay out on one line. See
+[task-30-user-feedback-fixes-3.md](./task-30-user-feedback-fixes-3.md). A
+same-day architecture pass then deepened two of that work's own follow-on
+candidates together: `DurationField` and TokenDetails' `QuantityRow`'s
+duplicated collapsed/popover chrome moved into one shared `CollapsedField<T>`
+module (each field now supplies only its own value display and a small
+`DurationForm`/`QuantityForm`), and `QuantityRow`'s best-effort
+`splitQuantity` reverse-parse was replaced by storing `amount`/`unit` as
+structured fields on a new `QuantityAttachment`, mirroring how
+`DurationAttachment` already carries its raw `seconds`. See
+[architecture-2026-09-17-collapsedfield-and-structured-quantity.md](./architecture-2026-09-17-collapsedfield-and-structured-quantity.md).
+A fourth same-day feedback pass followed immediately: the collapsed
+"+ Token time" button was shortened back to "+ Time" (matching
+`DurationField`'s own doc comment, which the two call sites had drifted
+from), which also fixed a second report for free - "+ Time" and
+"+ Quantity" now fit on one line in `TimeAndQuantityRow` without wrapping,
+where "+ Token time" and "+ Quantity" together hadn't. See
+[task-30-user-feedback-fixes-4.md](./task-30-user-feedback-fixes-4.md).
 
 ## What shipped
 
@@ -132,7 +196,9 @@ One file per task (or per notable pass), in task-number order:
 | — | UX: "Add to token" folded into Token details (TokenAttachmentPicker deleted; Quantity/Warning are always-visible rows in TokenDetails.tsx, changeable without removing first) | [token-attachments-folded-into-token-details.md](./token-attachments-folded-into-token-details.md) |
 | — | Architecture: 2026-09-16 review remediation (`resolveTokenPointerOutcome` names the select/drag decision in `lib/pointer-drag.ts`; `attachToSelectedToken` deleted from `state/document.ts`) | [architecture-2026-09-16-review-remediation.md](./architecture-2026-09-16-review-remediation.md) |
 | — | Title/description max length limits (step and token Title capped at 50 characters, step Details and token Notes at 249) | [title-and-description-max-length.md](./title-and-description-max-length.md) |
-| 30 | Test Real Users | *not started* |
+| — | Architecture: extract `SvgButton` (six duplicated keyboard-activatable SVG `<g role="button">` blocks in `InstructionCanvas.tsx` unified into one component; driver gained Enter/Space coverage for four sites) | [architecture-svgbutton-extraction.md](./architecture-svgbutton-extraction.md) |
+| 30 | Test Real Users (in progress - four feedback passes shipped) | [task-30-user-feedback-fixes.md](./task-30-user-feedback-fixes.md), [task-30-user-feedback-fixes-2.md](./task-30-user-feedback-fixes-2.md), [task-30-user-feedback-fixes-3.md](./task-30-user-feedback-fixes-3.md), [task-30-user-feedback-fixes-4.md](./task-30-user-feedback-fixes-4.md) |
+| — | Architecture: `CollapsedField<T>` extraction (DurationField/QuantityRow's duplicated collapsed/popover chrome unified) plus structured Quantity (`QuantityAttachment` replaces `splitQuantity`'s reverse-parse) | [architecture-2026-09-17-collapsedfield-and-structured-quantity.md](./architecture-2026-09-17-collapsedfield-and-structured-quantity.md) |
 | 31 | Refine UX | *not started* |
 
 ## Verification
@@ -146,7 +212,14 @@ One file per task (or per notable pass), in task-number order:
   mutators around without adding new logic; the 2026-09-16 architecture
   remediation added 4 `resolveTokenPointerOutcome` cases to
   `pointer-drag.test.ts` and removed 1 orphaned `attachToSelectedToken`
-  case from `document.test.ts`, net +3), and `npm run build` all pass
+  case from `document.test.ts`, net +3; the `SvgButton` extraction added
+  none - a component-only refactor with no new `lib`/`state` logic; the
+  task 30 feedback passes updated 1 existing `canvas-layout.test.ts`
+  assertion for the deleted `headerHeight` field (first pass) and added
+  none (second, third, and fourth passes - component-only refactors, same
+  as `SvgButton`), net 0 across all four; the `CollapsedField`/structured-
+  Quantity deepening added none either - same kind of component/data-shape
+  refactor with no new branchable logic), and `npm run build` all pass
   cleanly.
 - See each task's own file above for full verification detail
   (browser-driven checks, bundle size deltas, and the decisions made along

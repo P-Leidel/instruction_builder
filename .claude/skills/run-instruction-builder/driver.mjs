@@ -148,16 +148,23 @@ await firstToken.click();
 // below. Verify the canvas chip grows the expected badges, Token details
 // reflects both, and removing one via Token details drops it from both.
 const tokenDetails = page.locator(".token-details");
+// Token time and Quantity both render the shared CollapsedField chrome
+// (see components/CollapsedField/CollapsedField.tsx) - `.collapsed-field`,
+// `.collapsed-field__save`, etc. are ambiguous within `.token-details`
+// alone, so these scope to their fixed position (Time first, Quantity
+// second) within `.token-details__time-quantity-row` - see
+// TokenDetails.tsx's TimeAndQuantityRow.
+const tokenQuantityField = page.locator(".token-details__time-quantity-row").locator(".collapsed-field").nth(1);
 await tokenDetails.getByRole("button", { name: "Sharp!", exact: true }).click();
 await tokenDetails.getByRole("button", { name: "Add quantity", exact: true }).click();
 const quantityAmountInput = tokenDetails.locator(".token-details__quantity-field input");
 const quantityUnitSelect = tokenDetails.locator(".token-details__quantity-field select");
 await quantityAmountInput.fill("250");
 await quantityUnitSelect.selectOption("g");
-await tokenDetails.locator(".token-details__quantity-save").click();
+await tokenQuantityField.locator(".collapsed-field__save").click();
 
 const badgeCountAfterAttach = await firstToken.locator(".instruction-canvas__chip-badge").count();
-const quantityAttachedAfterSave = (await tokenDetails.locator(".token-details__quantity-value").textContent()) === "250 g";
+const quantityAttachedAfterSave = (await tokenQuantityField.locator(".collapsed-field__value").textContent()) === "250 g";
 const warningAttachmentCountAfterClick = await tokenDetails.locator(".token-details__attachment").count();
 await page.screenshot({ path: path.join(OUT, "02c-token-attachments.png"), fullPage: true });
 
@@ -167,7 +174,7 @@ await tokenDetails.getByRole("button", { name: "Remove Sharp!" }).click();
 const badgeCountAfterRemove = await firstToken.locator(".instruction-canvas__chip-badge").count();
 const warningAttachmentCountAfterRemove = await tokenDetails.locator(".token-details__attachment").count();
 const quantityStillAttachedAfterWarningRemove =
-  (await tokenDetails.locator(".token-details__quantity-value").textContent()) === "250 g";
+  (await tokenQuantityField.locator(".collapsed-field__value").textContent()) === "250 g";
 
 const attachmentsWorkedEndToEnd =
   badgeCountAfterAttach === 2 &&
@@ -188,7 +195,7 @@ const attachmentsWorkedEndToEnd =
 // unset). Clicking Edit here also exercises the edit form pre-filling
 // from the current value ("250"/"g"), same as DurationField's own
 // `startEditing`.
-await tokenDetails.locator(".token-details__quantity-edit").click();
+await tokenQuantityField.locator(".collapsed-field__edit").click();
 const quantityEditPrefillsFromCurrentValue =
   (await quantityAmountInput.inputValue()) === "250" && (await quantityUnitSelect.inputValue()) === "g";
 await quantityAmountInput.focus();
@@ -212,12 +219,12 @@ await firstToken.click(); // back to the first token for the rest of the flow
 // attached; the fresh QuantityRow mount just triggered by re-selecting it
 // (above) reset back to its collapsed display, same as the token-switch
 // check just above.
-await tokenDetails.locator(".token-details__quantity-edit").click();
+await tokenQuantityField.locator(".collapsed-field__edit").click();
 await quantityAmountInput.fill("3");
 await quantityUnitSelect.selectOption("kg");
-await tokenDetails.locator(".token-details__quantity-save").click();
-const quantityValueCountAfterReplace = await tokenDetails.locator(".token-details__quantity-value").count();
-const replacedQuantityLabel = await tokenDetails.locator(".token-details__quantity-value").textContent();
+await tokenQuantityField.locator(".collapsed-field__save").click();
+const quantityValueCountAfterReplace = await tokenQuantityField.locator(".collapsed-field__value").count();
+const replacedQuantityLabel = await tokenQuantityField.locator(".collapsed-field__value").textContent();
 const attachedValueChangeableWithoutRemoving =
   quantityValueCountAfterReplace === 1 && // replaced in place, not a second attachment
   replacedQuantityLabel === "3 kg";
@@ -227,8 +234,8 @@ const attachedValueChangeableWithoutRemoving =
 // estimate, which takes precedence over its tokens' summed time when both
 // are set - see stepDisplayedTime in InstructionCanvas.tsx). Verify the
 // canvas's step-level duration header reflects both in turn.
-const tokenDurationField = page.locator(".token-details").locator(".duration-field");
-await tokenDurationField.getByRole("button", { name: "Add token time", exact: true }).click();
+const tokenDurationField = page.locator(".token-details__time-quantity-row").locator(".collapsed-field").nth(0);
+await tokenDurationField.getByRole("button", { name: "Add time", exact: true }).click();
 const tokenDurationInputs = tokenDurationField.locator(".duration-field__unit input");
 // Select-on-focus: focusing a duration input should select its full
 // contents (so overtyping doesn't require manually clearing it first) -
@@ -239,7 +246,7 @@ const durationSelectsValueOnFocus = await tokenDurationInputs.nth(0).evaluate(
 );
 await tokenDurationInputs.nth(1).fill("1"); // 1 hour
 await tokenDurationInputs.nth(2).fill("30"); // 30 minutes
-await tokenDurationField.getByRole("button", { name: "Save token time", exact: true }).click();
+await tokenDurationField.getByRole("button", { name: "Save time", exact: true }).click();
 
 const stepTimeAfterTokenTime = await editableCanvas.locator(".instruction-canvas__step-time").first().textContent();
 const tokenTimeMatchesSum = stepTimeAfterTokenTime === "1h 30m";
@@ -250,37 +257,45 @@ const tokenTimeMatchesSum = stepTimeAfterTokenTime === "1h 30m";
 // token and then clicking a *different* token (without saving/cancelling)
 // left the new token's Time field stuck showing the old token's unsaved
 // editing form instead of the new token's own value.
-await tokenDurationField.getByRole("button", { name: "Edit token time", exact: true }).click();
+await tokenDurationField.getByRole("button", { name: "Edit time", exact: true }).click();
 await tokenDurationInputs.nth(2).fill("59"); // change but deliberately don't save
 const secondToken = editableCanvas.locator(".instruction-canvas__token").nth(1);
 await secondToken.click(); // step 1 already selected -> selects its 2nd token (no time of its own)
-const freshTokenDurationField = page.locator(".token-details").locator(".duration-field");
+const freshTokenDurationField = page.locator(".token-details__time-quantity-row").locator(".collapsed-field").nth(0);
 const durationFieldResetsPerToken =
   (await freshTokenDurationField.locator(".duration-field__inputs").count()) === 0 &&
-  (await freshTokenDurationField.getByRole("button", { name: "Add token time", exact: true }).count()) === 1;
+  (await freshTokenDurationField.getByRole("button", { name: "Add time", exact: true }).count()) === 1;
 // Leave the first token re-selected and its time intact for the rest of the flow.
 await firstToken.click();
 
-const stepDurationField = page.locator(".step-details").locator(".duration-field");
-await stepDurationField.getByRole("button", { name: "Add step time", exact: true }).click();
+const stepDurationField = page.locator(".step-details").locator(".collapsed-field");
+await stepDurationField.getByRole("button", { name: "Add time", exact: true }).click();
 const stepDurationInputs = stepDurationField.locator(".duration-field__unit input");
 await stepDurationInputs.nth(0).fill("2"); // 2 days - an explicit step estimate
-await stepDurationField.getByRole("button", { name: "Save step time", exact: true }).click();
+await stepDurationField.getByRole("button", { name: "Save time", exact: true }).click();
 
 const stepTimeAfterStepTime = await editableCanvas.locator(".instruction-canvas__step-time").first().textContent();
 const stepTimeOverridesTokenSum = stepTimeAfterStepTime === "2d";
 
 // Same regression as above, for a step switch: edit step 1's time again
 // without saving, then switch to step 2 - its own DurationField must show
-// "Add step time" fresh, not step 1's leftover unsaved edit.
-await stepDurationField.getByRole("button", { name: "Edit step time", exact: true }).click();
+// "Add time" fresh, not step 1's leftover unsaved edit.
+await stepDurationField.getByRole("button", { name: "Edit time", exact: true }).click();
 await stepDurationInputs.nth(0).fill("5"); // change but deliberately don't save
 await editableCanvas.locator(".instruction-canvas__badge").nth(1).click(); // switch to step 2 (no time of its own)
-const freshStepDurationField = page.locator(".step-details").locator(".duration-field");
+const freshStepDurationField = page.locator(".step-details").locator(".collapsed-field");
 const durationFieldResetsPerStep =
   (await freshStepDurationField.locator(".duration-field__inputs").count()) === 0 &&
-  (await freshStepDurationField.getByRole("button", { name: "Add step time", exact: true }).count()) === 1;
-await editableCanvas.locator(".instruction-canvas__badge").first().click(); // back to step 1 for the rest of the flow
+  (await freshStepDurationField.getByRole("button", { name: "Add time", exact: true }).count()) === 1;
+// Keyboard coverage (docs/phase-3/progress/architecture-svgbutton-extraction.md):
+// activate via Enter/Space, not click - same SvgButton onActivate either
+// way, so the resulting selection/action is identical to a click; only the
+// input path differs.
+async function activateViaKeyboard(locator, key) {
+  await locator.focus();
+  await locator.press(key);
+}
+await activateViaKeyboard(editableCanvas.locator(".instruction-canvas__badge").first(), "Enter"); // back to step 1 for the rest of the flow
 
 await page.screenshot({ path: path.join(OUT, "02d-time.png"), fullPage: true });
 
@@ -296,7 +311,8 @@ const canvasControlFocused = await page.evaluate(
 
 const chipRemoves = editableCanvas.locator(".instruction-canvas__chip-remove");
 if ((await chipRemoves.count()) > 0) {
-  await chipRemoves.first().click();
+  // Keyboard coverage: Space, not click - see the badge-select comment above.
+  await activateViaKeyboard(chipRemoves.first(), " ");
   await page.screenshot({ path: path.join(OUT, "03-desktop-after-remove.png"), fullPage: true });
 }
 
@@ -365,7 +381,12 @@ const forwardTokenDragLandsAtDropPoint =
 // each step's vertical midpoint, so dropping exactly on a midpoint is a
 // genuine boundary tie, not a realistic drag gesture.
 const stepGroups = editableCanvas.locator("[data-step-index]");
-const stepTitles = editableCanvas.locator(".instruction-canvas__step-title");
+// .instruction-canvas__step-title-text, not the outer __step-title text node
+// itself: since the step-time relocation
+// (docs/phase-3/progress/task-30-user-feedback-fixes.md), that outer node's
+// textContent can include a "<time> - " prefix, which would otherwise leak
+// into every title-equality check below.
+const stepTitles = editableCanvas.locator(".instruction-canvas__step-title-text");
 const firstSummaryBefore = await stepTitles.first().textContent();
 const step2HandleBox = await stepGroups.nth(1).locator(".instruction-canvas__step-drag-handle").boundingBox();
 const step1Box = await stepGroups.nth(0).boundingBox();
@@ -405,7 +426,8 @@ const forwardStepDragLandsAtDropPoint =
 // Remove the temporary third step so downstream counts (the persistence
 // check below expects exactly 2 steps) stay accurate, and refresh
 // firstSummaryAfter to reflect the resulting order.
-await stepGroups.nth(2).locator(".instruction-canvas__step-remove").click();
+// Keyboard coverage: Enter, not click - see the badge-select comment above.
+await activateViaKeyboard(stepGroups.nth(2).locator(".instruction-canvas__step-remove"), "Enter");
 firstSummaryAfter = await stepTitles.first().textContent();
 
 // Task 22: Move up/down buttons are the keyboard-operable alternative to
@@ -446,7 +468,8 @@ const stepMoveButtonsDisabledAtBoundaries = firstStepMoveUpDisabled && lastStepM
 const summariesBeforeHistoryTest = await stepTitles.allTextContents();
 
 // Discrete action: adding a step is its own undo step.
-await editableCanvas.locator(".instruction-canvas__add-step").click();
+// Keyboard coverage: Space, not click - see the badge-select comment above.
+await activateViaKeyboard(editableCanvas.locator(".instruction-canvas__add-step"), " ");
 const stepCountAfterAddForHistoryTest = await stepGroups.count();
 await undoButton.click();
 const stepCountAfterUndoingAdd = await stepGroups.count();

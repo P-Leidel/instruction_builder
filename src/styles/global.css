@@ -403,6 +403,19 @@ button {
 }
 
 @media (min-width: 800px) {
+  /* .app__main's grid-template-columns below uses vw-based clamp() for its
+     side columns, so the vertical scrollbar toggling on/off as the document
+     grows/shrinks would otherwise change the viewport width vw resolves
+     against and reflow the whole grid. Reserving the gutter unconditionally
+     keeps that width constant whether or not a scrollbar is actually
+     showing. Scoped to this same breakpoint (not a bare `html` rule) since
+     mobile's plain flex-column layout below has no vw-based columns to
+     protect, and reserving a gutter there only distorts
+     scrollWidth/clientWidth measurements without fixing anything real. */
+  html {
+    scrollbar-gutter: stable;
+  }
+
   .app__main {
     max-width: none;
     display: grid;
@@ -580,26 +593,31 @@ button {
   font-weight: 600;
 }
 
-/* Duration field (Time) - shared by Step details and Token details, see
-   components/DurationField/DurationField.tsx. Collapsed to one line (a
-   "+ Time" button, or a value with Edit/Remove) until actively editing, so
-   it doesn't dominate either panel. */
+/* Collapsed field - the add/display/edit/remove/popover-anchor chrome
+   shared by every "few clicks" value field in this app (Step/Token time via
+   DurationField, TokenDetails' Quantity), see
+   components/CollapsedField/CollapsedField.tsx. Collapsed to one line (a
+   "+ <label>" button, or a value with Edit/Remove) until actively editing,
+   so it doesn't dominate either panel. Each field still owns its own edit
+   form's classes (.duration-field__inputs, .token-details__quantity-form,
+   etc.) below - only this shared chrome moved out of duplicating
+   .duration-field__* and .token-details__quantity-* rules. */
 
-.duration-field {
+.collapsed-field {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
   margin-bottom: 0.75rem;
 }
 
-.duration-field__label {
+.collapsed-field__label {
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--color-text-muted);
 }
 
-.duration-field__add {
+.collapsed-field__add {
   align-self: flex-start;
   border: 1px dashed var(--color-border-strong);
   background: transparent;
@@ -610,34 +628,34 @@ button {
   color: var(--color-text);
 }
 
-.duration-field__add:hover {
+.collapsed-field__add:hover {
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
 
-.duration-field__display {
+.collapsed-field__display {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.4rem;
 }
 
-.duration-field__display-actions {
+.collapsed-field__display-actions {
   display: flex;
   gap: 0.5rem;
 }
 
-.duration-field__value {
+.collapsed-field__value {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   font-size: 0.85rem;
   white-space: nowrap;
 }
 
-.duration-field__edit,
-.duration-field__remove,
-.duration-field__save,
-.duration-field__cancel {
+.collapsed-field__edit,
+.collapsed-field__remove,
+.collapsed-field__save,
+.collapsed-field__cancel {
   border: 1px solid var(--color-border);
   background: var(--color-surface-sunken);
   border-radius: var(--radius-sm);
@@ -647,23 +665,26 @@ button {
   color: var(--color-text);
 }
 
-.duration-field__remove:hover {
+.collapsed-field__remove:hover {
   border-color: var(--color-danger);
   color: var(--color-danger);
 }
 
-.duration-field__save {
+.collapsed-field__save {
   background: var(--color-accent);
   border-color: var(--color-accent);
   color: var(--color-accent-contrast);
 }
 
-.duration-field__save:disabled {
+.collapsed-field__save:disabled {
   background: var(--color-surface-sunken);
   border-color: var(--color-border);
   color: var(--color-text-muted);
   cursor: not-allowed;
 }
+
+/* Duration form (DurationForm) - the day/hour/minute/second inputs inside
+   DurationField's popover. */
 
 .duration-field__inputs {
   display: flex;
@@ -695,6 +716,38 @@ button {
   gap: 0.5rem;
 }
 
+/* FieldPopover - shared by DurationField (Step/Token time) and
+   TokenDetails' QuantityRow (Quantity), see
+   components/FieldPopover/FieldPopover.tsx. `.field-popover-anchor` must
+   wrap exactly the trigger button ("+ Time"/"+ Quantity" or Edit) that
+   opens it - `position: relative` there makes `.field-popover`'s
+   `top: 100%` land directly below that button, not any other sibling
+   content in the field. Floats above the layout instead of pushing it,
+   so a field next to this one (Token time beside Quantity, in
+   TimeAndQuantityRow below) never reflows just because this one opened. */
+
+.field-popover-anchor {
+  position: relative;
+  display: inline-block;
+}
+
+.field-popover {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 0.75rem;
+}
+
 /* Token details */
 
 .token-details__empty {
@@ -702,20 +755,29 @@ button {
   font-size: 0.9rem;
 }
 
-.token-details__summary {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0 0 0.75rem;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-}
-
 .token-details__field {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   margin-bottom: 0.75rem;
+}
+
+/* Token time + Quantity sit in one row (testers wanted "+ Quantity" inline
+   next to "+ Time" rather than stacked) - see TokenDetails.tsx's
+   TimeAndQuantityRow. The row itself carries the bottom margin that
+   .duration-field/.token-details__field normally carry individually, so the
+   two don't stack a double gap underneath whichever one happens to be
+   shorter. */
+.token-details__time-quantity-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.token-details__time-quantity-row .collapsed-field {
+  margin-bottom: 0;
 }
 
 .token-details__label {
@@ -1008,19 +1070,14 @@ button {
   font-weight: 600;
 }
 
-/* Step duration header - centered above a step's card (see
-   InstructionCanvas's TIME_HEADER_HEIGHT), showing either the step's own
-   time or the sum of its tokens' times. */
-.instruction-canvas__step-time {
-  fill: var(--color-text);
-  font-size: 11px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
+/* .instruction-canvas__step-time (the step's own duration, shown either the
+   step's own time or the sum of its tokens' times) carries no styling of its
+   own - it's a <tspan> inside .instruction-canvas__step-title's <text>, so it
+   inherits that text's look, and the class exists only so
+   driver.mjs/tests can select just the time portion. */
 
-/* Token duration label - the same idea as .instruction-canvas__step-time
-   above, just above one chip instead of a whole step card, and smaller to
-   match the chip's own label (.instruction-canvas__chip-label). */
+/* Token duration label - above one chip instead of a whole step's title,
+   and smaller to match the chip's own label (.instruction-canvas__chip-label). */
 .instruction-canvas__chip-time {
   fill: var(--color-text-muted);
   font-size: 8px;
@@ -1116,75 +1173,10 @@ button {
   hyphens: auto;
 }
 
-/* Quantity field (TokenDetails' QuantityRow) - a collapsed/edit-toggle
-   value editor mirroring DurationField's "Token time" look (a "+ Quantity"
-   button, or a value with Edit/Remove, expanding to a committed edit form
-   with Save/Cancel), but with its own amount+unit form and class names
-   rather than sharing DurationField's component or CSS. */
-
-.token-details__quantity-add {
-  align-self: flex-start;
-  border: 1px dashed var(--color-border-strong);
-  background: transparent;
-  border-radius: var(--radius-md);
-  padding: 0.35rem 0.75rem;
-  min-height: 36px;
-  font-size: 0.85rem;
-  color: var(--color-text);
-}
-
-.token-details__quantity-add:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-
-.token-details__quantity-display {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.4rem;
-}
-
-.token-details__quantity-display-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.token-details__quantity-value {
-  font-weight: 600;
-  font-size: 0.85rem;
-}
-
-.token-details__quantity-edit,
-.token-details__quantity-remove,
-.token-details__quantity-save,
-.token-details__quantity-cancel {
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-sunken);
-  border-radius: var(--radius-sm);
-  padding: 0.3rem 0.6rem;
-  min-height: 32px;
-  font-size: 0.8rem;
-  color: var(--color-text);
-}
-
-.token-details__quantity-remove:hover {
-  border-color: var(--color-danger);
-  color: var(--color-danger);
-}
-
-.token-details__quantity-save {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-accent-contrast);
-}
-
-.token-details__quantity-save:disabled {
-  background: var(--color-surface-sunken);
-  border-color: var(--color-border);
-  color: var(--color-text-muted);
-  cursor: not-allowed;
-}
+/* Quantity form (QuantityForm) - the amount+unit inputs inside
+   TokenDetails' Quantity field's popover (the collapsed/edit-toggle chrome
+   around it is CollapsedField's, shared with DurationField - see the
+   "Collapsed field" section above). */
 
 .token-details__quantity-form {
   display: flex;

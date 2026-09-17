@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review — instruction_builder (canvas)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .badge { display: inline-flex; align-items: center; padding: 0.15rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; }
+      .badge-strong { background: #d1fae5; color: #065f46; }
+      .badge-worth { background: #fef3c7; color: #92400e; }
+      .badge-speculative { background: #e2e8f0; color: #475569; }
+      .tag { display: inline-flex; align-items: center; padding: 0.15rem 0.6rem; border-radius: 9999px; font-size: 0.7rem; background: #f1f5f9; color: #475569; }
+      .legend-box { width: 1rem; height: 1rem; display: inline-block; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+      <header class="space-y-4 border-b border-slate-200 pb-8">
+        <p class="text-xs uppercase tracking-widest text-slate-500">instruction_builder &middot; 2026-09-15</p>
+        <h1 class="font-serif text-3xl font-semibold">Architecture review — the canvas</h1>
+        <p class="text-slate-600 max-w-2xl">
+          Scope: <code class="font-mono text-sm">InstructionCanvas.tsx</code>,
+          <code class="font-mono text-sm">lib/canvas-layout.ts</code>,
+          <code class="font-mono text-sm">state/drag.ts</code>,
+          <code class="font-mono text-sm">lib/pointer-drag.ts</code>. A fresh pass, not a
+          re-confirmation of the known-issues.md re-render/vocabulary items (already tracked,
+          deliberately deferred).
+        </p>
+        <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600 sans">
+          <span><span class="legend-box border-2 border-slate-400 bg-white align-middle mr-1"></span>module</span>
+          <span><span class="legend-box border-2 border-slate-400 border-dashed bg-white align-middle mr-1"></span>seam</span>
+          <span><span class="legend-box border-2 border-red-500 bg-white align-middle mr-1"></span>leak</span>
+          <span><span class="legend-box deep align-middle mr-1"></span>deep module</span>
+        </div>
+        <p class="text-sm text-slate-500 max-w-2xl">
+          <code class="font-mono text-xs">canvas-layout.ts</code> was already deepened earlier today
+          (<code class="font-mono text-xs">computeCanvasLayout</code> is now its whole interface —
+          see <code class="font-mono text-xs">docs/phase-3/audits/2026-09-15-canvas-architecture-review.html</code>).
+          That module isn't revisited here. This pass instead looks hard at
+          <code class="font-mono text-xs">InstructionCanvas.tsx</code>, including reconsidering the
+          2026-09-14 review's "largely holds up" verdict — reached when the file was ~400 lines,
+          before step management (reorder handle, move up/down, remove) was merged onto the canvas
+          and pushed it to 626.
+        </p>
+      </header>
+
+      <section id="candidates" class="space-y-16">
+
+        <!-- Candidate 1 -->
+        <article class="space-y-5">
+          <div class="sans flex items-center gap-3 flex-wrap">
+            <span class="badge badge-strong">Strong</span>
+            <span class="tag">in-process</span>
+          </div>
+          <h2 class="font-serif text-2xl font-semibold">One SVG-button interface, five copies deleted</h2>
+          <p class="font-mono text-sm text-slate-600">src/components/InstructionCanvas/InstructionCanvas.tsx</p>
+
+          <div class="grid md:grid-cols-2 gap-6 py-4">
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">Before — five adapters, no shared interface</p>
+              <div class="space-y-2">
+                <div class="border-l-4 border-slate-400 pl-3 py-1.5 diagram-label text-sm">step badge · role, tabindex, onClick, onKeyDown(Enter/Space)</div>
+                <div class="border-l-4 border-slate-400 pl-3 py-1.5 diagram-label text-sm">step remove (×) · same 6 lines, + stopPropagation-free onClick</div>
+                <div class="border-l-4 border-slate-400 pl-3 py-1.5 diagram-label text-sm">move up · same 6 lines, + a canMoveUp guard</div>
+                <div class="border-l-4 border-slate-400 pl-3 py-1.5 diagram-label text-sm">move down · same 6 lines, + a canMoveDown guard</div>
+                <div class="border-l-4 border-red-500 pl-3 py-1.5 diagram-label text-sm">chip remove (×) · same 6 lines, + stopPropagation twice <span class="text-red-600">← drifted</span></div>
+              </div>
+              <p class="text-xs text-slate-500 mt-3">Every box re-implements "SVG group that's a keyboard-activatable button." The interface (role/tabindex/onClick/onKeyDown) is fully known — it's just never named.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-5 flex flex-col items-center justify-center">
+              <div class="deep text-white rounded-lg p-6 w-full text-center">
+                <p class="text-xs uppercase tracking-wider opacity-70 mb-2">deep module</p>
+                <p class="font-semibold">SvgButton adapter</p>
+                <p class="text-xs opacity-70 mt-2">{ onActivate, disabled?, stopPropagation? }</p>
+              </div>
+              <p class="text-xs text-slate-500 mt-3 text-center">5 call sites become 5 one-line adapters at the same seam. Enter/Space handling exists once.</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 sans text-sm">
+            <div>
+              <p class="font-semibold text-slate-700 mb-1">Problem</p>
+              <p class="text-slate-600">The badge, step-remove, move-up, move-down, and chip-remove controls each carry their own copy of the role/tabindex/onClick/onKeyDown(Enter-or-Space) block — five adapters with no shared interface. They've already drifted: chip-remove calls <code class="font-mono text-xs">stopPropagation</code> in both handlers (it sits inside a draggable token), the other four don't need to and don't.</p>
+            </div>
+            <div>
+              <p class="font-semibold text-slate-700 mb-1">Solution</p>
+              <p class="text-slate-600">Give "keyboard-activatable SVG button" one interface — a small <code class="font-mono text-xs">SvgButton</code> component or <code class="font-mono text-xs">svgButtonProps(onActivate, opts)</code> helper — and have all five sites call it. Deletion test: remove one copy and the block reappears verbatim four more times in the same file — it's earning nothing by staying separate.</p>
+            </div>
+          </div>
+
+          <div class="sans">
+            <p class="text-sm font-semibold text-slate-700 mb-2">Wins</p>
+            <ul class="text-sm text-slate-700 space-y-1 list-disc list-inside">
+              <li>Locality: Enter/Space bug fixed in one place, fixed at all five</li>
+              <li>Interface shrinks; implementation absorbs the wrappers</li>
+              <li>Testable once, not re-verified per control</li>
+              <li>~90 lines of near-duplicate JSX gone</li>
+            </ul>
+          </div>
+        </article>
+
+        <!-- Candidate 2 -->
+        <article class="space-y-5">
+          <div class="sans flex items-center gap-3 flex-wrap">
+            <span class="badge badge-worth">Worth exploring</span>
+            <span class="tag">in-process</span>
+            <span class="tag">re-examined</span>
+          </div>
+          <h2 class="font-serif text-2xl font-semibold">The step card's render tree has no interface of its own</h2>
+          <p class="font-mono text-sm text-slate-600">src/components/InstructionCanvas/InstructionCanvas.tsx</p>
+
+          <div class="py-4">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <pre class="mermaid">
+                flowchart TB
+                  subgraph before["InstructionCanvas — one render tree, 626 lines"]
+                    direction TB
+                    R["layouts.map(...)"] --> Badge["step badge + a11y"]
+                    R --> Flag["incomplete flag"]
+                    R --> Remove["step remove"]
+                    R --> Controls["drag handle + move up/down"]
+                    R --> Tokens["step.tokens.map(...)"]
+                    Tokens --> Chip["chip rect + icon + label"]
+                    Tokens --> Badges["Warning/Quantity badges"]
+                    Tokens --> Drag["pointer drag: ghost, drop-target, select-vs-drag"]
+                    Tokens --> ChipRemove["chip remove"]
+                  end
+                  classDef leak stroke:#dc2626,stroke-width:2px;
+                  class Drag leak
+              </pre>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 py-2">
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">Before</p>
+              <p class="text-sm text-slate-600">One component owns step-card markup, token-chip markup, and both controls' drag orchestration at once. Testing "does an incomplete step show its flag" means rendering the whole canvas.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <div class="deep text-white rounded-lg p-4 text-center">
+                <p class="text-xs uppercase tracking-wider opacity-70">deep modules</p>
+                <p class="font-semibold text-sm mt-1">StepCard</p>
+                <p class="font-semibold text-sm">TokenChip</p>
+              </div>
+              <p class="text-xs text-slate-500 mt-3">InstructionCanvas keeps only the layout loop and the two <code class="font-mono text-xs">.map()</code> calls; each card/chip becomes its own seam, testable with one step or one token in, markup out.</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 sans text-sm">
+            <div>
+              <p class="font-semibold text-slate-700 mb-1">Problem</p>
+              <p class="text-slate-600">The 2026-09-14 review cleared this file at ~400 lines, on the grounds that selection state wasn't duplicated. That argument still holds, but it never claimed the render tree itself was deep — and step management (reorder handle, move up/down, remove, the incomplete flag's offset math) landed afterward, adding a second cluster of concerns to the same tree without changing its shape. At 626 lines, one component now answers for step-card layout, token-chip layout, two independent drag flows, and the two-stage select rule's render-time half.</p>
+            </div>
+            <div>
+              <p class="font-semibold text-slate-700 mb-1">Solution</p>
+              <p class="text-slate-600">Pull <code class="font-mono text-xs">StepCard</code> and <code class="font-mono text-xs">TokenChip</code> out as their own modules, each taking the slice of a <code class="font-mono text-xs">StepLayout</code>/token it needs (already computed by <code class="font-mono text-xs">canvas-layout.ts</code>) plus its callbacks. <code class="font-mono text-xs">InstructionCanvas</code> keeps the SVG root, the layout memo, and two <code class="font-mono text-xs">.map()</code> calls.</p>
+            </div>
+          </div>
+
+          <div class="sans">
+            <p class="text-sm font-semibold text-slate-700 mb-2">Wins if pursued</p>
+            <ul class="text-sm text-slate-700 space-y-1 list-disc list-inside">
+              <li>Leverage: step-card and chip logic each get one interface, testable alone</li>
+              <li>Locality: a chip bug can't hide inside step-card code and vice versa</li>
+              <li>Shrinks the file candidate 1 would otherwise leave at ~550 lines</li>
+            </ul>
+          </div>
+          <div class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded px-4 py-2 sans">
+            Builds on candidate 1 — extracting <code class="font-mono text-xs">SvgButton</code> first removes the boilerplate that would otherwise get copied into both new modules.
+          </div>
+        </article>
+
+        <!-- Candidate 3 -->
+        <article class="space-y-5">
+          <div class="sans flex items-center gap-3 flex-wrap">
+            <span class="badge badge-worth">Worth exploring</span>
+            <span class="tag">in-process</span>
+            <span class="tag">re-examined</span>
+          </div>
+          <h2 class="font-serif text-2xl font-semibold">The select-vs-drag decision lives inside a pointerdown closure</h2>
+          <p class="font-mono text-sm text-slate-600">src/components/InstructionCanvas/InstructionCanvas.tsx &middot; src/lib/pointer-drag.ts</p>
+
+          <div class="grid md:grid-cols-2 gap-6 py-4">
+            <div class="rounded-lg border border-slate-200 bg-white p-5">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">Before</p>
+              <div class="space-y-2 diagram-label text-sm">
+                <div class="border-l-4 border-slate-400 pl-3 py-1.5">onPointerDown → beginPointerDrag</div>
+                <div class="border-l-4 border-slate-400 pl-3 py-1.5">onMove: set dragGhost, diff+write dropTarget</div>
+                <div class="border-l-4 border-red-500 pl-3 py-1.5">onDrop: wasDrag ? moveToken : (isSelected ? selectToken : selectStep) <span class="text-red-600">← the rule, inline, untested except via full pointer simulation</span></div>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-5 flex flex-col items-center justify-center">
+              <div class="deep text-white rounded-lg p-5 w-full text-center">
+                <p class="text-xs uppercase tracking-wider opacity-70 mb-2">deep module</p>
+                <p class="font-semibold text-sm">resolveTokenPointerOutcome(wasDrag, isSelected, target)</p>
+                <p class="text-xs opacity-70 mt-2">→ { kind: "select-token" | "select-step" | "move", ... }</p>
+              </div>
+              <p class="text-xs text-slate-500 mt-3 text-center">A pure function, unit-testable with plain values — no SVG, no pointer events, no Playwright.</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 sans text-sm">
+            <div>
+              <p class="font-semibold text-slate-700 mb-1">Problem</p>
+              <p class="text-slate-600">"A quick tap selects; a real drag moves" is a real domain rule (the component's own doc comment names it), but its only home is <code class="font-mono text-xs">onDrop</code>'s closure. The interface to reach it is "render the canvas, dispatch pointer events, inspect signals" — which is exactly what the Playwright driver does today, and exactly what a unit test can't.</p>
+            </div>
+            <div>
+              <p class="font-semibold text-slate-700 mb-1">Solution</p>
+              <p class="text-slate-600">Extract the decision as a pure function taking <code class="font-mono text-xs">wasDrag</code>, current selection, and the resolved drop target, returning what to do. <code class="font-mono text-xs">onDrop</code> becomes a thin dispatch over its result.</p>
+            </div>
+          </div>
+
+          <div class="sans">
+            <p class="text-sm font-semibold text-slate-700 mb-2">Wins if pursued</p>
+            <ul class="text-sm text-slate-700 space-y-1 list-disc list-inside">
+              <li>The interface is the test surface: a unit test replaces a Playwright-only path</li>
+              <li>Locality: the tap-vs-drag rule has one place to read, one place to change</li>
+            </ul>
+          </div>
+          <p class="sans text-sm text-slate-500">Narrower than candidate 2 — doesn't require splitting the render tree first, though it reads cleaner once TokenChip owns its own onPointerDown.</p>
+        </article>
+
+      </section>
+
+      <!-- Top recommendation -->
+      <section id="top-recommendation" class="border-t-2 border-slate-800 pt-10">
+        <p class="text-xs uppercase tracking-wider text-slate-500">Top recommendation</p>
+        <h2 class="font-serif text-2xl font-semibold mb-3">One SVG-button interface, five copies deleted</h2>
+        <p class="text-lg leading-relaxed max-w-3xl text-slate-700">
+          Smallest cut of the three, no design decisions to grill beyond the interface's own shape,
+          and it's already drifted once (chip-remove's stray double <code class="font-mono text-base">stopPropagation</code>) —
+          evidence the five copies won't stay in sync on their own. It also shrinks the file enough
+          that candidate 2 (splitting <code class="font-mono text-base">StepCard</code>/<code class="font-mono text-base">TokenChip</code> out) starts
+          from a smaller, cleaner base if picked up next.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

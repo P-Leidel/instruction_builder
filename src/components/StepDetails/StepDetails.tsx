@@ -71,7 +71,7 @@ export function StepDetails() {
           previously selected step into whichever step is selected now. */}
       <DurationField
         key={step.id}
-        label="Step time"
+        label="Time"
         value={step.time}
         onChange={(time) => setStepTime(step.id, time)}
       />

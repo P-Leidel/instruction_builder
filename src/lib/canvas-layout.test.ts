@@ -297,9 +297,8 @@ describe("computeCanvasLayout", () => {
     expect(layout.layouts[0].chipsPerRow).toBe(step.tokens.length);
   });
 
-  it("uses no header band and no displayed time for a step with no time", () => {
+  it("has no displayed time for a step with no time", () => {
     const layout = computeCanvasLayout([createEmptyStep()], true);
-    expect(layout.layouts[0].headerHeight).toBe(0);
     expect(layout.layouts[0].displayedTime).toBeUndefined();
   });
 

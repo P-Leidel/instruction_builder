@@ -40,6 +40,7 @@ import {
   computeCanvasLayout,
 } from "../../lib/canvas-layout";
 import type { TokenAttachment } from "../../model/instruction";
+import { SvgButton } from "./SvgButton";
 
 // Warning badge (see InstructionToken.warning): a small, fixed-corner
 // icon-only marker on a chip, chosen over resizing the chip so the existing
@@ -195,10 +196,12 @@ interface InstructionCanvasProps {
  * change the clamp bounds).
  *
  * A token with its own `time` (see InstructionToken.time) shows it above
- * its chip, the same idea as a step's own duration header above its card -
- * `lib/canvas-layout.ts` reserves the room per row of chips (only when a
- * row actually has a timed token in it), not here; this just renders the
- * label for whichever tokens have one.
+ * its chip - `lib/canvas-layout.ts` reserves the room per row of chips
+ * (only when a row actually has a timed token in it), not here; this just
+ * renders the label for whichever tokens have one. A step's own duration
+ * (`displayedTime`) instead renders inline before its title, in the same
+ * text node - see the step-title `<text>` below - rather than reserving any
+ * extra layout room of its own.
  *
  * Step management (previously a standalone StepList side panel) lives on the
  * canvas itself: each step's title renders next to its select badge, a
@@ -248,7 +251,6 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
             {
               step,
               cardY,
-              headerHeight,
               displayedTime,
               height,
               chipsPerRow,
@@ -289,16 +291,6 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
               data-step-id={step.id}
               data-step-index={index}
             >
-              {displayedTime && (
-                <text
-                  class="instruction-canvas__step-time"
-                  x={(canvasWidth - PADDING * 2) / 2}
-                  y={-headerHeight + 15}
-                  text-anchor="middle"
-                >
-                  {displayedTime.label}
-                </text>
-              )}
               <rect
                 class={`instruction-canvas__step-bg${isSelected ? " instruction-canvas__step-bg--selected" : ""}${isDropTarget ? " instruction-canvas__step-bg--drop-target" : ""}`}
                 x={0}
@@ -316,25 +308,17 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                   </text>
                 </g>
               ) : (
-                <g
+                <SvgButton
                   class="instruction-canvas__badge"
-                  role="button"
-                  tabindex={0}
-                  aria-current={isSelected ? "step" : undefined}
-                  aria-label={selectLabel}
-                  onClick={() => selectStep(step.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      selectStep(step.id);
-                    }
-                  }}
+                  ariaCurrent={isSelected ? "step" : undefined}
+                  ariaLabel={selectLabel}
+                  onActivate={() => selectStep(step.id)}
                 >
                   <circle cx={12} cy={12} r={BADGE_SIZE / 2} />
                   <text x={12} y={16} text-anchor="middle" aria-hidden="true">
                     {stepNumber}
                   </text>
-                </g>
+                </SvgButton>
               )}
               <text
                 class="instruction-canvas__step-title"
@@ -342,7 +326,13 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                 y={16}
                 aria-hidden="true"
               >
-                {step.title || "Untitled step"}
+                {displayedTime && (
+                  <>
+                    <tspan class="instruction-canvas__step-time">{displayedTime.label}</tspan>
+                    {" - "}
+                  </>
+                )}
+                <tspan class="instruction-canvas__step-title-text">{step.title || "Untitled step"}</tspan>
               </text>
               {showIncompleteFlag && (
                 <g aria-hidden="true">
@@ -356,18 +346,10 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                 </g>
               )}
               {canRemove && (
-                <g
+                <SvgButton
                   class="instruction-canvas__step-remove"
-                  role="button"
-                  tabindex={0}
-                  aria-label={`Remove step ${stepNumber}`}
-                  onClick={() => removeStep(step.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      removeStep(step.id);
-                    }
-                  }}
+                  ariaLabel={`Remove step ${stepNumber}`}
+                  onActivate={() => removeStep(step.id)}
                 >
                   <circle
                     cx={canvasWidth - PADDING * 2 - STEP_REMOVE_MARGIN}
@@ -382,7 +364,7 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                   >
                     ×
                   </text>
-                </g>
+                </SvgButton>
               )}
               {canReorder && (
                 <g class="instruction-canvas__step-controls">
@@ -407,44 +389,28 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                       ⠿
                     </text>
                   </g>
-                  <g
+                  <SvgButton
                     class={`instruction-canvas__step-move instruction-canvas__step-move--up${canMoveUp ? "" : " instruction-canvas__step-move--disabled"}`}
-                    role="button"
-                    tabindex={canMoveUp ? 0 : -1}
-                    aria-disabled={canMoveUp ? undefined : "true"}
-                    aria-label={`Move step ${stepNumber} up`}
-                    onClick={() => canMoveUp && moveStepUp(step.id)}
-                    onKeyDown={(event) => {
-                      if ((event.key === "Enter" || event.key === " ") && canMoveUp) {
-                        event.preventDefault();
-                        moveStepUp(step.id);
-                      }
-                    }}
+                    disabled={!canMoveUp}
+                    ariaLabel={`Move step ${stepNumber} up`}
+                    onActivate={() => moveStepUp(step.id)}
                   >
                     <circle cx={STEP_CONTROL_CX} cy={MOVE_UP_CY} r={STEP_CONTROL_RADIUS} />
                     <text x={STEP_CONTROL_CX} y={MOVE_UP_CY + 3} text-anchor="middle" aria-hidden="true">
                       ↑
                     </text>
-                  </g>
-                  <g
+                  </SvgButton>
+                  <SvgButton
                     class={`instruction-canvas__step-move instruction-canvas__step-move--down${canMoveDown ? "" : " instruction-canvas__step-move--disabled"}`}
-                    role="button"
-                    tabindex={canMoveDown ? 0 : -1}
-                    aria-disabled={canMoveDown ? undefined : "true"}
-                    aria-label={`Move step ${stepNumber} down`}
-                    onClick={() => canMoveDown && moveStepDown(step.id)}
-                    onKeyDown={(event) => {
-                      if ((event.key === "Enter" || event.key === " ") && canMoveDown) {
-                        event.preventDefault();
-                        moveStepDown(step.id);
-                      }
-                    }}
+                    disabled={!canMoveDown}
+                    ariaLabel={`Move step ${stepNumber} down`}
+                    onActivate={() => moveStepDown(step.id)}
                   >
                     <circle cx={STEP_CONTROL_CX} cy={MOVE_DOWN_CY} r={STEP_CONTROL_RADIUS} />
                     <text x={STEP_CONTROL_CX} y={MOVE_DOWN_CY + 3} text-anchor="middle" aria-hidden="true">
                       ↓
                     </text>
-                  </g>
+                  </SvgButton>
                 </g>
               )}
               <g transform={`translate(${tokensOffsetX}, 0)`}>
@@ -551,29 +517,19 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
                         {token.warning && <WarningBadge attachment={token.warning} />}
                         {token.quantity && <QuantityBadge attachment={token.quantity} />}
                         {!readOnly && (
-                          <g
+                          <SvgButton
                             class="instruction-canvas__chip-remove"
-                            role="button"
-                            tabindex={0}
-                            aria-label={`Remove ${label}`}
-                            onPointerDown={(event) => event.stopPropagation()}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              removeTokenFromStep(step.id, token.id);
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                removeTokenFromStep(step.id, token.id);
-                              }
-                            }}
+                            ariaLabel={`Remove ${label}`}
+                            stopPropagation
+                            onActivate={() => removeTokenFromStep(step.id, token.id)}
                           >
-                            <circle cx={CHIP_WIDTH - 10} cy={10} r={9} />
-                            <text x={CHIP_WIDTH - 10} y={13} text-anchor="middle" aria-hidden="true">
-                              ×
-                            </text>
-                          </g>
+                            <g onPointerDown={(event) => event.stopPropagation()}>
+                              <circle cx={CHIP_WIDTH - 10} cy={10} r={9} />
+                              <text x={CHIP_WIDTH - 10} y={13} text-anchor="middle" aria-hidden="true">
+                                ×
+                              </text>
+                            </g>
+                          </SvgButton>
                         )}
                       </g>
                     );
@@ -599,19 +555,11 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
           );
         })}
         {!readOnly && (
-          <g
+          <SvgButton
             class="instruction-canvas__add-step"
-            role="button"
-            tabindex={0}
-            aria-label="Add step"
+            ariaLabel="Add step"
             transform={`translate(${PADDING}, ${addStepRowY})`}
-            onClick={addStep}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                addStep();
-              }
-            }}
+            onActivate={addStep}
           >
             <rect
               class="instruction-canvas__add-step-bg"
@@ -629,7 +577,7 @@ export function InstructionCanvas({ readOnly = false }: InstructionCanvasProps) 
             >
               + Add step
             </text>
-          </g>
+          </SvgButton>
         )}
       </svg>
     </div>

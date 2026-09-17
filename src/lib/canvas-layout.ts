@@ -71,17 +71,13 @@ export const CONNECTOR_LEAD_OUT = 12;
 // Lucide's native viewBox is 24x24 - drawing at that size needs no rescale.
 export const ICON_DRAW_SIZE = 24;
 
-// Step-level duration header (see InstructionStep.time): reserved above a
-// step's card only when it has a displayable duration - see
-// stepDisplayedTime in lib/duration.ts for the step-time-wins-else-sum-of-
-// tokens rule.
-export const TIME_HEADER_HEIGHT = 22;
-
-// Token-level duration label, drawn above a chip - the same idea as
-// TIME_HEADER_HEIGHT above, just reserved per row of chips instead of per
-// step: a row only gets this extra band when at least one of its tokens has
-// its own `time` (InstructionToken.time), and only that token's label
-// actually renders inside it - see computeRowStartYs below.
+// Token-level duration label, drawn above a chip: a row only gets this extra
+// band when at least one of its tokens has its own `time`
+// (InstructionToken.time), and only that token's label actually renders
+// inside it - see computeRowStartYs below. A step's own duration (see
+// InstructionStep.time/stepDisplayedTime in lib/duration.ts) renders inline
+// before the step's title instead (InstructionCanvas.tsx), so it reserves no
+// layout room of its own here.
 export const CHIP_TIME_HEADER_HEIGHT = 14;
 
 // A step's left-edge control column (select badge, then drag handle, then
@@ -114,10 +110,8 @@ export const ADD_STEP_ROW_HEIGHT = 44;
 
 export interface StepLayout {
   step: InstructionStep;
-  /** y of the card itself - the duration header, if any, sits just above this. */
+  /** y of the card itself. */
   cardY: number;
-  /** 0 when the step has no displayable duration, else TIME_HEADER_HEIGHT. */
-  headerHeight: number;
   displayedTime: DurationAttachment | undefined;
   height: number;
   chipsPerRow: number;
@@ -165,11 +159,9 @@ export interface ConnectorSegment {
  * indexed by row number - one entry per row, empty for a token-less step.
  * Ordinarily that's just `HEADER_HEIGHT + row * (CHIP_HEIGHT + CHIP_GAP)`,
  * but a row that contains at least one token with its own `time` reserves
- * an extra CHIP_TIME_HEADER_HEIGHT band above itself first, the same way a
- * step with a displayed time reserves TIME_HEADER_HEIGHT above its own
- * card - so every row's start (and every row after it) shifts down by that
- * band, not just the one token that actually has a time. Not exported -
- * see chipPosition's comment.
+ * an extra CHIP_TIME_HEADER_HEIGHT band above itself first - so every row's
+ * start (and every row after it) shifts down by that band, not just the one
+ * token that actually has a time. Not exported - see chipPosition's comment.
  */
 function computeRowStartYs(tokens: InstructionToken[], chipsPerRow: number): number[] {
   if (tokens.length === 0) return [];
@@ -365,13 +357,11 @@ export function computeCanvasLayout(steps: InstructionStep[], isDesktop: boolean
     const height = stepHeight(step.tokens.length, rowStartYs);
     const validation = validateStep(step);
     const displayedTime = stepDisplayedTime(step);
-    const headerHeight = displayedTime ? TIME_HEADER_HEIGHT : 0;
-    const cardY = cursor + headerHeight;
+    const cardY = cursor;
     const chipPositions = step.tokens.map((_, index) => chipPosition(index, chipsPerRow, rowStartYs));
     layouts.push({
       step,
       cardY,
-      headerHeight,
       displayedTime,
       height,
       chipsPerRow,

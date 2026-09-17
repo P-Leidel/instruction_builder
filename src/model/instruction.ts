@@ -46,6 +46,25 @@ export interface DurationAttachment {
   seconds: number;
 }
 
+/**
+ * A quantity attached to a token (see InstructionToken.quantity) - a
+ * specialized attachment, not a `TokenAttachment`, for the same reason
+ * `DurationAttachment` isn't: the edit form (TokenDetails' QuantityForm)
+ * needs the raw `amount`/`unit` back to pre-fill itself, not just the
+ * already-formatted "3 kg" display string. Storing them structurally
+ * replaces an earlier version that stored only `label` and reverse-parsed
+ * it (`splitQuantity`, split on the first space) to re-open the edit form -
+ * a best-effort parse that silently fell back to a default whenever a unit
+ * contained a space or didn't match `EU_FOOD_UNITS`.
+ */
+export interface QuantityAttachment {
+  iconId: string;
+  /** Pre-formatted "<amount> <unit>" for display - see lib/quantity.ts. */
+  label: string;
+  amount: number;
+  unit: string;
+}
+
 /** A single placed icon+label unit — the atomic building block of a step. */
 export interface InstructionToken {
   /** Stable unique id within the document. */
@@ -65,7 +84,7 @@ export interface InstructionToken {
    * kind replaces the old one, rather than allowing several of the same
    * kind at once.
    */
-  quantity?: TokenAttachment;
+  quantity?: QuantityAttachment;
   warning?: TokenAttachment;
   /**
    * A token's own estimated duration - set independently of the step's own
