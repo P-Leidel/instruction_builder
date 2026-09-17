@@ -184,13 +184,16 @@ button {
   overflow: hidden;
 }
 
-/* Task 17 (Print/PDF Export), baseline tier: "Export PDF" is just
-   `window.print()` (lib/pdf-export.ts) - all the actual work is here.
-   Hide every other region of the page and turn the always-mounted,
+/* Originally what "Export PDF" itself used (`window.print()`, Task 17
+   baseline tier); superseded by the jsPDF/svg2pdf.js rewrite (2026-09-17
+   remediation - see app.tsx's handleExportPdf comment), so this block is
+   now only the fallback for a native Ctrl+P/File>Print, left in as an
+   unsupported path rather than removed (2026-09-17 remediation grill,
+   Q7). Hides every other region of the page and turns the always-mounted,
    read-only .app__export-canvas (see above) from a 0x0 clipped box back
-   into normal flow, so the print/"Save as PDF" output is just that one
-   clean canvas - no toolbar, no panels, no toasts/dialogs, and none of
-   the editor's editing-only affordances. */
+   into normal flow, so the printed output is just that one clean canvas -
+   no toolbar, no panels, no toasts/dialogs, and none of the editor's
+   editing-only affordances. */
 @media print {
   .app__toolbar,
   .app__persistence-warning,

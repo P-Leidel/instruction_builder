@@ -34,10 +34,15 @@ function toFiniteNonNegative(raw: string): number {
  */
 export function DurationForm({ label, value, onSave, onCancel }: DurationFormProps) {
   const [draft, setDraft] = useState(() => (value ? splitDuration(value.seconds) : ZERO));
-  const totalIsZero = draft.days === 0 && draft.hours === 0 && draft.minutes === 0 && draft.seconds === 0;
+  // Derived from the same `buildDuration` call Save makes, not a separate
+  // `totalIsZero` check, so Save's enabled state can never drift from what
+  // Save actually accepts (2026-09-17 remediation, item 16 - a fractional
+  // sub-1-second entry used to leave Save clickable but silently no-op,
+  // since `totalIsZero` only tripped at exactly 0 while `buildDuration`
+  // rejects anything under `MIN_DURATION_SECONDS`).
+  const built = buildDuration(draft.days, draft.hours, draft.minutes, draft.seconds);
 
   function save() {
-    const built = buildDuration(draft.days, draft.hours, draft.minutes, draft.seconds);
     if (!built) return;
     onSave(built);
   }
@@ -98,7 +103,7 @@ export function DurationForm({ label, value, onSave, onCancel }: DurationFormPro
         <button
           type="button"
           class="collapsed-field__save"
-          disabled={totalIsZero}
+          disabled={!built}
           aria-label={`Save ${label.toLowerCase()}`}
           onClick={save}
         >

@@ -9,9 +9,11 @@ export interface StepValidationResult {
 /**
  * Phase 1 stub implementing only the single domain-agnostic rule from
  * docs/phase-1/architecture.md section 2.4 (a step needs at least one action
- * token) so StepList can show basic progress in the prototype. The full
- * rule set (quantity metadata checks, etc.) lands in Phase 2 task 14
- * (Implement Visual Validation).
+ * token), now feeding the on-canvas incomplete-step badge
+ * (`canvas-layout.ts`'s `shouldFlagIncompleteStep`) and the export/import
+ * incomplete-count checks (`document-actions.ts`). The full rule set
+ * (quantity metadata checks, etc.) lands in Phase 2 task 14 (Implement
+ * Visual Validation).
  */
 export function validateStep(step: InstructionStep): StepValidationResult {
   const issues: string[] = [];
