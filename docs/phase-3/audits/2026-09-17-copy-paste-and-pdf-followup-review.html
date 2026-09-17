@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review for instruction_builder — copy/paste &amp; PDF follow-up</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+      .badge-strong { background: #d1fae5; color: #065f46; }
+      .badge-explore { background: #fef3c7; color: #92400e; }
+      .badge-speculative { background: #e2e8f0; color: #334155; }
+      .tag { background: #eef2ff; color: #3730a3; }
+      .module-box { border: 2px solid #cbd5e1; border-radius: 0.5rem; background: #fff; }
+      .module-box-deep { border: 3px solid #0f172a; border-radius: 0.5rem; background: linear-gradient(135deg, #f8fafc, #eef2f7); }
+      .shallow-region { border: 1px dashed #94a3b8; border-radius: 0.375rem; background: #fef2f2; }
+      .clean-region { border: 1px dashed #94a3b8; border-radius: 0.375rem; background: #f0fdf4; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+      <header class="space-y-3 border-b border-slate-200 pb-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Architecture review</p>
+        <h1 class="text-3xl font-serif font-semibold">instruction_builder</h1>
+        <p class="text-sm text-slate-500">2026-09-17 · follow-up to the same-day
+          <span class="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">canvas-decomposition-followup-review</span>
+          (written 11:37) · scoped to the 5 commits since then: TokenPicker tab-semantics fix, the token-time/step-size
+          fix and PDF export pagination rework, the icon library expansion, token copy/paste, and the
+          selected-panel border match — plus a re-check of that review's still-open candidates.</p>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-500 pt-2">
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-3 module-box"></span> module</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-3 module-box-deep"></span> deep module</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-0 border-t-2 border-dashed border-slate-400"></span> seam</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-0 border-t-2 border-red-600"></span> leakage</span>
+        </div>
+      </header>
+
+      <section class="rounded-xl border border-slate-200 bg-white p-6 space-y-3">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">What's already clean — checked and passed</h2>
+        <p class="text-sm text-slate-700">Five areas the 5 new commits touched were checked against the deletion test and found to be well-seamed, not friction. They aren't cards below because there's nothing to deepen:</p>
+        <ul class="text-sm space-y-1.5 list-disc list-inside text-slate-700">
+          <li><span class="font-mono text-xs bg-slate-100 px-1 rounded">pdf-pagination.ts</span>'s <span class="font-mono text-xs">paginateSteps</span> is a pure, DOM-free, independently-tested packing function; <span class="font-mono text-xs">pdf-export.ts</span> is correctly left holding all the jsPDF/DOM glue. Deleting the split would make the packing algorithm untestable without a real SVG.</li>
+          <li>The token-time/step-size fix in <span class="font-mono text-xs">canvas-layout.ts</span>'s <span class="font-mono text-xs">computeRowStartYs</span> is a single, well-localized, test-covered change — no drift left behind.</li>
+          <li><span class="font-mono text-xs">TokenPicker.tsx</span>'s radiogroup is the only tab/radio widget in the codebase — <span class="font-mono text-xs">TokenAttachmentPicker</span> was already folded into TokenDetails in an earlier review, so there's no second implementation to reconcile it with. The "stale driver check" it fixed was a test-driver bug (focusing inside a collapsed <span class="font-mono text-xs">&lt;details&gt;</span> without opening it first), not a product-code issue.</li>
+          <li>The selected-panel border match (<span class="font-mono text-xs">global.css</span>) ties two independent CSS rules to the same <span class="font-mono text-xs">--color-accent</span> custom property via a cross-referencing comment — no color literal actually drifted.</li>
+          <li>The icon-library expansion is pure data (27 new token entries) — no architectural surface.</li>
+        </ul>
+      </section>
+
+      <section id="candidates" class="space-y-16">
+
+        <!-- Candidate 1 -->
+        <article id="candidate-1" class="space-y-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-xl font-serif font-semibold">Decompose the canvas's per-step render into StepCard and TokenChip modules</h2>
+          </div>
+          <div class="flex flex-wrap gap-2 text-xs font-medium">
+            <span class="badge-strong rounded-full px-2.5 py-1">Strong</span>
+            <span class="tag rounded-full px-2.5 py-1">carried forward — 2 reviews, still unaddressed</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">src/components/InstructionCanvas/InstructionCanvas.tsx (602 lines, byte-for-byte unchanged since 11:37)</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+              <p class="text-xs uppercase tracking-wider text-slate-400">Before</p>
+              <div class="module-box p-3 h-72 flex flex-col gap-2 relative">
+                <p class="text-xs uppercase tracking-wider text-slate-500 text-center">InstructionCanvas · 602 ln</p>
+                <div class="shallow-region flex-1 p-2 flex items-center justify-center text-center text-xs text-red-800">
+                  step-chrome cluster, lines 304–432<br/>badge + title + remove +<br/>reorder/move drag wiring (~129 ln)
+                </div>
+                <div class="shallow-region flex-1 p-2 flex items-center justify-center text-center text-xs text-red-800">
+                  token-chip cluster, lines 439–553<br/>chip render + badges +<br/>pointerdown/resolveTokenPointerOutcome switch (~115 ln)
+                </div>
+                <p class="text-[11px] text-slate-400 text-center">no seam between either region and layout orchestration</p>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">After</p>
+              <pre class="mermaid">
+                flowchart TB
+                  IC["InstructionCanvas<br/>thin, ~150 ln"]
+                  SC["StepCard<br/>deep module"]
+                  TC["TokenChip<br/>deep module"]
+                  DOC["state/document.ts<br/>module-level bound actions"]
+                  IC -->|"step, index, height, isSelected"| SC
+                  SC -->|"token, chipPosition, isTokenSelected"| TC
+                  SC -.->|"selectStep, moveStepUp/Down, removeStep"| DOC
+                  TC -.->|"selectToken, moveToken, removeTokenFromStep"| DOC
+                  classDef deep fill:#0f172a,color:#fff,stroke:#0f172a;
+                  class SC,TC deep
+              </pre>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm">
+            <p><span class="font-semibold">Problem:</span> the per-step <code class="font-mono text-xs">layouts.map</code> body still inlines two distinct modules' worth of behaviour with no seam around either. Both pass the deletion test: cut either cluster and its ~115–130 lines reappear somewhere else in <code class="font-mono text-xs">InstructionCanvas</code>, they don't vanish.</p>
+            <p><span class="font-semibold">Solution:</span> give each region its own module — <code class="font-mono text-xs">StepCard</code> (chrome + drag-handle/move wiring, lines 304–432) and <code class="font-mono text-xs">TokenChip</code> (chip markup, badges, the pointerdown switch, lines 439–553) — so <code class="font-mono text-xs">InstructionCanvas</code> becomes a thin composition over what <code class="font-mono text-xs">computeCanvasLayout</code> already computes.</p>
+          </div>
+
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Interface shrinks to layout/derived props; implementation absorbs the wiring</li>
+            <li>Locality: a chip-badge bug fixes in one module, not a 602-line scroll</li>
+            <li>Leverage: TokenChip becomes testable through its own interface, not the whole canvas</li>
+          </ul>
+
+          <div class="rounded-md bg-indigo-50 border border-indigo-200 px-3 py-2 text-xs text-indigo-900">
+            The extraction is cheaper than its two-review-long backlog suggests: every handler either cluster calls (<code class="font-mono">selectStep</code>, <code class="font-mono">moveToken</code>, <code class="font-mono">moveStepUp</code>, …) is already a zero-argument, module-level-bound export of the document session (<code class="font-mono">bindActionsToSession</code>/<code class="font-mono">defaultSession</code> in <code class="font-mono">state/document.ts</code>). A <code class="font-mono">StepCard</code>/<code class="font-mono">TokenChip</code> can import them directly, the same way <code class="font-mono">InstructionCanvas.tsx</code> does today — nothing forces a deep prop-drilled interface. This is a genuinely shallow extraction that keeps getting deferred.
+          </div>
+        </article>
+
+        <!-- Candidate 2 -->
+        <article id="candidate-2" class="space-y-5">
+          <h2 class="text-xl font-serif font-semibold">Collapse document.ts's four free-text mutators into one field-update module</h2>
+          <div class="flex flex-wrap gap-2 text-xs font-medium">
+            <span class="badge-explore rounded-full px-2.5 py-1">Worth exploring</span>
+            <span class="tag rounded-full px-2.5 py-1">carried forward — unchanged by the 5 new commits</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">src/state/document.ts (lines 450–504, sessionActions 609–610)</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+              <p class="text-xs uppercase tracking-wider text-slate-400 text-center mb-1">Before — 4 adapters, 1 implementation each</p>
+              <div class="space-y-1.5">
+                <div class="shallow-region p-2 text-xs text-red-800"><span class="font-mono">updateStepTitleCore</span> — steps.map + coalesce:true</div>
+                <div class="shallow-region p-2 text-xs text-red-800"><span class="font-mono">updateStepDescriptionCore</span> — steps.map + coalesce:true</div>
+                <div class="shallow-region p-2 text-xs text-red-800"><span class="font-mono">updateTokenLabelCore</span> — steps→tokens.map + coalesce:true</div>
+                <div class="shallow-region p-2 text-xs text-red-800"><span class="font-mono">updateTokenNoteCore</span> — steps→tokens.map + coalesce:true</div>
+              </div>
+              <p class="text-[11px] text-slate-400 text-center">line-for-line identical shape, four copies</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 flex flex-col justify-center">
+              <p class="text-xs uppercase tracking-wider text-slate-400 text-center mb-2">After</p>
+              <div class="module-box-deep text-white p-4 text-center space-y-1">
+                <p class="text-sm font-medium">updateStepField / updateTokenField</p>
+                <p class="text-xs text-slate-300">one field-selector param · coalesce intrinsic to the module, not a call-site flag</p>
+              </div>
+              <p class="text-[11px] text-slate-400 text-center mt-2">4 adapters → 1 deep implementation</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm">
+            <p><span class="font-semibold">Problem:</span> <code class="font-mono text-xs">updateStepTitleCore</code>, <code class="font-mono text-xs">updateStepDescriptionCore</code>, <code class="font-mono text-xs">updateTokenLabelCore</code>, <code class="font-mono text-xs">updateTokenNoteCore</code> are four separate implementations of the same shape — map over steps (and tokens), replace one field, pass <code class="font-mono text-xs">{'{ coalesce: true }'}</code> — differing only in which field and whether it's step- or token-scoped. The new <code class="font-mono text-xs">copyTokenCore</code>/<code class="font-mono text-xs">pasteTokenCore</code> (see below) show the pattern this file uses when a mutator <em>is</em> given its own shape on purpose — these four aren't that, they're accidental repetition.</p>
+            <p><span class="font-semibold">Solution:</span> one deep <code class="font-mono text-xs">updateStepField</code>/<code class="font-mono text-xs">updateTokenField</code> taking a field updater, with free-text coalescing built into that module's interface as an invariant rather than repeated per adapter.</p>
+          </div>
+
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>One implementation instead of four near-identical clones</li>
+            <li>Locality: the coalescing invariant lives in one place</li>
+            <li>A future free-text field gets coalescing for free, no fifth clone</li>
+          </ul>
+        </article>
+
+        <!-- Candidate 3 -->
+        <article id="candidate-3" class="space-y-5">
+          <h2 class="text-xl font-serif font-semibold">Give the on-screen and PDF headings one total-time seam instead of two</h2>
+          <div class="flex flex-wrap gap-2 text-xs font-medium">
+            <span class="badge-explore rounded-full px-2.5 py-1">Worth exploring</span>
+            <span class="tag rounded-full px-2.5 py-1">new — introduced by bab2742 (PDF pagination rework)</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">src/components/InstructionCanvas/InstructionCanvas.tsx:240 · src/lib/document-actions.ts:100</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+              <p class="text-xs uppercase tracking-wider text-slate-400 text-center mb-1">Before — same expression, two files</p>
+              <div class="shallow-region p-2 text-xs text-red-800 font-mono">InstructionCanvas.tsx:240<br/>sumDurations(steps.map(stepDisplayedTime))</div>
+              <div class="shallow-region p-2 text-xs text-red-800 font-mono mt-2">document-actions.ts:100<br/>sumDurations(doc.steps.map(stepDisplayedTime))</div>
+              <p class="text-[11px] text-slate-400 text-center mt-1">a component and a lib module, kept in sync by a comment, not code</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 flex flex-col justify-center">
+              <p class="text-xs uppercase tracking-wider text-slate-400 text-center mb-2">After</p>
+              <div class="module-box-deep text-white p-4 text-center">
+                <p class="text-sm font-medium">documentTotalTime(doc)</p>
+                <p class="text-xs text-slate-300 mt-1">one function in lib/duration.ts, wrapping the existing sumDurations/stepDisplayedTime</p>
+              </div>
+              <p class="text-[11px] text-slate-400 text-center mt-2">both the on-screen heading and the PDF's page-1 heading call it</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm">
+            <p><span class="font-semibold">Problem:</span> the document-level total time is computed with the identical expression in two layers — a component (the on-screen <code class="font-mono text-xs">&lt;h2&gt;</code> heading) and a lib module (the PDF's page-1 heading, drawn separately since it's a DOM sibling of the exported <code class="font-mono text-xs">&lt;svg&gt;</code>, not part of it). <code class="font-mono text-xs">document-actions.ts</code>'s own doc-comment already says the PDF heading is "computed here the same way <code class="font-mono text-xs">InstructionCanvas.tsx</code> computes its own" — the duplication is self-aware, not accidental, and was still left unextracted.</p>
+            <p><span class="font-semibold">Solution:</span> a <code class="font-mono text-xs">documentTotalTime(doc): DurationAttachment | undefined</code> helper in <code class="font-mono text-xs">src/lib/duration.ts</code>, next to <code class="font-mono text-xs">sumDurations</code>/<code class="font-mono text-xs">stepDisplayedTime</code>, called from both sites.</p>
+          </div>
+
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Deletion test: if <code class="font-mono text-xs">sumDurations</code>'s "nothing to sum → undefined" floor or its rounding/clamping rule ever changes, two call sites in two different layers need manual updates today</li>
+            <li>Locality: the document-total-time rule lives in the same module as the step-total-time rule it's built from</li>
+            <li>Small, cheap fix — no new seam design needed, just naming an existing repeated expression</li>
+          </ul>
+        </article>
+
+        <!-- Candidate 4 -->
+        <article id="candidate-4" class="space-y-5">
+          <h2 class="text-xl font-serif font-semibold">Share the "copy token, show toast" action between its button and keyboard paths</h2>
+          <div class="flex flex-wrap gap-2 text-xs font-medium">
+            <span class="badge-explore rounded-full px-2.5 py-1">Worth exploring</span>
+            <span class="tag rounded-full px-2.5 py-1">new — introduced by 2f20c79 (token copy/paste)</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">src/components/TokenDetails/TokenDetails.tsx:165–169 · src/app.tsx (Ctrl/Cmd+C handler, ~186–189)</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+              <p class="text-xs uppercase tracking-wider text-slate-400 text-center mb-1">Before</p>
+              <div class="shallow-region p-2 text-xs text-red-800 font-mono">TokenDetails.tsx handleCopy(step, token)<br/>copyToken(...); toast.value = {'{ text: `Copied ${'}…{'}` }'}</div>
+              <div class="shallow-region p-2 text-xs text-red-800 font-mono mt-2">app.tsx Ctrl+C branch<br/>copyToken(...); toast.value = {'{ text: `Copied ${'}…{'}` }'} <span class="text-[11px] font-sans">(reimplemented inline)</span></div>
+              <p class="text-[11px] text-slate-400 text-center mt-1">the <span class="font-mono">handleCopy</span> comment already points at app.tsx as "the shared shape" — but nothing is actually shared</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 flex flex-col justify-center">
+              <p class="text-xs uppercase tracking-wider text-slate-400 text-center mb-2">After</p>
+              <div class="module-box-deep text-white p-4 text-center">
+                <p class="text-sm font-medium">copyTokenWithToast(step, token)</p>
+                <p class="text-xs text-slate-300 mt-1">one function; the button and Ctrl+C both call it</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm">
+            <p><span class="font-semibold">Problem:</span> the same user-visible action — copy a token and confirm it with a toast — is reachable two ways (the Copy button, the <code class="font-mono text-xs">Ctrl/Cmd+C</code> shortcut) with its behavior and wording duplicated verbatim across a component file and the app-composition-root file. <code class="font-mono text-xs">TokenDetails.tsx</code>'s own comment on <code class="font-mono text-xs">handleCopy</code> already names <code class="font-mono text-xs">app.tsx</code> as sharing its shape — the intent to keep them in sync was there, the seam to do it mechanically wasn't. (Paste doesn't have this problem: both its call sites are a single bare <code class="font-mono text-xs">pasteToken()</code> with no toast.)</p>
+            <p><span class="font-semibold">Solution:</span> extract a shared <code class="font-mono text-xs">copyTokenWithToast(step, token)</code> — colocated near the other UI-orchestration helpers in <code class="font-mono text-xs">document-actions.ts</code>, or exported from <code class="font-mono text-xs">TokenDetails.tsx</code> — that both the button handler and the keyboard shortcut call.</p>
+          </div>
+
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Deletion test: if the toast wording or tone changes, or copy gains a side effect (analytics, a different clipboard), two sites need the same edit today</li>
+            <li>Turns a documented intention (the comment) into an actual seam</li>
+          </ul>
+        </article>
+
+      </section>
+
+      <section id="top-recommendation" class="rounded-xl border-2 border-slate-900 bg-white p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400 mb-2">Top recommendation</p>
+        <h2 class="text-lg font-serif font-semibold mb-2">
+          <a href="#candidate-1" class="hover:underline">Decompose the canvas's per-step render into StepCard and TokenChip modules</a>
+        </h2>
+        <p class="text-sm text-slate-700">This is the third review in a row to carry it forward as the top candidate, and the file hasn't moved a single line since the last one wrote that verdict. The 5 commits since then only strengthen the case: they kept landing new behaviour (copy/paste, PDF pagination, a step-size fix) around <code class="font-mono text-xs">InstructionCanvas.tsx</code> without touching it, which is itself a sign the file has become a place people route around rather than into. And the extraction is cheaper than its backlog suggests — every handler either cluster needs is already a module-level-bound export, so <code class="font-mono text-xs">StepCard</code>/<code class="font-mono text-xs">TokenChip</code> would need no prop-drilled action plumbing, just the per-step/per-token data they already close over. The two new small duplications (candidates 3 and 4) are cheap follow-ups worth doing in the same pass, but neither is where the leverage is.</p>
+      </section>
+    </main>
+  </body>
+</html>

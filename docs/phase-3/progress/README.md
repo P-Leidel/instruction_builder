@@ -16,7 +16,8 @@ user feedback passes, the `CollapsedField`/structured-Quantity deepening,
 an external audit evaluation that fixed `TokenPicker`'s tab-semantics gap,
 a PDF export rework that closed out Phase 4 task 37 early, an icon
 library expansion with 12 new generic actions and 15 new ingredients, a
-copy/paste-tokens feature, and a matching selected-panel border)
+copy/paste-tokens feature, a matching selected-panel border, a follow-up
+architecture review, and the `StepCard`/`TokenChip` extraction it picked up)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
 [../../project-plan.md](../../project-plan.md#implementation-plan)'s Phase 3
@@ -255,6 +256,23 @@ by construction - StepDetails carries it only while no token is also
 selected, TokenDetails' one "editing" render branch only ever renders once
 a token is. See
 [task-30-user-feedback-fixes-10.md](./task-30-user-feedback-fixes-10.md).
+A same-day follow-up `/improve-codebase-architecture` review, scoped to the
+five commits since the 2026-09-17 canvas-decomposition-followup review plus
+a re-check of its still-open candidates, confirmed `InstructionCanvas.tsx`'s
+`StepCard`/`TokenChip` decomposition was still unaddressed after three
+straight reviews naming it the top recommendation, and surfaced two small
+new duplications (a repeated document-total-time expression, a repeated
+"copy token, show toast" action) left open for a later pass - see
+[reviews/2026-09-17-external-audit-evaluation.md](../reviews/2026-09-17-external-audit-evaluation.md)'s
+sibling audit at
+[audits/2026-09-17-copy-paste-and-pdf-followup-review.html](../audits/2026-09-17-copy-paste-and-pdf-followup-review.html).
+Its top candidate was picked up immediately, settled via
+`/mattpocock-skills:grilling`: `TokenChip` (chip markup, its badges, the
+drag/select-outcome switch) was extracted first and verified alone, then
+`StepCard` (step chrome plus the tokens-area wrapper) second, now wrapping
+the already-separate `TokenChip` - `InstructionCanvas.tsx` dropped from 602
+to 198 lines. See
+[architecture-stepcard-tokenchip-extraction.md](./architecture-stepcard-tokenchip-extraction.md).
 
 ## What shipped
 
@@ -278,6 +296,7 @@ One file per task (or per notable pass), in task-number order:
 | 30 | Test Real Users (in progress - ten feedback passes shipped) | [task-30-user-feedback-fixes.md](./task-30-user-feedback-fixes.md), [task-30-user-feedback-fixes-2.md](./task-30-user-feedback-fixes-2.md), [task-30-user-feedback-fixes-3.md](./task-30-user-feedback-fixes-3.md), [task-30-user-feedback-fixes-4.md](./task-30-user-feedback-fixes-4.md), [task-30-user-feedback-fixes-5.md](./task-30-user-feedback-fixes-5.md), [task-30-user-feedback-fixes-6.md](./task-30-user-feedback-fixes-6.md), [task-30-user-feedback-fixes-7.md](./task-30-user-feedback-fixes-7.md), [task-30-user-feedback-fixes-8.md](./task-30-user-feedback-fixes-8.md), [task-30-user-feedback-fixes-9.md](./task-30-user-feedback-fixes-9.md), [task-30-user-feedback-fixes-10.md](./task-30-user-feedback-fixes-10.md) |
 | — | Architecture: `CollapsedField<T>` extraction (DurationField/QuantityRow's duplicated collapsed/popover chrome unified) plus structured Quantity (`QuantityAttachment` replaces `splitQuantity`'s reverse-parse) | [architecture-2026-09-17-collapsedfield-and-structured-quantity.md](./architecture-2026-09-17-collapsedfield-and-structured-quantity.md) |
 | — | External audit evaluation (`reviews/check/` claims independently re-verified; two doc-only fixes applied; remediation plan produced) plus `TokenPicker`'s tab-semantics fix (`role="radiogroup"`/`role="radio"` with wrapping arrow-key nav) and a stale driver check fixed along the way | [reviews/2026-09-17-external-audit-evaluation.md](../reviews/2026-09-17-external-audit-evaluation.md), [accessibility-tokenpicker-radiogroup.md](./accessibility-tokenpicker-radiogroup.md) |
+| — | Architecture: 2026-09-17 copy-paste-and-PDF follow-up review, then `StepCard`/`TokenChip` extraction (`InstructionCanvas.tsx` 602 → 198 lines; two small new duplications left open) | [audits/2026-09-17-copy-paste-and-pdf-followup-review.html](../audits/2026-09-17-copy-paste-and-pdf-followup-review.html), [architecture-stepcard-tokenchip-extraction.md](./architecture-stepcard-tokenchip-extraction.md) |
 | 31 | Refine UX | *not started* |
 
 ## Verification
@@ -310,8 +329,11 @@ One file per task (or per notable pass), in task-number order:
   tables, verified live in a browser instead; the ninth pass's copy/paste
   feature added a new `copyToken / pasteToken` describe block to
   `document.test.ts`, +6; the tenth pass's selected-panel border added
-  none - a pure CSS/class-name change verified live in a browser instead),
-  and `npm run build` all pass cleanly.
+  none - a pure CSS/class-name change verified live in a browser instead;
+  the `StepCard`/`TokenChip` extraction added none either - same kind of
+  component-only decomposition as the `SvgButton` extraction, with existing
+  driver checks covering the unchanged rendered output), and `npm run build`
+  all pass cleanly.
 - See each task's own file above for full verification detail
   (browser-driven checks, bundle size deltas, and the decisions made along
   the way).
