@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review for instruction_builder — canvas decomposition follow-up</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+      .badge-strong { background: #d1fae5; color: #065f46; }
+      .badge-explore { background: #fef3c7; color: #92400e; }
+      .badge-speculative { background: #e2e8f0; color: #334155; }
+      .tag { background: #eef2ff; color: #3730a3; }
+      .module-box { border: 2px solid #cbd5e1; border-radius: 0.5rem; background: #fff; }
+      .module-box-deep { border: 3px solid #0f172a; border-radius: 0.5rem; background: linear-gradient(135deg, #f8fafc, #eef2f7); }
+      .shallow-region { border: 1px dashed #94a3b8; border-radius: 0.375rem; background: #fef2f2; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+      <header class="space-y-3 border-b border-slate-200 pb-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Architecture review</p>
+        <h1 class="text-3xl font-serif font-semibold">instruction_builder</h1>
+        <p class="text-sm text-slate-500">2026-09-17 · follow-up to the same-day
+          <span class="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">canvas-tokenchip-and-field-shape-review</span>
+          · scoped to the canvas token/step interaction and <code class="font-mono text-xs">state/document.ts</code>, the hot spots across the last 25 commits.</p>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-500 pt-2">
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-3 module-box"></span> module</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-3 module-box-deep"></span> deep module</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-0 border-t-2 border-dashed border-slate-400"></span> seam</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-0 border-t-2 border-red-600"></span> leakage</span>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-16">
+
+        <!-- Candidate 1 -->
+        <article id="candidate-1" class="space-y-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-xl font-serif font-semibold">Decompose the canvas's per-step render into StepCard and TokenChip modules</h2>
+          </div>
+          <div class="flex flex-wrap gap-2 text-xs font-medium">
+            <span class="badge-strong rounded-full px-2.5 py-1">Strong</span>
+            <span class="tag rounded-full px-2.5 py-1">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">src/components/InstructionCanvas/InstructionCanvas.tsx (602 lines)</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+              <p class="text-xs uppercase tracking-wider text-slate-400">Before</p>
+              <div class="module-box p-3 h-72 flex flex-col gap-2 relative">
+                <p class="text-xs uppercase tracking-wider text-slate-500 text-center">InstructionCanvas · 602 ln</p>
+                <div class="shallow-region flex-1 p-2 flex items-center justify-center text-center text-xs text-red-800">
+                  step chrome, inline<br/>badge + title + remove +<br/>reorder/move wiring (~130 ln)
+                </div>
+                <div class="shallow-region flex-1 p-2 flex items-center justify-center text-center text-xs text-red-800">
+                  chip render + badges +<br/>pointerdown/resolveTokenPointerOutcome<br/>switch, inline (~115 ln)
+                </div>
+                <p class="text-[11px] text-slate-400 text-center">no seam between either region and layout orchestration</p>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">After</p>
+              <pre class="mermaid">
+                flowchart TB
+                  IC["InstructionCanvas<br/>thin, ~150 ln"]
+                  SC["StepCard<br/>deep module"]
+                  TC["TokenChip<br/>deep module"]
+                  IC -->|"step, index, layout"| SC
+                  SC -->|"token, position, isSelected"| TC
+                  classDef deep fill:#0f172a,color:#fff,stroke:#0f172a;
+                  class SC,TC deep
+              </pre>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm">
+            <p><span class="font-semibold">Problem:</span> the per-step <code class="font-mono text-xs">layouts.map</code> body inlines two distinct modules' worth of behaviour with no seam around either — step chrome (badge/title/remove/reorder, ~130 ln) and token-chip rendering plus its pointer-drag outcome switch (~115 ln) both pass the deletion test: cut either and the same complexity reappears in <code class="font-mono text-xs">InstructionCanvas</code>, it doesn't vanish.</p>
+            <p><span class="font-semibold">Solution:</span> give each region its own module — <code class="font-mono text-xs">StepCard</code> (chrome + drag-handle/move wiring) and <code class="font-mono text-xs">TokenChip</code> (chip markup, badges, the pointerdown switch) — so <code class="font-mono text-xs">InstructionCanvas</code> becomes a thin composition over what <code class="font-mono text-xs">computeCanvasLayout</code> already computes.</p>
+          </div>
+
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Interface shrinks to step/token props; implementation absorbs the wiring</li>
+            <li>Locality: a chip-badge bug fixes in one module, not a 602-line scroll</li>
+            <li>Leverage: TokenChip becomes testable through its own interface, not the whole canvas</li>
+          </ul>
+
+          <div class="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+            The 2026-09-17 audit this follows up on already named TokenChip as its top recommendation and deferred it. StepCard is new: it only became a comparably-sized inline cluster once step management moved onto the canvas (commit <code class="font-mono">106e536</code>), after that audit was written — both seams are now overdue, not just one.
+          </div>
+        </article>
+
+        <!-- Candidate 2 -->
+        <article id="candidate-2" class="space-y-5">
+          <h2 class="text-xl font-serif font-semibold">Collapse document.ts's four free-text mutators into one field-update module</h2>
+          <div class="flex flex-wrap gap-2 text-xs font-medium">
+            <span class="badge-explore rounded-full px-2.5 py-1">Worth exploring</span>
+            <span class="tag rounded-full px-2.5 py-1">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">src/state/document.ts (lines 440–494, sessionActions 545–569)</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+              <p class="text-xs uppercase tracking-wider text-slate-400 text-center mb-1">Before — 4 adapters, 1 implementation each</p>
+              <div class="space-y-1.5">
+                <div class="shallow-region p-2 text-xs text-red-800"><span class="font-mono">updateStepTitleCore</span> — steps.map + coalesce:true</div>
+                <div class="shallow-region p-2 text-xs text-red-800"><span class="font-mono">updateStepDescriptionCore</span> — steps.map + coalesce:true</div>
+                <div class="shallow-region p-2 text-xs text-red-800"><span class="font-mono">updateTokenLabelCore</span> — steps.map + coalesce:true</div>
+                <div class="shallow-region p-2 text-xs text-red-800"><span class="font-mono">updateTokenNoteCore</span> — steps.map + coalesce:true</div>
+              </div>
+              <p class="text-[11px] text-slate-400 text-center">line-for-line identical shape, four copies</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 flex flex-col justify-center">
+              <p class="text-xs uppercase tracking-wider text-slate-400 text-center mb-2">After</p>
+              <div class="module-box-deep text-white p-4 text-center space-y-1">
+                <p class="text-sm font-medium">updateStepField / updateTokenField</p>
+                <p class="text-xs text-slate-300">one field-selector param · coalesce intrinsic to the module, not a call-site flag</p>
+              </div>
+              <p class="text-[11px] text-slate-400 text-center mt-2">4 adapters → 1 deep implementation</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm">
+            <p><span class="font-semibold">Problem:</span> <code class="font-mono text-xs">updateStepTitleCore</code>, <code class="font-mono text-xs">updateStepDescriptionCore</code>, <code class="font-mono text-xs">updateTokenLabelCore</code>, <code class="font-mono text-xs">updateTokenNoteCore</code> are four separate implementations of the same shape — map over steps (and tokens), replace one field, pass <code class="font-mono text-xs">{'{ coalesce: true }'}</code> — differing only in which field and whether it's step- or token-scoped.</p>
+            <p><span class="font-semibold">Solution:</span> one deep <code class="font-mono text-xs">updateStepField</code>/<code class="font-mono text-xs">updateTokenField</code> taking a field updater, with free-text coalescing built into that module's interface as an invariant rather than repeated per adapter.</p>
+          </div>
+
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>One implementation instead of four near-identical clones</li>
+            <li>Locality: the coalescing invariant lives in one place</li>
+            <li>A future free-text field gets coalescing for free, no fifth clone</li>
+          </ul>
+        </article>
+
+        <!-- Candidate 3 -->
+        <article id="candidate-3" class="space-y-5">
+          <h2 class="text-xl font-serif font-semibold">Give StepDetails one reset seam instead of two</h2>
+          <div class="flex flex-wrap gap-2 text-xs font-medium">
+            <span class="badge-explore rounded-full px-2.5 py-1">Worth exploring</span>
+            <span class="tag rounded-full px-2.5 py-1">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">src/components/StepDetails/StepDetails.tsx (lines 74–96)</p>
+
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+              <p class="text-xs uppercase tracking-wider text-slate-400 text-center mb-1">Before</p>
+              <div class="shallow-region p-2 text-xs text-red-800"><span class="font-mono">key={'{step.id}'}</span> on &lt;DurationField&gt;<br/><span class="text-[11px]">+ 4-line comment explaining why</span></div>
+              <div class="shallow-region p-2 text-xs text-red-800 mt-2"><span class="font-mono">key={'{step.id}'}</span> on &lt;details&gt;<br/><span class="text-[11px]">+ near-duplicate 4-line comment</span></div>
+              <p class="text-[11px] text-slate-400 text-center mt-1">same reset seam declared twice, by convention</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 flex flex-col justify-center">
+              <p class="text-xs uppercase tracking-wider text-slate-400 text-center mb-2">After</p>
+              <div class="module-box-deep text-white p-4 text-center">
+                <p class="text-sm font-medium">one wrapper, key={'{step.id}'}</p>
+                <p class="text-xs text-slate-300 mt-1">DurationField + tokens-disclosure reset together</p>
+              </div>
+              <p class="text-[11px] text-slate-400 text-center mt-2">already the pattern TokenDetails.tsx uses:<br/><span class="font-mono">&lt;TimeAndQuantityRow key={'{token.id}'} .../&gt;</span></p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm">
+            <p><span class="font-semibold">Problem:</span> two sibling children each need their own <code class="font-mono text-xs">key={'{step.id}'}</code> to stop Preact reusing them across a step switch and leaking child-local edit/open state — the same fix, independently re-derived and re-commented twice in one file.</p>
+            <p><span class="font-semibold">Solution:</span> wrap both stateful children in one element keyed once, the way <code class="font-mono text-xs">TokenDetails.tsx</code> already keys <code class="font-mono text-xs">TimeAndQuantityRow</code> as a single row rather than keying its internal fields separately.</p>
+          </div>
+
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>Locality: the reset seam is declared once, not per child</li>
+            <li>A third stateful child (a future collapsible) inherits the reset for free</li>
+            <li>Matches an existing seam TokenDetails.tsx already established</li>
+          </ul>
+        </article>
+
+        <!-- Candidate 4 -->
+        <article id="candidate-4" class="space-y-5">
+          <h2 class="text-xl font-serif font-semibold">Name the "Untitled" defaults once</h2>
+          <div class="flex flex-wrap gap-2 text-xs font-medium">
+            <span class="badge-speculative rounded-full px-2.5 py-1">Speculative</span>
+            <span class="tag rounded-full px-2.5 py-1">in-process</span>
+          </div>
+          <p class="font-mono text-sm text-slate-600">src/model/instruction.ts:149 · src/app.tsx:211 · src/components/InstructionCanvas/InstructionCanvas.tsx:252,352,394</p>
+
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <div class="flex flex-wrap gap-3 justify-center items-center">
+              <span class="shallow-region px-3 py-1.5 text-xs text-red-800 font-mono">"Untitled instructions" — model/instruction.ts</span>
+              <span class="shallow-region px-3 py-1.5 text-xs text-red-800 font-mono">"Untitled instructions" — app.tsx</span>
+              <span class="shallow-region px-3 py-1.5 text-xs text-red-800 font-mono">"Untitled instructions" — Canvas heading</span>
+              <span class="shallow-region px-3 py-1.5 text-xs text-red-800 font-mono">"Untitled step" ×2 — Canvas title/ghost</span>
+            </div>
+            <p class="text-[11px] text-slate-400 text-center mt-3">5 literal occurrences → 2 exported constants, no seam needed, just one source</p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm">
+            <p><span class="font-semibold">Problem:</span> the empty-title fallback strings are hardcoded independently at each of five call sites (three for the document, two for a step within the same file) with no shared constant, kept in sync only by convention.</p>
+            <p><span class="font-semibold">Solution:</span> two exported constants in <code class="font-mono text-xs">model/instruction.ts</code>, imported everywhere the fallback is needed.</p>
+          </div>
+
+          <ul class="text-sm space-y-1 list-disc list-inside text-slate-700">
+            <li>One literal, five readers, no drift risk</li>
+          </ul>
+        </article>
+
+      </section>
+
+      <section id="top-recommendation" class="rounded-xl border-2 border-slate-900 bg-white p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400 mb-2">Top recommendation</p>
+        <h2 class="text-lg font-serif font-semibold mb-2">
+          <a href="#candidate-1" class="hover:underline">Decompose the canvas's per-step render into StepCard and TokenChip modules</a>
+        </h2>
+        <p class="text-sm text-slate-700">It's the only candidate carried forward from the prior audit as still <em>Strong</em>, it now covers a second, newly-grown seam (StepCard) that didn't exist when that audit ran, and it's the highest-leverage fix for the single most process-churned component in the last 25 commits.</p>
+      </section>
+    </main>
+  </body>
+</html>
