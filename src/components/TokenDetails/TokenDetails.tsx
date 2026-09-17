@@ -201,7 +201,12 @@ export function TokenDetails() {
   }
 
   return (
-    <div class="token-details">
+    // Matches the canvas's own selected-step highlight (same border color
+    // and thickness as `.instruction-canvas__step-bg--selected`) - shown
+    // here rather than on StepDetails whenever a token is selected, since
+    // this panel only ever renders this branch once one is (see the guard
+    // above).
+    <div class="token-details token-details--selected">
       <div class="token-details__header">
         <h2 class="token-details__heading">Token details</h2>
         <button

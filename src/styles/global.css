@@ -519,6 +519,16 @@ button {
   background: var(--color-canvas-bg);
 }
 
+/* Visual clarity: whichever of the two mirrors the canvas's own current
+   selection (StepDetails with only a step selected, TokenDetails once a
+   token is too - see each component's own class-choosing comment) gets the
+   same border color/thickness as `.instruction-canvas__step-bg--selected`'s
+   `stroke: var(--color-accent)` / implicit `stroke-width: 1`. */
+.step-details--selected,
+.token-details--selected {
+  border-color: var(--color-accent);
+}
+
 .step-details__heading,
 .token-details__heading,
 .instruction-canvas__heading,

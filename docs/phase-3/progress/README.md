@@ -11,12 +11,12 @@ pass, a pre-launch file/docs and UI audit, a follow-up canvas-specific
 architecture deepening, a step-management-onto-the-canvas UX rework, and an
 "Add to token"-into-Token-details UX rework), updated 2026-09-16 (a further
 architecture review remediation, plus title/description max length limits),
-updated 2026-09-17 (the `SvgButton` extraction, task 30's first nine real
+updated 2026-09-17 (the `SvgButton` extraction, task 30's first ten real
 user feedback passes, the `CollapsedField`/structured-Quantity deepening,
 an external audit evaluation that fixed `TokenPicker`'s tab-semantics gap,
 a PDF export rework that closed out Phase 4 task 37 early, an icon
-library expansion with 12 new generic actions and 15 new ingredients, and
-a copy/paste-tokens feature)
+library expansion with 12 new generic actions and 15 new ingredients, a
+copy/paste-tokens feature, and a matching selected-panel border)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
 [../../project-plan.md](../../project-plan.md#implementation-plan)'s Phase 3
@@ -246,7 +246,15 @@ Paste button in `StepDetails`' header (split across the two panels
 deliberately, since Paste targets the selected *step* and must stay
 reachable even with no token selected), and global `Ctrl+C`/`Ctrl+V`
 shortcuts that skip text inputs so native text copy/paste still works. See
-[task-30-user-feedback-fixes-9.md](./task-30-user-feedback-fixes-9.md).
+[task-30-user-feedback-fixes-9.md](./task-30-user-feedback-fixes-9.md). A
+tenth same-day pass gave `StepDetails`/`TokenDetails` a selected-state
+border matching the canvas's own selected-step highlight exactly (same
+`var(--color-accent)` color, same 1px thickness): a `.step-details
+--selected`/`.token-details--selected` modifier class, mutually exclusive
+by construction - StepDetails carries it only while no token is also
+selected, TokenDetails' one "editing" render branch only ever renders once
+a token is. See
+[task-30-user-feedback-fixes-10.md](./task-30-user-feedback-fixes-10.md).
 
 ## What shipped
 
@@ -267,7 +275,7 @@ One file per task (or per notable pass), in task-number order:
 | — | Architecture: 2026-09-16 review remediation (`resolveTokenPointerOutcome` names the select/drag decision in `lib/pointer-drag.ts`; `attachToSelectedToken` deleted from `state/document.ts`) | [architecture-2026-09-16-review-remediation.md](./architecture-2026-09-16-review-remediation.md) |
 | — | Title/description max length limits (step and token Title capped at 50 characters, step Details and token Notes at 249) | [title-and-description-max-length.md](./title-and-description-max-length.md) |
 | — | Architecture: extract `SvgButton` (six duplicated keyboard-activatable SVG `<g role="button">` blocks in `InstructionCanvas.tsx` unified into one component; driver gained Enter/Space coverage for four sites) | [architecture-svgbutton-extraction.md](./architecture-svgbutton-extraction.md) |
-| 30 | Test Real Users (in progress - nine feedback passes shipped) | [task-30-user-feedback-fixes.md](./task-30-user-feedback-fixes.md), [task-30-user-feedback-fixes-2.md](./task-30-user-feedback-fixes-2.md), [task-30-user-feedback-fixes-3.md](./task-30-user-feedback-fixes-3.md), [task-30-user-feedback-fixes-4.md](./task-30-user-feedback-fixes-4.md), [task-30-user-feedback-fixes-5.md](./task-30-user-feedback-fixes-5.md), [task-30-user-feedback-fixes-6.md](./task-30-user-feedback-fixes-6.md), [task-30-user-feedback-fixes-7.md](./task-30-user-feedback-fixes-7.md), [task-30-user-feedback-fixes-8.md](./task-30-user-feedback-fixes-8.md), [task-30-user-feedback-fixes-9.md](./task-30-user-feedback-fixes-9.md) |
+| 30 | Test Real Users (in progress - ten feedback passes shipped) | [task-30-user-feedback-fixes.md](./task-30-user-feedback-fixes.md), [task-30-user-feedback-fixes-2.md](./task-30-user-feedback-fixes-2.md), [task-30-user-feedback-fixes-3.md](./task-30-user-feedback-fixes-3.md), [task-30-user-feedback-fixes-4.md](./task-30-user-feedback-fixes-4.md), [task-30-user-feedback-fixes-5.md](./task-30-user-feedback-fixes-5.md), [task-30-user-feedback-fixes-6.md](./task-30-user-feedback-fixes-6.md), [task-30-user-feedback-fixes-7.md](./task-30-user-feedback-fixes-7.md), [task-30-user-feedback-fixes-8.md](./task-30-user-feedback-fixes-8.md), [task-30-user-feedback-fixes-9.md](./task-30-user-feedback-fixes-9.md), [task-30-user-feedback-fixes-10.md](./task-30-user-feedback-fixes-10.md) |
 | — | Architecture: `CollapsedField<T>` extraction (DurationField/QuantityRow's duplicated collapsed/popover chrome unified) plus structured Quantity (`QuantityAttachment` replaces `splitQuantity`'s reverse-parse) | [architecture-2026-09-17-collapsedfield-and-structured-quantity.md](./architecture-2026-09-17-collapsedfield-and-structured-quantity.md) |
 | — | External audit evaluation (`reviews/check/` claims independently re-verified; two doc-only fixes applied; remediation plan produced) plus `TokenPicker`'s tab-semantics fix (`role="radiogroup"`/`role="radio"` with wrapping arrow-key nav) and a stale driver check fixed along the way | [reviews/2026-09-17-external-audit-evaluation.md](../reviews/2026-09-17-external-audit-evaluation.md), [accessibility-tokenpicker-radiogroup.md](./accessibility-tokenpicker-radiogroup.md) |
 | 31 | Refine UX | *not started* |
@@ -301,7 +309,9 @@ One file per task (or per notable pass), in task-number order:
   icon library expansion added none - a pure data addition to two lookup
   tables, verified live in a browser instead; the ninth pass's copy/paste
   feature added a new `copyToken / pasteToken` describe block to
-  `document.test.ts`, +6), and `npm run build` all pass cleanly.
+  `document.test.ts`, +6; the tenth pass's selected-panel border added
+  none - a pure CSS/class-name change verified live in a browser instead),
+  and `npm run build` all pass cleanly.
 - See each task's own file above for full verification detail
   (browser-driven checks, bundle size deltas, and the decisions made along
   the way).

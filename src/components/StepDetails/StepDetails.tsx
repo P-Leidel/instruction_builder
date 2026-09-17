@@ -55,8 +55,14 @@ export function StepDetails() {
     );
   }
 
+  // Matches the canvas's own selected-step highlight (same border color and
+  // thickness as `.instruction-canvas__step-bg--selected`) - but only while
+  // no token is also selected, since once a token is selected the border
+  // moves to TokenDetails instead (see its own class below).
+  const isSelected = !selectedTokenId.value;
+
   return (
-    <div class="step-details">
+    <div class={`step-details${isSelected ? " step-details--selected" : ""}`}>
       <div class="step-details__header">
         <h2 class="step-details__heading">Step details</h2>
         <button
