@@ -14,7 +14,8 @@ import { ConfirmDialog } from "../ConfirmDialog/ConfirmDialog";
  * keyboard/screen-reader users, not just carry the role - see the shared
  * `ConfirmDialog` shell (`components/ConfirmDialog`, also used by
  * `NewDocumentConfirmDialog` - 2026-09-17 remediation, item 15) for the
- * focus/Tab-trap/Escape behavior.
+ * `aria-modal`/focus/Escape behavior, and CONTEXT.md's "Confirm dialog"
+ * for what modality commits this app to.
  */
 export function ImportConfirmDialog() {
   const pending = pendingImport.value;

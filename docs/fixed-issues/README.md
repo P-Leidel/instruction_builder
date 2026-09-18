@@ -40,3 +40,5 @@ One file per bug, newest last (matching the order they were found):
 21. [A naive service worker fetch handler broke every page reload](./service-worker-broke-every-page-reload.md)
 22. [The service worker's runtime cache silently cached nothing, ever](./service-worker-never-actually-cached-anything.md)
 23. [PDF export's step-bounds reader also matched token groups](./pdf-pagination-step-bounds-selector-collision.md)
+24. [The confirm dialogs behaved like modals without ever declaring it](./confirm-dialogs-were-modal-in-behavior-only.md)
+25. [The hidden export canvas was a keyboard tab stop](./hidden-export-canvas-was-a-keyboard-tab-stop.md)

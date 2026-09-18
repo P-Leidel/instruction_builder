@@ -161,8 +161,8 @@ function useDocumentTitleSync(): void {
  * Whether the global keyboard shortcuts below (undo/redo, copy/paste)
  * should stay dormant: a confirm dialog (Import/New document) is open, or
  * Preview mode is showing a read-only canvas. Both `window`-level listeners
- * used to ignore all three - the confirm dialogs' own focus trap
- * (`dialog-focus-trap.ts`) only handles Escape/Tab, so every other key
+ * used to ignore all three - the confirm dialogs' own focus handling
+ * (`dialog-focus-trap.ts`) only handles Escape, so every other key
  * bubbled past their focused Cancel button up to these listeners, letting
  * e.g. Ctrl+Z undo the document sitting behind an open dialog, or Ctrl+V
  * paste into Preview's supposedly read-only canvas (2026-09-17 audit
@@ -172,6 +172,29 @@ function useDocumentTitleSync(): void {
  */
 function keyboardShortcutsSuspended(): boolean {
   return pendingImport.value !== null || confirmingNewDocument.value || previewMode.value;
+}
+
+/**
+ * Whether a confirm dialog (Import/New document) is currently open, and so
+ * whether everything outside it should be `inert` (2026-09-18 architecture
+ * review, finding 7 - see `ConfirmDialog.tsx` and CONTEXT.md's "Confirm
+ * dialog").
+ *
+ * Deliberately *not* `keyboardShortcutsSuspended` above, even though the
+ * two overlap on both dialog signals: that one also includes `previewMode`,
+ * and Preview is not modal - inerting the page during Preview would make
+ * the read-only canvas, the toolbar and the "Back to editor" button all
+ * unreachable. Two names for two genuinely different questions, rather
+ * than one predicate quietly answering both.
+ *
+ * Called from `App`'s render (not from an event handler like
+ * `keyboardShortcutsSuspended`), so reading these two signals subscribes
+ * `App` to them - which is the point: `App` otherwise never re-renders
+ * when a dialog opens, and the `inert` attributes below would never
+ * update. It costs one extra `App` render per dialog open and per close.
+ */
+function confirmDialogOpen(): boolean {
+  return pendingImport.value !== null || confirmingNewDocument.value;
 }
 
 /**
@@ -319,10 +342,20 @@ export function App() {
   // computed once, not twice, for what's provably the same input.
   const liveLayout = useMemo(() => computeCanvasLayout(steps, isDesktop), [steps, isDesktop]);
   const exportLayout = useMemo(() => computeCanvasLayout(steps, true), [steps]);
+  // Everything the app renders *outside* an open confirm dialog carries
+  // this: the toolbar, the main editor grid, and the two banners between
+  // them. That is the whole page bar the dialog itself, `DragGhost` (which
+  // can't be mid-drag while a dialog is open) and the hidden export canvas
+  // (already `aria-hidden`, and read-only, so it holds nothing focusable).
+  // The two banners are included even though only the toast contains a
+  // focusable element today - "everything behind the dialog" is the rule,
+  // and leaving a Dismiss button tabbable behind a modal is exactly the
+  // hole `aria-modal="true"` would then be lying about.
+  const backgroundInert = confirmDialogOpen();
 
   return (
     <div class="app">
-      <header class="app__toolbar">
+      <header class="app__toolbar" inert={backgroundInert}>
         <div class="app__titles">
           <h1>Visual Instruction Builder</h1>
           <p class="app__tagline">Build step-by-step recipe instructions</p>
@@ -404,7 +437,7 @@ export function App() {
         </button>
       </header>
       {persistenceStatus.value === "unavailable" && (
-        <p class="app__persistence-warning" role="status">
+        <p class="app__persistence-warning" role="status" inert={backgroundInert}>
           Your browser blocked local saving (this is common in private
           browsing). Changes will be lost when you close this tab.
         </p>
@@ -413,6 +446,7 @@ export function App() {
         <div
           class={`app__toast app__toast--${toast.value.tone}`}
           role={toast.value.tone === "error" ? "alert" : "status"}
+          inert={backgroundInert}
         >
           <span>{toast.value.text}</span>
           <button
@@ -425,7 +459,7 @@ export function App() {
           </button>
         </div>
       )}
-      <main class={`app__main${previewMode.value ? " app__main--preview" : ""}`}>
+      <main class={`app__main${previewMode.value ? " app__main--preview" : ""}`} inert={backgroundInert}>
         {previewMode.value ? (
           <InstructionCanvas readOnly layout={exportLayout} />
         ) : (
@@ -444,7 +478,19 @@ export function App() {
       <DragGhost />
       <ImportConfirmDialog />
       <NewDocumentConfirmDialog />
-      <div class="app__export-canvas" aria-hidden="true">
+      {/*
+        `inert` as well as `aria-hidden`, and unconditionally rather than
+        only behind a dialog: `.instruction-canvas` is `overflow-x: auto`,
+        and Chromium makes scroll containers keyboard-focusable, so this
+        hidden, zero-sized, read-only copy of the document was a real Tab
+        stop on every page - focus simply vanished into a node nobody can
+        see. Found by the driver's own tab-stop probe while checking the
+        confirm dialogs' modality (2026-09-18 review, finding 7); the hole
+        predates that work and had nothing to do with dialogs. `inert`
+        doesn't affect layout or `getComputedStyle`, so SVG/PNG/PDF
+        export's style-baking reads exactly what it read before.
+      */}
+      <div class="app__export-canvas" aria-hidden="true" inert>
         <InstructionCanvas readOnly layout={exportLayout} svgRef={exportSvgRef} />
       </div>
     </div>

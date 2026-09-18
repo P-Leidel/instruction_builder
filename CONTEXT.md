@@ -66,3 +66,32 @@ by `resolveFieldPlacement` in
 CSS modifier - the arithmetic is kept out of the panel itself so it can be
 tested without a browser. _Avoid_: "modal", "dialog", "tooltip" (it is
 none of these).
+
+## Confirm dialog
+
+A **confirm dialog** is the app's modal counterpart to the field popover:
+the centered panel, over a backdrop, that asks the user to approve
+replacing the whole document before it happens. There are exactly two -
+Import's "Replace current document?" and New document's "Start a new
+document?" - and they share one shell,
+[src/components/ConfirmDialog/ConfirmDialog.tsx](./src/components/ConfirmDialog/ConfirmDialog.tsx),
+with each caller supplying only its own wording and its own go-ahead.
+
+The term exists because this app now decides modality in opposite
+directions in two places, and "dialog" alone no longer says which. Calling
+something a confirm dialog is a commitment to all four of these, not a
+description of how it looks:
+
+- `aria-modal="true"` alongside `role="alertdialog"`.
+- Everything outside it is `inert` while it is open, so neither Tab nor a
+  screen reader in browse mode can reach the page behind it.
+- Escape closes it from anywhere, not only while focus is inside it.
+- Closing it returns focus to whatever opened it.
+
+Notably **not** part of it: a hand-written Tab cycle between the dialog's
+own controls. Focus containment is a consequence of the page behind being
+inert, and a second mechanism enforcing the same rule is what made the
+field popover's old `aria-modal="false"`-plus-Tab-trap contradict itself.
+
+_Avoid_: "popover", "modal" on its own (this app has exactly one modal
+pattern and one non-modal one - name which), "alert" (that is the toast).

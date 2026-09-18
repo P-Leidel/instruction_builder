@@ -239,10 +239,18 @@ the only one that needs the steps under "Run (agent path)".
    the list's first/last position); and a keyboard-only token selection
    via `StepDetails`' "Tokens in this step" list (the canvas's own SVG
    token chips stay pointer/touch-only - see Gotchas), confirming Token
-   Details opens for it. It also confirms the Import dialog behaves like a
-   real modal: focus lands on Cancel the instant it opens, Tab is trapped
-   between its two buttons, and Escape cancels with the document left
-   untouched. It prints `SCREENSHOTS_DIR=...`,
+   Details opens for it. It also confirms the two confirm dialogs behave
+   like real modals (2026-09-18, review finding 7): focus lands on Cancel
+   the instant the Import dialog opens, everything behind it reports
+   `inert`, six consecutive Tab presses never land on an element outside
+   the dialog while both its buttons stay reachable, and Escape cancels
+   with the document left untouched - plus, on the New-document dialog,
+   that closing it returns focus to the toolbar button that opened it.
+   Note this replaced an older assertion that Tab *cycled between exactly
+   two buttons*: there is no hand-rolled cycle any more, `inert` is what
+   contains focus now, and past the last button focus legitimately parks
+   on `<body>` before the order starts again. `IMPORT_DIALOG_TAB_STOPS`
+   prints the landing spots so a failure says where focus actually went. It prints `SCREENSHOTS_DIR=...`,
    `TABS_FILTER_TOKENS=...`, `TOKEN_SELECTED_AFTER_FIRST_CLICK=...`,
    `TOKEN_LABEL_UPDATED=...`, `ATTACHMENTS_WORKED_END_TO_END=...`,
    `QUANTITY_EDIT_PREFILLS_FROM_CURRENT_VALUE=...`,
@@ -293,7 +301,9 @@ the only one that needs the steps under "Run (agent path)".
    `STEP_REORDERED_VIA_KEYBOARD=...`,
    `STEP_MOVE_BUTTONS_DISABLED_AT_BOUNDARIES=...`,
    `TOKEN_SELECTED_VIA_KEYBOARD=...`,
-   `IMPORT_DIALOG_TRAPS_FOCUS_AND_ESCAPE_CLOSES=...`,
+   `IMPORT_DIALOG_TRAPS_FOCUS_AND_ESCAPE_CLOSES=...` (with an
+   `IMPORT_DIALOG_TAB_STOPS=...` trace),
+   `CONFIRM_DIALOG_RETURNS_FOCUS_TO_OPENER=...`,
    `ACCESSIBILITY_VIOLATIONS_MAIN_EDITOR=...`,
    `ACCESSIBILITY_VIOLATIONS_IMPORT_DIALOG=...`,
    `ACCESSIBILITY_VIOLATIONS_MOBILE=...`,
@@ -354,6 +364,28 @@ taken - watch the terminal output for the actual URL).
 
 ## Gotchas
 
+- **`overflow: auto` makes an element a keyboard tab stop in Chromium,
+  even if it is invisible and `aria-hidden`.** Chromium's
+  keyboard-focusable scroll containers mean any `overflow: auto` element
+  is reachable by Tab so it can be arrow-key scrolled - regardless of
+  whether it contains anything focusable. `.instruction-canvas` is
+  `overflow-x: auto`, so the hidden export canvas was a silent dead stop
+  in the tab order (`width: 0; height: 0; overflow: hidden` and
+  `aria-hidden="true"` do nothing about tab order) until it was marked
+  `inert`. Worth remembering both as an app bug class and as a driver one:
+  a tab-order probe will report elements you would never think to look
+  for. See `docs/fixed-issues/hidden-export-canvas-was-a-keyboard-tab-stop.md`.
+- **A `keydown` handler on a dialog element only sees keys that bubble
+  through it - which is not "always" once focus can leave.** The confirm
+  dialogs' Escape handling used to live on the dialog `<div>`'s
+  `onKeyDown`, which worked only because a hand-rolled Tab cycle kept
+  focus on one of its two buttons. With focus containment moved to `inert`
+  (2026-09-18), focus legitimately parks on `<body>` past the last button,
+  Escape stopped reaching the handler, and the dialog became uncloseable
+  by keyboard. It is a `window` listener now, matching the native
+  `<dialog>` element. If a driver check starts timing out on "click the
+  thing behind the dialog", suspect the dialog never closed rather than
+  the click.
 - **The download check patches the page, it doesn't reproduce the bug.**
   `DOWNLOAD_DEFERS_OBJECT_URL_REVOKE` exists for a Safari/iOS failure
   (revoking a blob URL before the transfer is handed off cancels the

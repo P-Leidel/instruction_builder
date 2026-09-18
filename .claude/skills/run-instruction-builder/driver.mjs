@@ -1127,12 +1127,41 @@ const accessibilityViolationsImportDialog = await countAxeViolations("import dia
 const dialogFocusedCancelOnOpen = await page.evaluate(
   () => document.activeElement?.className === "confirm-dialog-cancel",
 );
-await page.keyboard.press("Tab");
-const focusedReplaceAfterOneTab = await page.evaluate(() => document.activeElement?.className);
-await page.keyboard.press("Tab");
-const focusWrappedBackToCancel = await page.evaluate(
-  () => document.activeElement?.className === "confirm-dialog-cancel",
-);
+
+// 2026-09-18 architecture review, finding 7. This used to assert a
+// hand-rolled two-button cycle: Tab from Cancel lands on Replace, Tab
+// again wraps back to Cancel. That cycle is gone - `app.tsx` marks
+// everything outside the dialog `inert` while one is open, which removes
+// the whole page behind it from the tab order as a property of the page
+// rather than as two buttons agreeing to pass focus to each other. So the
+// honest assertion is now "Tab never reaches anything behind the dialog",
+// which is also the thing `aria-modal="true"` promises.
+//
+// Note what is *not* a failure: past the dialog's last control the browser
+// hands focus to the document itself (`activeElement` becomes `<body>`)
+// before starting over. That is ordinary modal behaviour, not an escape -
+// only landing on a real element outside the dialog is.
+const backgroundInertWhileDialogOpen = await page.evaluate(() => {
+  const behind = [...document.querySelectorAll(".app__toolbar, .app__main, .app__toast, .app__persistence-warning")];
+  return behind.length >= 2 && behind.every((el) => el.inert === true);
+});
+const tabStops = [];
+for (let i = 0; i < 6; i += 1) {
+  await page.keyboard.press("Tab");
+  tabStops.push(
+    await page.evaluate(() => {
+      const el = document.activeElement;
+      if (!el || el === document.body || el === document.documentElement) return "body";
+      return el.closest(".confirm-dialog") ? `dialog:${el.className}` : `OUTSIDE:${el.className}`;
+    }),
+  );
+}
+const tabNeverLeftDialog = tabStops.every((stop) => !stop.startsWith("OUTSIDE"));
+// Both buttons still have to be *reachable* - an all-`body` result would
+// satisfy "never left the dialog" while meaning focus went nowhere at all.
+const tabReachedBothDialogButtons =
+  tabStops.includes("dialog:confirm-dialog-cancel") &&
+  tabStops.includes("dialog:confirm-dialog-confirm");
 
 // 2026-09-17 audit remediation, finding 4: `useHistoryKeyboardShortcuts`
 // used to have no idea this dialog (or any confirm dialog) was open - every
@@ -1152,8 +1181,9 @@ const escapeClosedDialogWithNoChange =
   JSON.stringify(await stepTitles.allTextContents()) === JSON.stringify(summariesBeforeImportTest);
 const importDialogTrapsFocusAndEscapeCloses =
   dialogFocusedCancelOnOpen &&
-  focusedReplaceAfterOneTab === "confirm-dialog-confirm" &&
-  focusWrappedBackToCancel &&
+  backgroundInertWhileDialogOpen &&
+  tabNeverLeftDialog &&
+  tabReachedBothDialogButtons &&
   escapeClosedDialogWithNoChange;
 
 // NewDocumentConfirmDialog (task 28) - never previously exercised by this
@@ -1174,6 +1204,22 @@ await page.getByRole("button", { name: "Cancel", exact: true }).click();
 const newDocDialogCancelLeavesDocumentUnchanged =
   (await page.locator(".confirm-dialog").count()) === 0 &&
   JSON.stringify(await stepTitles.allTextContents()) === JSON.stringify(summariesBeforeImportTest);
+
+// The other half of modality, and the one the Import dialog above can't
+// show: closing a dialog must put focus back on whatever opened it
+// (2026-09-18 architecture review, finding 7 - it used to land on <body>,
+// leaving a keyboard user to Tab from the top of the page). Checked on the
+// New-document dialog specifically because its opener is a real, visible
+// toolbar button that was genuinely focused by the click above; Import's
+// is a hidden file input reached through a native file picker, so there is
+// no meaningful element to come back to there.
+//
+// Read after a `waitForFunction` rather than immediately: the restore runs
+// from the focus hook's effect cleanup, which Preact flushes after the
+// commit that clears `inert` - a synchronous read here can beat it.
+const focusReturnedToOpener = await page
+  .waitForFunction(() => document.activeElement?.textContent?.trim() === "New", null, { timeout: 2000 })
+  .then(() => true, () => false);
 
 // Combines the three suspended-shortcuts probes above (Preview mode, the
 // Import dialog, the New Document dialog) into the one guard function
@@ -1474,6 +1520,8 @@ console.log("STEP_REORDERED_VIA_KEYBOARD=" + stepReorderedViaKeyboard);
 console.log("STEP_MOVE_BUTTONS_DISABLED_AT_BOUNDARIES=" + stepMoveButtonsDisabledAtBoundaries);
 console.log("TOKEN_SELECTED_VIA_KEYBOARD=" + tokenSelectedViaKeyboard);
 console.log("IMPORT_DIALOG_TRAPS_FOCUS_AND_ESCAPE_CLOSES=" + importDialogTrapsFocusAndEscapeCloses);
+console.log("IMPORT_DIALOG_TAB_STOPS=" + tabStops.join(" -> "));
+console.log("CONFIRM_DIALOG_RETURNS_FOCUS_TO_OPENER=" + focusReturnedToOpener);
 console.log("ACCESSIBILITY_VIOLATIONS_MAIN_EDITOR=" + accessibilityViolationsMainEditor);
 console.log("ACCESSIBILITY_VIOLATIONS_IMPORT_DIALOG=" + accessibilityViolationsImportDialog);
 console.log("ACCESSIBILITY_VIOLATIONS_MOBILE=" + accessibilityViolationsMobile);
