@@ -125,7 +125,7 @@ keyboard-selects a token via `StepDetails`' list and confirms Token Details
 opens for it (`TOKEN_SELECTED_VIA_KEYBOARD`), and confirms the Import
 dialog focuses Cancel on open, traps Tab between its two buttons, and
 Escape closes it with the document left untouched
-(`IMPORT_DIALOG_TRAPS_FOCUS_AND_ESCAPE_CLOSES`) - all passing, alongside
+(`IMPORT_DIALOG_CONTAINS_FOCUS_AND_ESCAPE_CLOSES`) - all passing, alongside
 every pre-existing check, with `CONSOLE_ERRORS_COUNT=0`.
 
 ## Files touched

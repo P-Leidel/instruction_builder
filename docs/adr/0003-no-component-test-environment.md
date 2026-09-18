@@ -33,24 +33,52 @@ Do not add a DOM test environment. Components stay covered by the browser
 driver. Where a component holds logic worth testing in isolation, the logic
 moves out to `src/lib/` rather than the test environment moving in.
 
-## Why: the coupling nothing else records
+## Why: the cost is a simulated DOM, not a dependency upgrade
 
-Adding jsdom or happy-dom means adding a Vitest DOM environment, and the
-only Vitest versions compatible with this project's pinned `vite@^5.4.11`
-are the 2.x-4.x line. Every one of those depends on a `@vitest/mocker`
-version carrying a critical advisory
+**Corrected 2026-09-18, before this ADR was ever pushed.** The version first
+written here argued that a DOM environment was blocked by the deferred Vite
+major: that the only Vitest versions compatible with the pinned
+`vite@^5.4.11` are the 2.x-4.x line, that every one of them depends on a
+`@vitest/mocker` carrying a critical advisory
 ([GHSA-82fw-gwwq-j7x9](https://github.com/advisories/GHSA-82fw-gwwq-j7x9)),
-and the fix - `vitest@5` - requires `vite@^6.4.0 || ^7 || ^8`. That is the
-major Vite upgrade [`known-issues.md`](../known-issues.md) already defers,
-with its own reasons and its own two operational guardrails.
+and that the fix - `vitest@5` - requires `vite@^6.4.0 || ^7 || ^8`. Each of
+those version facts is true. The *conclusion drawn from them was not*, and
+it is corrected here in place rather than quietly deleted, because it is
+exactly the argument a future reader would otherwise re-derive and believe.
 
-So "add component tests" is not a tooling decision that can be made on its
-own merits: it forces a dependency upgrade this project has deliberately
-deferred, in order to gain a *simulated* DOM for an app whose hardest
-behaviour is precisely the part a simulated DOM gets wrong. Neither
-`known-issues.md` (which explains the deferral but not what depends on it)
-nor the review (which names the coupling in passing) recorded this as a
-standing constraint. It is recorded here.
+None of those facts is a consequence of adding a DOM environment.
+`vitest@2.1.9` - and with it `@vitest/mocker@2.1.9` - is **already installed
+and already shipping in this project's dev tree today** (`npm ls
+@vitest/mocker`), and that advisory is already an accepted, guard-railed
+entry in [`known-issues.md`](../known-issues.md), with the guardrail being
+"never run `vitest --ui`", the one mode it is exploitable in. Adding `jsdom`
+as a devDependency and changing `vitest.config.ts`'s `environment: "node"`
+introduces no new advisory and forces no upgrade at all. The exposure is
+identical before and after. "Add component tests" *is* a tooling decision
+that can be made on its own merits, and it is made on them below.
+
+What it actually costs is real, but smaller and of a different kind:
+
+- **A simulated DOM for the app whose hardest behaviour is precisely what a
+  simulated DOM gets wrong.** Drag and drop, SVG export, download plumbing,
+  `inert`, and focus management are this component tree's difficult parts,
+  and jsdom either does not implement them or implements them as a
+  plausible-looking approximation - which is worse, because a green test
+  then asserts something the browser does not do. This is the argument that
+  carries the decision, and it never depended on the upgrade claim.
+- **A build step the test config currently does without.**
+  [`vitest.config.ts`](../../vitest.config.ts) is deliberately standalone
+  from [`vite.config.ts`](../../vite.config.ts), and its own comment says
+  why: the app config exists for the build/dev-server and the Preact JSX
+  plugin, "neither of which this pass's test scope needs (plain `.ts` unit
+  tests, no `.tsx` rendering)". Rendering components means wiring
+  `@preact/preset-vite` into the test config and adding a rendering helper,
+  so `npm test` stops being a plain, plugin-free pass over plain TypeScript.
+- **Two more devDependencies** on a project that committed in Phase 1 to
+  adding as few as it can get away with.
+
+None of that is prohibitive. It is simply not free either, and it buys a
+weaker signal than the coverage that already exists.
 
 ## The alternative that is actually being pursued
 
@@ -72,6 +100,10 @@ six unit tests at any viewport you can type.
   code commit rather than only before a release.
 - A component whose logic is hard to reach from the driver is a signal that
   the logic wants extracting, not that the test environment is missing.
-- **Revisit when** the Vite major upgrade happens for its own reasons. At
-  that point `vitest@5` and a DOM environment come almost for free, and this
-  decision should be re-argued on its merits rather than inherited.
+- **Revisit when** the extraction strategy above stops absorbing the work -
+  i.e. when a real regression ships that neither a `src/lib/` unit test nor
+  the driver could have caught, and the honest post-mortem is "a component
+  test would have found this". That, not a dependency upgrade, is the
+  trigger. Nothing about the tooling blocks this decision from being
+  reversed on any ordinary afternoon, so it should be re-argued on its
+  merits whenever someone wants to, rather than inherited.

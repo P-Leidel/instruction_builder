@@ -99,7 +99,7 @@ clearing browser storage), a plainer toolbar tagline, and a general
 audit-first visual/responsive sweep - deliberately excluding the two
 accessibility gaps already tracked in known-issues.md, kept deferred. The
 new confirm dialog this needed was built by extracting a shared
-`useConfirmDialogFocusTrap` hook out of the existing `ImportConfirmDialog`
+`useConfirmDialogFocus` hook out of the existing `ImportConfirmDialog`
 rather than duplicating its keyboard-focus logic a second time (see
 [phase-3/progress/task-28-ui-polish-pass.md](./phase-3/progress/task-28-ui-polish-pass.md)).
 A same-day `/mattpocock-skills:improve-codebase-architecture` review (see
@@ -108,7 +108,7 @@ surfaced five candidates; discussed with the user before acting, three
 were fixed the same day - `app.tsx`'s export/import orchestration moved
 to `lib/document-actions.ts` (keeping this codebase's existing convention
 that `lib/` modules never write UI state directly, and picking up 3 new
-Vitest tests along the way), `useConfirmDialogFocusTrap` tightened from
+Vitest tests along the way), `useConfirmDialogFocus` tightened from
 raw refs to ready-to-spread prop bags, and a known-issues.md entry
 sharpened - one (collapsing the tab-strip duplicated across `TokenPicker`
 and `TokenAttachmentPicker`) was deliberately deferred to Phase 4 task 32
@@ -234,7 +234,7 @@ shoved the other's collapsed button around) and surfaced a pre-existing
 one line at the sidebar's actual width - also true of Step details' own
 Token time, not just the paired row). Both moved to a new `FieldPopover` -
 a small floating panel anchored below their trigger button, extending
-`useConfirmDialogFocusTrap`'s keyboard pattern - instead of expanding in
+`useConfirmDialogFocus`'s keyboard pattern - instead of expanding in
 place, removing the edit form from document flow entirely. See
 [phase-3/progress/task-30-user-feedback-fixes-3.md](./phase-3/progress/task-30-user-feedback-fixes-3.md).
 A same-day architecture pass then deepened two of that work's own

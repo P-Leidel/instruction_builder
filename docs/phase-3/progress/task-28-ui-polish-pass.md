@@ -34,8 +34,8 @@ and no way to reset it is a real gap for task 30 (Test Real Users).
   `replaceDocument(createEmptyDocument())` - the same session action
   Import uses - so starting over is recorded in undo history like any
   other document change, not a special-cased reset.
-- **Extracted `useConfirmDialogFocusTrap`**
-  ([lib/dialog-focus-trap.ts](../../../src/lib/dialog-focus-trap.ts)):
+- **Extracted `useConfirmDialogFocus`**
+  ([lib/dialog-focus.ts](../../../src/lib/dialog-focus.ts)):
   `ImportConfirmDialog`'s focus-on-open/Tab-trap/Escape-to-cancel logic
   was about to be copy-pasted a second time for the new dialog - pulled
   into one shared hook instead (both dialogs now use it), the same

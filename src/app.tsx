@@ -162,16 +162,16 @@ function useDocumentTitleSync(): void {
  * should stay dormant: a confirm dialog (Import/New document) is open, or
  * Preview mode is showing a read-only canvas. Both `window`-level listeners
  * used to ignore all three - the confirm dialogs' own focus handling
- * (`dialog-focus-trap.ts`) only handles Escape, so every other key
+ * (`dialog-focus.ts`) only handles Escape, so every other key
  * bubbled past their focused Cancel button up to these listeners, letting
  * e.g. Ctrl+Z undo the document sitting behind an open dialog, or Ctrl+V
  * paste into Preview's supposedly read-only canvas (2026-09-17 audit
  * remediation, finding 4). Checked here, at the source, rather than by
- * making the focus trap swallow every keystroke - that would be a second,
+ * making the dialog's focus handling swallow every keystroke - that would be a second,
  * redundant place enforcing the same rule.
  */
 function keyboardShortcutsSuspended(): boolean {
-  return pendingImport.value !== null || confirmingNewDocument.value || previewMode.value;
+  return confirmDialogOpen() || previewMode.value;
 }
 
 /**
@@ -187,11 +187,17 @@ function keyboardShortcutsSuspended(): boolean {
  * unreachable. Two names for two genuinely different questions, rather
  * than one predicate quietly answering both.
  *
- * Called from `App`'s render (not from an event handler like
- * `keyboardShortcutsSuspended`), so reading these two signals subscribes
+ * The two still share the dialog half rather than spelling it out twice:
+ * `keyboardShortcutsSuspended` is this predicate plus `previewMode`, so a
+ * third dialog is one edit here instead of two edits that can disagree.
+ *
+ * Called from `App`'s render, so reading these two signals subscribes
  * `App` to them - which is the point: `App` otherwise never re-renders
  * when a dialog opens, and the `inert` attributes below would never
  * update. It costs one extra `App` render per dialog open and per close.
+ * The call from `keyboardShortcutsSuspended` adds no subscription: that
+ * one runs inside a `window` event handler, where there is no reactive
+ * context for a signal read to subscribe to.
  */
 function confirmDialogOpen(): boolean {
   return pendingImport.value !== null || confirmingNewDocument.value;

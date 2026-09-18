@@ -11,8 +11,9 @@
  * the arithmetic was previously unreachable from any test this repo can
  * run - `vitest.config.ts` is `environment: "node"` and matches only
  * `*.test.ts`, so nothing under `src/components/` is testable at all
- * without a jsdom environment and the Vite major upgrade that
- * `docs/known-issues.md` deliberately defers. Placement is the part of that
+ * without adding a DOM test environment, which this project has weighed
+ * and declined on its own merits (see
+ * `docs/adr/0003-no-component-test-environment.md`). Placement is the part of that
  * panel most likely to be wrong on a device nobody here owns, so it is the
  * part worth being able to test on a machine with no browser. Please don't
  * inline it back for want of a second caller.

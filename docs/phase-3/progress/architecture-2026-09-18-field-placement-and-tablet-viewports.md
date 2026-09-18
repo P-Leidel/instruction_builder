@@ -77,9 +77,11 @@ The baseline came back clean at both viewports, so nothing needed logging.
   behaviour, not a pass-through), and `vitest.config.ts` is
   `environment: "node"` with `include: ["src/**/*.test.ts"]`, so nothing
   under `src/components/` is reachable from any runnable test. Extracting
-  the maths is the only way to test it without the deferred Vite major
-  upgrade that a DOM environment would force - which is itself one of the
-  dev-only advisories tracked in known-issues.md.
+  the maths is the only way to test it without adding a DOM test
+  environment - which this project has since weighed and declined in
+  [ADR 0003](../../adr/0003-no-component-test-environment.md). (This bullet
+  first said such an environment would force the deferred Vite major
+  upgrade; that was false, and is corrected in the ADR.)
 - **The report's horizontal framing was wrong, and was corrected.**
   `max-width: calc(100vw - 2rem)` already capped the panel, and the
   existing flip's `right: 0` is anchor-relative, so a right-flipped panel

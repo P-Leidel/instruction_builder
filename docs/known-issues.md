@@ -423,8 +423,13 @@ task, which shipped keyboard alternatives for step reordering and token
   written specifically so a future architecture review stops re-suggesting
   it, since two successive reviews already have - and
   [0003](./adr/0003-no-component-test-environment.md) parks component-level
-  unit testing (the report's finding 10), naming the coupling to the
-  deferred Vite major upgrade above that nothing else in `docs/` recorded.
+  unit testing (the report's finding 10) on the grounds that a simulated
+  DOM is worst at exactly this app's hardest behaviour. Note that it does
+  **not** rest on the Vite major upgrade above: an earlier draft claimed a
+  DOM environment would force that upgrade, which is false - `vitest@2.1.9`
+  and its already-accepted `@vitest/mocker` advisory are installed today,
+  so adding `jsdom` changes this project's exposure not at all. The ADR
+  records and corrects that error in place.
 - **A correction to the report itself, recorded here because it exists
   nowhere else (2026-09-18).** Finding 5 ("the PDF export chunk ships
   ~230 kB of libraries the app never runs") **overstates the cost**, and
@@ -444,13 +449,118 @@ task, which shipped keyboard alternatives for step reordering and token
   report missed: aliasing `dompurify` to a stub module means that if jsPDF
   ever reaches for it on a path this app *does* use, it fails at runtime
   rather than at build time.
-- **Why it's not fixed now:** deliberately scoped out of the change that
-  fixed the three findings above, to keep a placement fix from turning
-  into a documentation pass. Deciding what is truly deferred versus merely
+- **Why it's not fixed now:** deliberately scoped out of the
+  field-placement change that fixed the first batch of those findings, to
+  keep a placement fix from turning into a documentation pass. Deciding what is truly deferred versus merely
   unscheduled is its own judgement call, and better made once the tablet
   testing currently underway has had its say on several of the same items
   (the mobile layout order and the small-tokens-at-390px items in this
   file are both in that group).
 - **Revisit when:** task 30's tablet round is finished and this change has
   been exercised on real devices.
+- **First noted:** 2026-09-18.
+
+## `inert` is the only thing containing focus in a confirm dialog, and it is not feature-detected
+
+- **What it is:** since 2026-09-18 the confirm dialogs' modality rests
+  entirely on one mechanism. `app.tsx` marks the background `inert` while a
+  dialog is open, and the hand-written Tab cycle that used to keep focus
+  between Cancel and Confirm was deleted in the same change (see
+  [`lib/dialog-focus.ts`](../src/lib/dialog-focus.ts) for the argument: two
+  mechanisms enforcing one rule is the shape that was just removed from
+  `FieldPopover`, and the cycle only ever knew about two buttons). There is
+  no fallback and no feature detection, so on a browser without `inert`
+  `aria-modal="true"` becomes a promise nothing keeps.
+- **Why it's not fixed:** the practical risk is low. `inert` is Baseline
+  (Chrome 102 and Safari 15.5, both May 2022; Firefox 112, April 2023), and
+  this app targets current European desktop and tablet browsers. Re-checking
+  that support claim is part of revisiting this, not something to take from
+  this entry on trust.
+- **The part that is actually worth acting on is documentation, not code.**
+  The 2026-09-18 review's finding 7 asked to add `aria-modal="true"` *and*
+  set `inert` on the app root; it did not ask for the Tab trap to be
+  removed, and its finding 8 records the opposite preference for the
+  analogous `FieldPopover` case ("modal is the honest answer: set
+  `aria-modal="true"` and keep the trap"). Deleting the trap was a
+  deliberate, well-argued deviation from the written solution - but it is
+  argued only in commit `b40d2d6`'s message, which is the one place a future
+  reader will not look. This is exactly what [`adr/`](./adr/README.md) was
+  created for in the same batch of work.
+- **Revisit when:** the deviation is either recorded as ADR 0004 or
+  reversed. That decision was deliberately left un-made rather than rushed
+  in before the branch was pushed, because the commit message already argues
+  one side of it well and it deserves to be argued against properly.
+- **First noted:** 2026-09-18.
+
+## `inert` is applied to four enumerated siblings rather than to one background subtree
+
+- **What it is:** [`app.tsx`](../src/app.tsx) sets `inert={backgroundInert}`
+  on four elements individually - `.app__toolbar`,
+  `.app__persistence-warning`, `.app__toast` and `<main>`. `CONTEXT.md`'s
+  "Confirm dialog" section promises "Everything outside it is `inert`"; the
+  code implements "these four are". A fifth top-level sibling added later
+  becomes a silent hole in the `aria-modal="true"` guarantee, and nothing
+  fails to make that visible.
+- **Why the driver only partly covers it:** the dedicated assertion
+  (`backgroundInertWhileDialogOpen`) queries that same hard-coded list of
+  four selectors, so it cannot notice a fifth. The Tab walk beside it would
+  catch a fifth sibling only if it contains a focusable element reached
+  within the six Tab presses - and not at all if the sibling is
+  unfocusable-but-readable, which is precisely the case `aria-modal` exists
+  to cover.
+- **Why it's not fixed:** the structural fix is to wrap the non-dialog
+  subtree and inert it in one place - the same "enforce it where it cannot
+  be forgotten" move [ADR 0001](./adr/0001-keep-collapsedfield-dual-mode.md)
+  chose for `CollapsedField`. That changes `app.tsx`'s top-level DOM
+  structure and therefore the CSS that depends on it, which is more than a
+  pre-push tidy-up: it deserves its own pass rather than being folded into a
+  batch of mechanical fixes.
+- **Revisit when:** a fifth top-level sibling is added for any reason, or
+  the next architecture pass touches `app.tsx`'s layout - whichever comes
+  first. Adding a sibling without inerting it is the failure mode.
+- **First noted:** 2026-09-18.
+
+## Confirm-dialog focus return has one path the driver never asserts
+
+- **What it is:** [`lib/dialog-focus.ts`](../src/lib/dialog-focus.ts)
+  records the opener by listening for `focusin` on the whole document while
+  the dialog is closed, because marking the toolbar `inert` blurs the real
+  opener before any effect can read `document.activeElement`. Both confirm
+  dialogs are always mounted ([`app.tsx`](../src/app.tsx)), so each
+  instance runs its own document-wide listener and both log every focus move
+  in the page for the lifetime of the app - two listeners recording one
+  global fact.
+- **The residual risk is narrower than it first looks.** Import's only entry
+  point is clicking the Import button, which re-records the correct opener,
+  so the dialogs do not steal each other's. What is genuinely unasserted is
+  that Chromium may focus the `visually-hidden` file input after the native
+  file picker closes; that would make the input the last-focused element,
+  and closing the dialog would then return focus to something invisible.
+- **Why it's not fixed:** it is a plausible, unconfirmed browser behaviour
+  rather than an observed bug, and the cheap first step is evidence, not a
+  code change. The driver asserts
+  `CONFIRM_DIALOG_RETURNS_FOCUS_TO_OPENER` for the New-document case only.
+- **Revisit when:** the driver grows the same assertion for the Import path;
+  if it turns out to be real, collapsing the two always-mounted listeners
+  into one shared opener record is the natural fix for both halves at once.
+- **First noted:** 2026-09-18.
+
+## ADR 0002 does not meet the bar `docs/adr/README.md` sets for an ADR
+
+- **What it is:** [`adr/README.md`](./adr/README.md) gates what earns an ADR
+  on decisions that are hard to reverse, saying that otherwise a code
+  comment is enough.
+  [ADR 0002](./adr/0002-no-shared-no-op-guard.md) declines a one-line shared
+  no-op guard - trivially reversible - and its reasoning now *also* lives as
+  a comment on `setSteps`, which is the alternative the gate points to.
+- **Why it's not fixed:** the ADR still does real work: two successive
+  architecture reviews have suggested that consolidation, and 0002 exists
+  specifically so a third stops re-suggesting it. "Costly to re-litigate
+  repeatedly" is a defensible reading of the gate, it just is not what the
+  gate says. The honest options are to widen the gate's wording or to drop
+  0002 back to a comment, and picking between them is a judgement about what
+  `adr/` is for - worth making deliberately, one week into the directory's
+  existence rather than on day one.
+- **Revisit when:** the next ADR is written, since that is when the gate
+  gets read and applied again.
 - **First noted:** 2026-09-18.

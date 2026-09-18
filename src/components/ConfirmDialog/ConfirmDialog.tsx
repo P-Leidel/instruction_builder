@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useConfirmDialogFocusTrap } from "../../lib/dialog-focus-trap";
+import { useConfirmDialogFocus } from "../../lib/dialog-focus";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -15,7 +15,7 @@ interface ConfirmDialogProps {
 /**
  * The overlay/heading/body/actions markup `ImportConfirmDialog` and
  * `NewDocumentConfirmDialog` used to each write out separately - only
- * `useConfirmDialogFocusTrap`'s focus/Escape behavior was shared
+ * `useConfirmDialogFocus`'s focus/Escape behavior was shared
  * before this (2026-09-17 remediation, item 15). Each caller still owns its
  * own confirm/cancel logic (which session action to call, which toast to
  * show) - this only owns the shell and the focus wiring.
@@ -26,11 +26,11 @@ interface ConfirmDialogProps {
  * walk the document behind them. The declaration is only honest because
  * `app.tsx` marks everything outside this dialog `inert` while one is
  * open - see CONTEXT.md's "Confirm dialog" for what modality commits this
- * app to, and `dialog-focus-trap.ts` for why the hand-rolled Tab cycle
+ * app to, and `dialog-focus.ts` for why the hand-rolled Tab cycle
  * that used to stand in for it is gone.
  */
 export function ConfirmDialog({ open, idPrefix, heading, body, confirmLabel, onCancel, onConfirm }: ConfirmDialogProps) {
-  const { cancelButtonProps } = useConfirmDialogFocusTrap(open, onCancel);
+  const { cancelButtonProps } = useConfirmDialogFocus(open, onCancel);
 
   if (!open) return null;
 

@@ -32,7 +32,7 @@
   because two mechanisms enforcing one rule is the exact shape that had
   just been removed from `FieldPopover`. Focus is now returned to whatever
   opened the dialog. See CONTEXT.md's "Confirm dialog" for the term this
-  established, and `dialog-focus-trap.ts` for the two non-obvious
+  established, and `dialog-focus.ts` for the two non-obvious
   consequences below.
 - **Two things the fix had to get right that weren't obvious:**
   - **Escape had to move to a `window` listener.** With the Tab cycle gone,
@@ -49,7 +49,7 @@
     runs, `activeElement` is already `<body>` and the thing to return focus
     to has been forgotten. The hook now records the last element focused
     *while the dialog was closed* instead.
-- **Verified by:** the driver's `IMPORT_DIALOG_TRAPS_FOCUS_AND_ESCAPE_CLOSES`
+- **Verified by:** the driver's `IMPORT_DIALOG_CONTAINS_FOCUS_AND_ESCAPE_CLOSES`
   check, rewritten from "Tab cycles between exactly these two buttons" to
   the honest property - everything behind the dialog reports `inert`, six
   consecutive Tab presses never land on an element outside the dialog, and

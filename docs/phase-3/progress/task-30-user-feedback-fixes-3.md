@@ -60,7 +60,7 @@ decided during grilling:
   original ask behind `TimeAndQuantityRow` wasn't a side effect of the old
   bug, it was a stated requirement.
 - **Full keyboard trap inside whichever popover is open**, extending
-  `useConfirmDialogFocusTrap`'s pattern (`lib/dialog-focus-trap.ts`) to
+  `useConfirmDialogFocus`'s pattern (`lib/dialog-focus.ts`) to
   more than its hard-coded two buttons - these forms have 4-6 focusable
   controls whose enabled state can also change (Quantity's Save disables
   while its amount is invalid), so the trap re-queries focusable

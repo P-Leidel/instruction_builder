@@ -166,7 +166,7 @@ target, firing even while typing in a field; `useTokenClipboardKeyboardShortcuts
 `isTextEntryTarget` (lines 159-165) and skips text fields entirely. Neither
 checks `pendingImport`, `confirmingNewDocument`, or `previewMode`. The
 confirm-dialog focus trap
-([`dialog-focus-trap.ts:36-53`](../../../src/lib/dialog-focus-trap.ts#L36-L53))
+([`dialog-focus.ts:36-53`](../../../src/lib/dialog-focus.ts#L36-L53))
 only handles `Escape`/`Tab`; every other key bubbles to `window` from the
 focused Cancel button (not a text-entry target), so with Import or
 New-document's confirm dialog open, Ctrl+Z undoes and Ctrl+V pastes into the
@@ -274,7 +274,7 @@ concentrated in three.
 | --- | --- |
 | `app.tsx:274` reads `document.value.meta.title` directly in render, subscribing the whole `App` tree to every document change; contradicts its own comment at `app.tsx:119-120` ("App doesn't otherwise re-render..."); no `memo()` anywhere in the tree | **Confirmed** — a real, additional instance of the already-tracked [full-canvas-re-render known issue](../../known-issues.md#full-canvas-re-render-on-any-edit-anywhere-in-the-document), at the `App` level rather than just `InstructionCanvas` |
 | Each action "spelled four times" | **Off by one** — it's three (Core impl, `sessionActions` entry, `bindActionsToSession` export), not four. `past`/`future`/`AttachmentKind` confirmed to have zero importers outside `document.ts` |
-| `ImportConfirmDialog`/`NewDocumentConfirmDialog` duplicate the same dialog shell | **Confirmed** — only the focus-trap *behavior* is actually shared (`useConfirmDialogFocusTrap`); the markup shell was never extracted |
+| `ImportConfirmDialog`/`NewDocumentConfirmDialog` duplicate the same dialog shell | **Confirmed** — only the focus-trap *behavior* is actually shared (`useConfirmDialogFocus`); the markup shell was never extracted |
 | `CollapsedField`'s `editing` prop duplicates `FieldPopover`'s outside-click close | **Not confirmed / reject** — `FieldPopover`'s outside-close only fires on `pointerdown`; a keyboard-only Tab+Enter switch between two fields never triggers it, so `TimeAndQuantityRow`'s explicit `openField` coordination is load-bearing, not redundant |
 | `DurationForm`'s Save-enabled check diverges from `buildDuration`'s validation | **Confirmed** — `totalIsZero` only disables Save when every field is exactly 0, while `buildDuration` rejects any total under 1 second; a fractional sub-1s entry leaves Save clickable but silently no-ops |
 | 6 stale comments naming old callers | **2 of 6 confirmed stale**: `model/validate.ts:12` (references a deleted `StepList` component that no longer exists anywhere in `src`) and `global.css:188` (still describes Export PDF as `window.print()`, superseded by the 2026-09-17 jsPDF/svg2pdf.js rewrite). The other four (`pointer-drag.ts:4,102,185`, `state/drag.ts:19`, `canvas-layout.ts:11-13`) are **not** stale — still accurate |
@@ -405,7 +405,7 @@ only now true for export).
     otherwise pick one.
 15. Extract the `ImportConfirmDialog`/`NewDocumentConfirmDialog` shared shell
     into one parameterized component (title/body/actions), keeping
-    `useConfirmDialogFocusTrap` as-is.
+    `useConfirmDialogFocus` as-is.
 16. Reconcile `DurationForm`'s Save-enabled check with `buildDuration`'s real
     validation (accept fractional-second edge case or reject it consistently
     in both places).

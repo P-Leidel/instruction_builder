@@ -57,9 +57,9 @@ app's existing task-20 test-scope decision - extraction bought locality
 not a pile of new unit tests, and that's stated plainly rather than
 oversold.
 
-## Fixed: `useConfirmDialogFocusTrap`'s unenforced two-button contract
+## Fixed: `useConfirmDialogFocus`'s unenforced two-button contract
 
-The hook ([lib/dialog-focus-trap.ts](../../../src/lib/dialog-focus-trap.ts))
+The hook ([lib/dialog-focus.ts](../../../src/lib/dialog-focus.ts))
 used to return raw refs (`cancelRef`, `confirmRef`) and a bare
 `handleKeyDown` - a caller could forget `onKeyDown` on the dialog wrapper,
 or attach a ref to the wrong element, and the hook would silently no-op

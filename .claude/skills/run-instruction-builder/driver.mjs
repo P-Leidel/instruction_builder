@@ -1148,8 +1148,10 @@ const validImportDoc = {
 // Task 22 (Add Accessibility Features): an `alertdialog` needs to actually
 // behave like a modal for keyboard/screen-reader users, not just carry the
 // role - focus should land on Cancel (the safer default for a "replace
-// everything" action) the instant it opens, Tab should stay trapped
-// between its two buttons rather than escaping to whatever's underneath,
+// everything" action) the instant it opens, Tab should never reach
+// anything behind the dialog (since 2026-09-18 that is `inert`'s doing,
+// not a hand-written cycle's, so Tab may legitimately rest on `<body>`
+// between passes - what must never appear is a stop outside the dialog),
 // and Escape should cancel exactly like clicking Cancel does. Exercised
 // with a throwaway import first, so this cycle leaves the document
 // untouched either way - the real Replace flow right after is unaffected.
@@ -1201,11 +1203,11 @@ const tabReachedBothDialogButtons =
 
 // 2026-09-17 audit remediation, finding 4: `useHistoryKeyboardShortcuts`
 // used to have no idea this dialog (or any confirm dialog) was open - every
-// key besides Escape/Tab bubbled past its own focus trap
-// (`dialog-focus-trap.ts`, which only handles those two) straight to
+// key besides Escape bubbled past the dialog's own focus handling
+// (`dialog-focus.ts`, which only handles Escape) straight to
 // app.tsx's window-level listener, so Ctrl+Z could undo the document
 // sitting behind it. Probed here, in the same open-dialog window the
-// focus-trap check above already established, before Escape below closes
+// focus check above already established, before Escape below closes
 // the dialog.
 await page.keyboard.press("Control+z");
 const undoSuspendedBehindImportDialog =
@@ -1215,7 +1217,7 @@ await page.keyboard.press("Escape");
 const escapeClosedDialogWithNoChange =
   (await page.locator(".confirm-dialog").count()) === 0 &&
   JSON.stringify(await stepTitles.allTextContents()) === JSON.stringify(summariesBeforeImportTest);
-const importDialogTrapsFocusAndEscapeCloses =
+const importDialogContainsFocusAndEscapeCloses =
   dialogFocusedCancelOnOpen &&
   backgroundInertWhileDialogOpen &&
   tabNeverLeftDialog &&
@@ -1560,7 +1562,7 @@ console.log("AUTOSAVE_NOT_CLOBBERED_BY_TAB_HIDE=" + autosaveNotClobberedByTabHid
 console.log("STEP_REORDERED_VIA_KEYBOARD=" + stepReorderedViaKeyboard);
 console.log("STEP_MOVE_BUTTONS_DISABLED_AT_BOUNDARIES=" + stepMoveButtonsDisabledAtBoundaries);
 console.log("TOKEN_SELECTED_VIA_KEYBOARD=" + tokenSelectedViaKeyboard);
-console.log("IMPORT_DIALOG_TRAPS_FOCUS_AND_ESCAPE_CLOSES=" + importDialogTrapsFocusAndEscapeCloses);
+console.log("IMPORT_DIALOG_CONTAINS_FOCUS_AND_ESCAPE_CLOSES=" + importDialogContainsFocusAndEscapeCloses);
 console.log("IMPORT_DIALOG_TAB_STOPS=" + tabStops.join(" -> "));
 console.log("CONFIRM_DIALOG_RETURNS_FOCUS_TO_OPENER=" + focusReturnedToOpener);
 console.log("ACCESSIBILITY_VIOLATIONS_MAIN_EDITOR=" + accessibilityViolationsMainEditor);

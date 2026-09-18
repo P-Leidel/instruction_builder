@@ -29,7 +29,7 @@ import { useEffect, useRef } from "preact/hooks";
  * there is nowhere else for it to go). A `keydown` handler on the dialog
  * element only ever sees keys that bubble *through* the dialog, so Escape
  * silently stopped closing the dialog the moment focus sat on `<body>` -
- * caught by the driver's own `IMPORT_DIALOG_TRAPS_FOCUS_AND_ESCAPE_CLOSES`
+ * caught by the driver's own `IMPORT_DIALOG_CONTAINS_FOCUS_AND_ESCAPE_CLOSES`
  * check when it started tabbing past two stops. Listening on `window`
  * matches what the native `<dialog>` element does, and is correct whether
  * or not focus happens to be inside.
@@ -60,7 +60,7 @@ import { useEffect, useRef } from "preact/hooks";
  * `confirmButtonProps` held the Tab cycle's second ref, and `dialogProps`
  * held the `onKeyDown` that Escape no longer travels through.
  */
-export function useConfirmDialogFocusTrap(open: boolean, onCancel: () => void) {
+export function useConfirmDialogFocus(open: boolean, onCancel: () => void) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const lastFocusedWhileClosed = useRef<HTMLElement | null>(null);
   const focusOnClose = useRef<HTMLElement | null>(null);

@@ -56,13 +56,13 @@ was scoped with the user first (a "New document" action, a plainer toolbar
 tagline, and a general audit-first visual/responsive sweep - explicitly
 *not* the two accessibility gaps already tracked in known-issues.md, kept
 deferred) and shipped the same way, extracting a shared
-`useConfirmDialogFocusTrap` hook so the new confirm dialog and the
+`useConfirmDialogFocus` hook so the new confirm dialog and the
 existing Import one stop duplicating the same keyboard-focus logic (see
 [task-28-ui-polish-pass.md](./task-28-ui-polish-pass.md)). A same-day
 `/mattpocock-skills:improve-codebase-architecture` review then surfaced
 five more candidates; three were fixed (extracting `app.tsx`'s export/
 import orchestration to `lib/document-actions.ts`, tightening
-`useConfirmDialogFocusTrap`'s contract, and sharpening a known-issues.md
+`useConfirmDialogFocus`'s contract, and sharpening a known-issues.md
 entry), one was deliberately deferred to Phase 4 task 32 with a concrete
 trigger, and fixing the app.tsx extraction incidentally caught and fixed
 a flaky Playwright driver check (see
@@ -165,7 +165,7 @@ true of Step details' own Token time, not just the paired row). Both were
 verified against the running dev server before being grilled into a fix:
 Token time (everywhere it's used) and Quantity now open their edit forms
 in a new `FieldPopover` - a small floating panel anchored below their
-trigger button, extending `useConfirmDialogFocusTrap`'s keyboard pattern
+trigger button, extending `useConfirmDialogFocus`'s keyboard pattern
 to more than two controls - instead of expanding in place, which removes
 the form from document flow entirely so a sibling field can no longer be
 affected by it, and gives it enough width to lay out on one line. See
@@ -289,7 +289,7 @@ One file per task (or per notable pass), in task-number order:
 | 26 | Expand Sample/Starter Tokens | [tasks-25-26-icon-library.md](./tasks-25-26-icon-library.md) |
 | 27 | Add Document Title UI | [task-27-document-title-ui.md](./task-27-document-title-ui.md) |
 | 28 | UI Polish Pass | [task-28-ui-polish-pass.md](./task-28-ui-polish-pass.md) |
-| — | Architecture: 2026-09-14 review remediation (`lib/document-actions.ts` extraction, `useConfirmDialogFocusTrap` prop-bag contract, a `known-issues.md` sharpening, and a flaky driver check fixed) | [architecture-2026-09-14-review-remediation.md](./architecture-2026-09-14-review-remediation.md) |
+| — | Architecture: 2026-09-14 review remediation (`lib/document-actions.ts` extraction, `useConfirmDialogFocus` prop-bag contract, a `known-issues.md` sharpening, and a flaky driver check fixed) | [architecture-2026-09-14-review-remediation.md](./architecture-2026-09-14-review-remediation.md) |
 | — | Pre-launch file/docs audit and UI polish follow-up (stale README, vestigial `tests/`, grid layout fix, toolbar grouping, human-readable durations, deferred incomplete-step badge, document-title contrast) | [pre-launch-file-and-ui-audit.md](./pre-launch-file-and-ui-audit.md) |
 | 29 | Publish MVP | [task-29-publish-mvp.md](./task-29-publish-mvp.md) |
 | — | Architecture: 2026-09-15 canvas deepening (`computeCanvasLayout` becomes `canvas-layout.ts`'s whole interface; `insertionMarkerPosition` kept as a separate seam) | [architecture-2026-09-15-canvas-deepening.md](./architecture-2026-09-15-canvas-deepening.md) |

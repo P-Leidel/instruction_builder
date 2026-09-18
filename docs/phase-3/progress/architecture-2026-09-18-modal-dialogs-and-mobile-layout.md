@@ -40,10 +40,13 @@ driver run rather than batching the verification at the end.
   convention the three guards serve, so the concept is visible without an
   abstraction existing to hold it.
   [0003](../../adr/0003-no-component-test-environment.md) parks
-  component-level unit testing and writes down the coupling nothing else
-  recorded - a DOM test environment forces the Vite major upgrade
-  `known-issues.md` defers, to gain a *simulated* DOM for the behaviour a
-  simulated DOM is worst at. All three landed in one commit because they
+  component-level unit testing, on the grounds that it buys a *simulated*
+  DOM for exactly the behaviour a simulated DOM is worst at. (As first
+  written it also claimed a DOM environment would force the Vite major
+  upgrade `known-issues.md` defers. That was false - the vulnerable
+  `@vitest/mocker` is already installed and already accepted - and was
+  corrected in the ADR before this branch was pushed.) All three landed in
+  one commit because they
   share an index that would otherwise have been rewritten three times.
 - **Every export stopped revoking its object URL in the click's own task**
   (finding 9). `downloadBlob` clicked a detached `<a download>` and
@@ -160,7 +163,7 @@ the mechanism being replaced.
 - Three new checks: `DOWNLOAD_DEFERS_OBJECT_URL_REVOKE`,
   `CONFIRM_DIALOG_RETURNS_FOCUS_TO_OPENER`, and
   `MOBILE_LAYOUT_COLLAPSES_EMPTY_TOKEN_DETAILS`, plus a rewritten
-  `IMPORT_DIALOG_TRAPS_FOCUS_AND_ESCAPE_CLOSES` and an
+  `IMPORT_DIALOG_CONTAINS_FOCUS_AND_ESCAPE_CLOSES` and an
   `IMPORT_DIALOG_TAB_STOPS` trace that prints where focus actually went.
 - The download check is the unusual one, because **Chromium cannot
   reproduce the bug it guards**. It patches
