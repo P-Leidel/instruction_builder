@@ -664,6 +664,60 @@ const mobileOverflow = await page.evaluate(
 );
 const noHorizontalOverflowAtMobileWidth = mobileOverflow === 0;
 
+// Tablet viewports - the two edges of the 800px layout switch (global.css's
+// only non-print media query) and the whole band this driver never used to
+// visit: it ran at 1400x900 and 390x844 and nothing in between, so an iPad
+// in either orientation was covered by neither. 768px is the widest a
+// single-column layout ever gets (iPad portrait); 1024px is the narrowest
+// the three-column grid ever gets (iPad landscape). Both are where a
+// layout breaks if it is going to, and both are what task 30's tablet
+// testers are about to pick up (see docs/manual-testing-checklist.md).
+//
+// Added as a *baseline* pass, deliberately ahead of the field-placement
+// work in the same review, so that anything already broken at these widths
+// is distinguishable from anything that change introduces - see
+// docs/phase-3/audits/2026-09-18-architecture-review.html.
+//
+// Scope matches the 390px mobile pass above rather than replaying all of
+// this script's checks at three widths: screenshot, axe, horizontal
+// overflow, and which layout is actually active. The viewport is restored
+// to 390x844 afterwards, so everything downstream of here sees exactly
+// what it saw before this block existed.
+async function measureViewport(label, width, height, screenshotName) {
+  await page.setViewportSize({ width, height });
+  await page.screenshot({ path: path.join(OUT, screenshotName), fullPage: true });
+  const violations = await countAxeViolations(label);
+  const metrics = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    mainDisplay: getComputedStyle(document.querySelector(".app__main")).display,
+  }));
+  return { violations, ...metrics };
+}
+
+const tabletPortrait = await measureViewport("tablet portrait 768px", 768, 1024, "04b-tablet-portrait.png");
+const tabletLandscape = await measureViewport("tablet landscape 1024px", 1024, 768, "04c-tablet-landscape.png");
+await page.setViewportSize({ width: 390, height: 844 });
+
+// `<= 0`, not the `=== 0` the mobile check above uses. Past the 800px
+// breakpoint `html { scrollbar-gutter: stable }` reserves the scrollbar's
+// 15px unconditionally (global.css - scoped to that breakpoint on purpose,
+// so mobile measurements aren't distorted by a gutter that fixes nothing
+// there), which makes scrollWidth 15px *smaller* than clientWidth rather
+// than equal to it. An equality-to-zero test is therefore correct at 390px
+// and wrong at 1024px, where it reports the reserved gutter as a
+// horizontal-overflow failure. Only a positive difference is real overflow.
+const noHorizontalOverflowAtTabletPortrait = tabletPortrait.overflow <= 0;
+const noHorizontalOverflowAtTabletLandscape = tabletLandscape.overflow <= 0;
+// 768px sits below the 800px breakpoint and 1024px above it, so these two
+// must disagree: `.app__main` is `display: flex` in the single-column
+// layout and `display: grid` in the three-column one. If they ever match,
+// the breakpoint has moved or stopped applying, and both tablet checks
+// above are measuring the same layout twice without saying so.
+const layoutSwitchesAcrossTabletOrientations =
+  tabletPortrait.mainDisplay === "flex" && tabletLandscape.mainDisplay === "grid";
+const accessibilityViolationsTabletPortrait = tabletPortrait.violations;
+const accessibilityViolationsTabletLandscape = tabletLandscape.violations;
+
 // Task 18 (JSON Export): add a temporary empty step so there's something for
 // task 14's validation to flag, then export and confirm the downloaded file
 // is the current document plus a non-blocking warning toast (the export
@@ -1263,6 +1317,9 @@ console.log("FORWARD_STEP_DRAG_LANDS_AT_DROP_POINT=" + forwardStepDragLandsAtDro
 console.log("PREVIEW_HIDES_EDITING_CONTROLS=" + previewHidesEditingControls);
 console.log("PERSISTED_ACROSS_RELOAD=" + persistedAcrossReload);
 console.log("NO_HORIZONTAL_OVERFLOW_AT_MOBILE_WIDTH=" + noHorizontalOverflowAtMobileWidth);
+console.log("NO_HORIZONTAL_OVERFLOW_AT_TABLET_PORTRAIT=" + noHorizontalOverflowAtTabletPortrait);
+console.log("NO_HORIZONTAL_OVERFLOW_AT_TABLET_LANDSCAPE=" + noHorizontalOverflowAtTabletLandscape);
+console.log("LAYOUT_SWITCHES_ACROSS_TABLET_ORIENTATIONS=" + layoutSwitchesAcrossTabletOrientations);
 console.log("CANVAS_KEYBOARD_FOCUSABLE=" + canvasControlFocused);
 console.log("JSON_EXPORT_DOWNLOADS_CURRENT_DOCUMENT=" + jsonExportDownloadsCurrentDocument);
 console.log("JSON_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + exportWarnedAboutIncompleteSteps);
@@ -1293,5 +1350,7 @@ console.log("IMPORT_DIALOG_TRAPS_FOCUS_AND_ESCAPE_CLOSES=" + importDialogTrapsFo
 console.log("ACCESSIBILITY_VIOLATIONS_MAIN_EDITOR=" + accessibilityViolationsMainEditor);
 console.log("ACCESSIBILITY_VIOLATIONS_IMPORT_DIALOG=" + accessibilityViolationsImportDialog);
 console.log("ACCESSIBILITY_VIOLATIONS_MOBILE=" + accessibilityViolationsMobile);
+console.log("ACCESSIBILITY_VIOLATIONS_TABLET_PORTRAIT=" + accessibilityViolationsTabletPortrait);
+console.log("ACCESSIBILITY_VIOLATIONS_TABLET_LANDSCAPE=" + accessibilityViolationsTabletLandscape);
 console.log("CONSOLE_ERRORS_COUNT=" + errors.length);
 for (const e of errors) console.log(e);
