@@ -264,32 +264,62 @@ task, which shipped keyboard alternatives for step reordering and token
   rather than its own isolated cost.
 - **First noted:** 2026-09-14.
 
-## Mobile layout order buries the canvas below an empty Token details placeholder
+## Mobile layout order buries the canvas below an empty Token details placeholder - Resolved 2026-09-18
 
-- **What it is:** at the 390px mobile stacking order, `Token details` (an
+- **What it was:** at the 390px mobile stacking order, `Token details` (an
   empty "Select a step, then click one of its tokens..." placeholder until
-  a token is actually picked) and the entire instruction canvas sit between
-  `Step details` and `Add to step`. A first-time mobile user scrolls past a
+  a token is actually picked) and the entire instruction canvas sat between
+  `Step details` and `Add to step`. A first-time mobile user scrolled past a
   placeholder with nothing in it before reaching the canvas that actually
   shows what they've built - the one view that's the whole point of the
   app.
-- **Why it's not fixed now:** found during a 2026-09-14 pre-launch UI
-  review (see
+- **Why it stayed open as long as it did:** found during a 2026-09-14
+  pre-launch UI review (see
   [phase-3/progress/pre-launch-file-and-ui-audit.md](./phase-3/progress/pre-launch-file-and-ui-audit.md))
   alongside 6 other findings; the user asked for the smaller, purely
   visual/CSS items to ship immediately and this one - a mobile-only
-  reorder - to be tracked instead, since it touches more of the stacking
-  order than a small CSS tweak.
-- **Related:** the canvas's token icon/label chips are also fairly small
-  at 390px width - already flagged as a known area of active work in
-  `.claude/skills/run-instruction-builder/SKILL.md`'s own troubleshooting
-  table (`.instruction-canvas__svg`'s scale clamp). Worth revisiting
-  together, since both are about the mobile canvas experience.
-- **Revisit when:** task 31 (Refine UX) or a dedicated mobile-layout pass -
-  reordering `.app__main`'s mobile (< 800px) stacking so canvas follows
-  Steps, and collapsing `Token details` until a token is selected instead
-  of reserving its slot unconditionally.
+  reorder - to be tracked instead, since it looked like it touched more of
+  the stacking order than a small CSS tweak. The 2026-09-18 codebase
+  health review
+  ([phase-3/audits/2026-09-18-architecture-review.html](./phase-3/audits/2026-09-18-architecture-review.html))
+  raised it from that implied low priority to S3 on one argument: this is
+  the first thing every mobile tester meets, and mobile testing was about
+  to start - so it was worth doing *before* the tablet round rather than
+  after it, so the feedback would be about the real layout.
+- **How it was fixed:** no DOM reorder was needed after all, which is what
+  made it small. `TokenDetails`' empty branch now carries a
+  `token-details--empty` modifier, `display: none` by default and re-shown
+  inside `global.css`'s existing `@media (min-width: 800px)` block -
+  collapsing the placeholder already leaves the stacking order reading
+  Step details -> canvas -> Add to step. Deliberately **not** a third media
+  query: this stylesheet has exactly two (`print` and `min-width: 800px`),
+  and that discipline is what makes "which layout am I looking at?"
+  answerable. Covered by the driver's new
+  `MOBILE_LAYOUT_COLLAPSES_EMPTY_TOKEN_DETAILS` check, which asserts both
+  sides of the breakpoint (collapsed at 768px with the canvas reached
+  before "Add to step"; still shown at 1024px).
 - **First noted:** 2026-09-14.
+
+## Canvas token icons and labels are small at 390px
+
+- **What it is:** `.instruction-canvas__svg`'s `clamp(480px, 100%, 960px)`
+  minimum means the canvas card scrolls sideways on a phone by design
+  rather than shrinking to fit, so a token's icon and label are small at
+  390px. Flagged as a known area of active work in
+  `.claude/skills/run-instruction-builder/SKILL.md`'s own troubleshooting
+  table.
+- **Why it's not fixed:** split out of the mobile-layout entry above when
+  that one was resolved on 2026-09-18 - the two were tracked together
+  because both are about the mobile canvas experience, but only the
+  stacking-order half was cheap. Changing the clamp trades legibility
+  against how much of a step fits on one screen, which is a judgement
+  better made with real tester feedback than guessed at beforehand.
+- **Revisit when:** task 30's tablet/phone round reports back on it, or in
+  task 31 (Refine UX). Graded S4 by the 2026-09-18 codebase health review,
+  which recommended bundling it with the mobile layout reorder; that half
+  shipped without it for the reason above.
+- **First noted:** 2026-09-14 (as part of the entry above); tracked
+  separately from 2026-09-18.
 
 ## PDF pagination selector fix has no driver regression test yet - Resolved 2026-09-17 (same day, by removing the DOM read entirely)
 

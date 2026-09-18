@@ -736,10 +736,22 @@ async function measureViewport(label, width, height, screenshotName) {
   await page.setViewportSize({ width, height });
   await page.screenshot({ path: path.join(OUT, screenshotName), fullPage: true });
   const violations = await countAxeViolations(label);
-  const metrics = await page.evaluate(() => ({
-    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    mainDisplay: getComputedStyle(document.querySelector(".app__main")).display,
-  }));
+  const metrics = await page.evaluate(() => {
+    const placeholder = document.querySelector(".app__main .token-details--empty");
+    const canvas = document.querySelector(".app__main .instruction-canvas");
+    const picker = document.querySelector(".app__main .token-picker");
+    return {
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      mainDisplay: getComputedStyle(document.querySelector(".app__main")).display,
+      // "absent" would be a false pass for the check below - it means no
+      // token is selected *and* no placeholder rendered, i.e. the probe
+      // measured nothing at all.
+      emptyTokenDetails: placeholder ? getComputedStyle(placeholder).display : "absent",
+      canvasAbovePicker:
+        canvas !== null && picker !== null &&
+        canvas.getBoundingClientRect().top < picker.getBoundingClientRect().top,
+    };
+  });
   return { violations, ...metrics };
 }
 
@@ -783,6 +795,15 @@ async function popoverStaysInsideViewport(width) {
   return measured !== null && measured.noRoomBelowTrigger && measured.insideViewport;
 }
 
+// An empty "Token details" is only measurable while it is actually empty,
+// and a token is still selected from the checks further up - so drop back
+// to a step-only selection first. Clicking a step badge is what a user
+// does, and it clears the token selection the same way (`selectStepCore`);
+// `popoverStaysInsideViewport` below clicks this same badge anyway, so
+// nothing downstream of this block depends on the token selection
+// surviving it.
+await editableCanvas.locator(".instruction-canvas__badge").first().click();
+
 const tabletPortrait = await measureViewport("tablet portrait 768px", 768, 1024, "04b-tablet-portrait.png");
 const popoverInsideViewportTabletPortrait = await popoverStaysInsideViewport(768);
 const tabletLandscape = await measureViewport("tablet landscape 1024px", 1024, 768, "04c-tablet-landscape.png");
@@ -808,6 +829,21 @@ const layoutSwitchesAcrossTabletOrientations =
   tabletPortrait.mainDisplay === "flex" && tabletLandscape.mainDisplay === "grid";
 const accessibilityViolationsTabletPortrait = tabletPortrait.violations;
 const accessibilityViolationsTabletLandscape = tabletLandscape.violations;
+// The mobile stacking order used to bury the canvas below an empty Token
+// details placeholder (docs/known-issues.md, graded S3 by the 2026-09-18
+// health review and fixed the same day). The fix is one modifier class,
+// not a DOM reorder, so this asserts both halves of it against the two
+// sides of the same breakpoint: collapsed on the single-column layout,
+// still there on the three-column one - and, either way, the canvas
+// reached before "Add to step".
+// `canvasAbovePicker` is asserted for portrait only, and that is not an
+// oversight: above the breakpoint the canvas and "Add to step" are two
+// columns of one grid row, so neither is above the other and the question
+// doesn't apply. Stacking order is only a thing on the single-column side.
+const mobileLayoutCollapsesEmptyTokenDetails =
+  tabletPortrait.emptyTokenDetails === "none" &&
+  tabletPortrait.canvasAbovePicker &&
+  tabletLandscape.emptyTokenDetails === "block";
 
 // Task 18 (JSON Export): add a temporary empty step so there's something for
 // task 14's validation to flag, then export and confirm the downloaded file
@@ -1481,6 +1517,11 @@ console.log("NO_HORIZONTAL_OVERFLOW_AT_MOBILE_WIDTH=" + noHorizontalOverflowAtMo
 console.log("NO_HORIZONTAL_OVERFLOW_AT_TABLET_PORTRAIT=" + noHorizontalOverflowAtTabletPortrait);
 console.log("NO_HORIZONTAL_OVERFLOW_AT_TABLET_LANDSCAPE=" + noHorizontalOverflowAtTabletLandscape);
 console.log("LAYOUT_SWITCHES_ACROSS_TABLET_ORIENTATIONS=" + layoutSwitchesAcrossTabletOrientations);
+console.log(
+  "MOBILE_LAYOUT_COLLAPSES_EMPTY_TOKEN_DETAILS=" +
+    mobileLayoutCollapsesEmptyTokenDetails +
+    ` (portrait: ${tabletPortrait.emptyTokenDetails}, landscape: ${tabletLandscape.emptyTokenDetails})`,
+);
 console.log(
   "FIELD_POPOVER_STAYS_INSIDE_VIEWPORT=" +
     (popoverInsideViewportTabletPortrait && popoverInsideViewportTabletLandscape) +

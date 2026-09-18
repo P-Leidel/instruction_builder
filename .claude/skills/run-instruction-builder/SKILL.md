@@ -153,7 +153,13 @@ the only one that needs the steps under "Run (agent path)".
    portrait and `grid` at 1024px landscape, since the single 800px
    breakpoint puts a portrait tablet on the *mobile* layout), and checking
    the field popover flips above its trigger and stays inside the viewport
-   when opened with no room below. It restores 390x844 afterwards so
+   when opened with no room below. It also checks the mobile layout
+   collapses an *empty* "Token details" instead of leaving a placeholder
+   between Step details and the canvas (2026-09-18 - see
+   `docs/known-issues.md`), asserting both sides of the breakpoint: hidden
+   at 768px with the canvas reached before "Add to step", still shown at
+   1024px. That one needs no token selected, so the block clicks a step
+   badge first to drop back to a step-only selection. It restores 390x844 afterwards so
    nothing downstream sees a different app. Note the tablet overflow
    assertions use `<= 0`, not the mobile pass's `=== 0`: above 800px
    `html { scrollbar-gutter: stable }` reserves 15px unconditionally, so
@@ -274,6 +280,8 @@ the only one that needs the steps under "Run (agent path)".
    `NO_HORIZONTAL_OVERFLOW_AT_TABLET_PORTRAIT=...`,
    `NO_HORIZONTAL_OVERFLOW_AT_TABLET_LANDSCAPE=...`,
    `LAYOUT_SWITCHES_ACROSS_TABLET_ORIENTATIONS=...`,
+   `MOBILE_LAYOUT_COLLAPSES_EMPTY_TOKEN_DETAILS=...` (with the
+   per-orientation computed `display`),
    `FIELD_POPOVER_STAYS_INSIDE_VIEWPORT=...` (with the per-orientation
    results), `CANVAS_KEYBOARD_FOCUSABLE=...`,
    `COPY_PASTE_WORKED_END_TO_END=...`,
@@ -721,4 +729,5 @@ taken - watch the terminal output for the actual URL).
 |---|---|
 | `Error: Port 5173 is already in use` on dev server start | A server from an earlier run is still up. `curl -sf http://localhost:5173` to confirm it's this app, then just point the driver at it - no need to restart. |
 | `playwright install msedge` errors with "insufficient privileges" | Expected on this machine (see Gotchas). Use `npx playwright install chromium` instead; the driver launches `chromium`, not `msedge`. |
+| `MOBILE_LAYOUT_COLLAPSES_EMPTY_TOKEN_DETAILS` reports `none` at *both* viewports | A `min-width: 800px` rule for a component lost on source order. `global.css` puts its breakpoint block above the component rules, so a bare class selector there ties with the later mobile-first rule and loses; scope the desktop one (e.g. `.app__main .token-details--empty`). |
 | Screenshot shows the canvas tokens as tiny/illegible at mobile width | Known area of active work - the canvas SVG scales its whole viewBox to the container width. Check `src/styles/global.css`'s `.instruction-canvas__svg` rule for the current min/max clamp before assuming it's still broken. |

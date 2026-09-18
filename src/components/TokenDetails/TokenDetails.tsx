@@ -188,7 +188,14 @@ export function TokenDetails() {
 
   if (!step || !token) {
     return (
-      <div class="token-details">
+      // `--empty` so the stylesheet can collapse this whole panel on the
+      // mobile layout, where it otherwise sits between Step details and
+      // the canvas - a first-time phone user scrolled past a placeholder
+      // with nothing in it to reach the thing they are actually building
+      // (docs/known-issues.md, raised in the 2026-09-14 pre-launch UI
+      // review and graded S3 by the 2026-09-18 health review). Above
+      // 800px there is room for all three columns at once, so it stays.
+      <div class="token-details token-details--empty">
         <h2 class="token-details__heading">Token details</h2>
         <p class="token-details__empty">
           Select a step, then click one of its tokens to edit it here.

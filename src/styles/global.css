@@ -444,6 +444,23 @@ button {
        sizes to its own content only. */
     align-items: start;
   }
+
+  /* Re-shown above the breakpoint: with three side-by-side columns there
+     is nothing for an empty Token details to push out of the way, and the
+     placeholder's "select a step, then click one of its tokens" is the
+     only hint that panel exists at all. See `.token-details--empty`.
+
+     Scoped through `.app__main` for specificity, not for reach - it is the
+     only place that panel ever renders. This block sits *above* the
+     component rules in this file rather than below them (it is grouped
+     with the layout it belongs to, which is the more useful arrangement to
+     read), so a bare `.token-details--empty` here would tie on specificity
+     with the `display: none` further down and lose on source order - at
+     every width, silently. Caught by the driver reporting `none` on both
+     sides of the breakpoint. */
+  .app__main .token-details--empty {
+    display: block;
+  }
 }
 
 /* Task 8 (Live Preview): a single, centered, read-only canvas replaces the
@@ -871,6 +888,21 @@ button {
 }
 
 /* Token details */
+
+/* Mobile-first: the panel disappears entirely while it has nothing in it,
+   and the `min-width: 800px` block above turns it back on. Below that
+   breakpoint the three columns stack, so an empty "Token details" sits
+   between Step details and the canvas and a first-time phone user scrolls
+   past an empty placeholder to reach the thing they are building
+   (docs/known-issues.md). No DOM reorder is needed to fix that - once this
+   collapses, the stacking order already reads Step details -> canvas ->
+   Add to step. Done as a modifier on the panel rather than a third media
+   query on purpose: this stylesheet has exactly two (`print` and
+   `min-width: 800px`), and keeping it that way is what makes "which layout
+   am I looking at?" answerable. */
+.token-details--empty {
+  display: none;
+}
 
 .token-details__empty {
   color: var(--color-text-muted);

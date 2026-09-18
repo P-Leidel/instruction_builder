@@ -259,15 +259,12 @@ These are already logged and scheduled (see
 [known-issues.md](./known-issues.md)). Telling us **how much they bother
 you** is genuinely useful; telling us they exist is not.
 
-1. **Phone layout order.** The canvas sits below an empty "Token details"
-   area, so you scroll past a placeholder before reaching the thing you are
-   actually building.
-2. **Small tokens on a phone.** The icons and labels on the canvas are small
+1. **Small tokens on a phone.** The icons and labels on the canvas are small
    at phone width.
-3. **No keyboard way to move a token** between steps or within a step -
+2. **No keyboard way to move a token** between steps or within a step -
    dragging is the only way. (Steps themselves do have keyboard Move up and
    Move down buttons.)
-4. **A change made in the last fraction of a second before closing the tab**
+3. **A change made in the last fraction of a second before closing the tab**
    can be lost. Closing a tab a second or more after your last keystroke is
    safe.
 
@@ -280,4 +277,4 @@ you** is genuinely useful; telling us they exist is not.
 | Highest priority | Anything that loses or corrupts saved work |
 | Then | Anything unreachable by keyboard or touch |
 | Then | Layout and visual problems, with the screen width noted |
-| Not needed | The four known issues listed above |
+| Not needed | The three known issues listed above |
