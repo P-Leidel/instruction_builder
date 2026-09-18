@@ -380,13 +380,20 @@ task, which shipped keyboard alternatives for step reordering and token
   What it is / Why it's not fixed / Revisit when shape as everything else
   here, and drop the ones that turn out to be neither deferred nor real.
   Two documentation corrections the report identified belong in the same
-  pass. Separately, start a `docs/adr/` directory with two entries: the
-  decision to keep `CollapsedField`'s dual controlled/uncontrolled mode
-  rather than deleting it (recorded for now only as a comment at the guard
-  in `CollapsedField.tsx`), and the decision *not* to consolidate the
+  pass.
+- **The `docs/adr/` half of this is done (2026-09-18).** The report's own
+  recommendation to start recording declined decisions shipped ahead of the
+  rest of this cleanup, as [adr/](./adr/README.md) with three entries:
+  [0001](./adr/0001-keep-collapsedfield-dual-mode.md) keeps
+  `CollapsedField`'s dual controlled/uncontrolled mode (previously recorded
+  only as a comment at the guard in `CollapsedField.tsx`),
+  [0002](./adr/0002-no-shared-no-op-guard.md) declines consolidating the
   three no-op guards in `state/document.ts` behind a shared abstraction -
-  the latter specifically so a future architecture review stops
-  re-suggesting it.
+  written specifically so a future architecture review stops re-suggesting
+  it, since two successive reviews already have - and
+  [0003](./adr/0003-no-component-test-environment.md) parks component-level
+  unit testing (the report's finding 10), naming the coupling to the
+  deferred Vite major upgrade above that nothing else in `docs/` recorded.
 - **Why it's not fixed now:** deliberately scoped out of the change that
   fixed the three findings above, to keep a placement fix from turning
   into a documentation pass. Deciding what is truly deferred versus merely

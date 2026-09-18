@@ -209,6 +209,15 @@ function restoreDocument(session: DocumentSession, doc: InstructionDocument): vo
  * continuous edit (free-text typing) that should merge into the last
  * history entry instead of pushing its own - see the comment on
  * `COALESCE_WINDOW_MS`.
+ *
+ * By convention, a caller that can cheaply detect a no-op guards *before*
+ * calling this, so history isn't polluted with entries that changed
+ * nothing - see `attachmentsEqual`, `tokensEqual` and `reorderStepsCore`'s
+ * `clamped === fromIndex` below. The three are deliberately different in
+ * shape (a flat-object comparison, an array-identity comparison, and an
+ * arithmetic proof of equality), and consolidating them behind one
+ * comparator-taking helper was considered and declined - see
+ * docs/adr/0002-no-shared-no-op-guard.md.
  */
 function setSteps(
   session: DocumentSession,

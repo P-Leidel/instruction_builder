@@ -87,7 +87,8 @@ export function CollapsedField<T>({
    * only caller relying on self-managed state) its own `useState`. That
    * removes this whole class of bug instead of guarding against it, at the
    * cost of pushing state into a caller with no other reason to hold it.
-   * Deliberately deferred, not rejected - revisit here.
+   * Declined, with the reasoning and the revisit trigger recorded in
+   * docs/adr/0001-keep-collapsedfield-dual-mode.md rather than only here.
    */
   function setEditing(next: boolean) {
     if (controlledEditing === undefined) setUncontrolledEditing(next);
