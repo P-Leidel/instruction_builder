@@ -72,8 +72,25 @@ export function CollapsedField<T>({
   const editing = controlledEditing ?? uncontrolledEditing;
   const triggerRef = useRef<HTMLButtonElement>(null);
 
+  /**
+   * Only the uncontrolled half of this writes local state. Without the
+   * guard, a controlled caller (TokenDetails' TimeAndQuantityRow) still
+   * drifted `uncontrolledEditing` to true on every open - harmless today
+   * only because `controlledEditing ?? uncontrolledEditing` above always
+   * finds a real boolean to mask it with, so the drifted value is never
+   * read. That's a latent trap rather than a working design: the moment a
+   * caller passes `editing` conditionally, the mask lifts and a stale
+   * `true` becomes visible (2026-09-18 architecture review, finding 3).
+   *
+   * The considered alternative was deleting the uncontrolled mode outright
+   * - make `editing`/`onEditingChange` required, and give StepDetails (the
+   * only caller relying on self-managed state) its own `useState`. That
+   * removes this whole class of bug instead of guarding against it, at the
+   * cost of pushing state into a caller with no other reason to hold it.
+   * Deliberately deferred, not rejected - revisit here.
+   */
   function setEditing(next: boolean) {
-    setUncontrolledEditing(next);
+    if (controlledEditing === undefined) setUncontrolledEditing(next);
     onEditingChange?.(next);
   }
 
