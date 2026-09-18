@@ -49,6 +49,55 @@ async function countAxeViolations(label) {
   return results.violations.length;
 }
 
+// 2026-09-18 architecture review, finding 9: `lib/download.ts` used to
+// click a *detached* <a download> and revoke its object URL on the very
+// next line. Chromium tolerates both; Safari - iOS especially, and
+// especially for a blob the size of a multi-page PDF - has a long history
+// of cancelling the transfer when the URL dies before it has been handed
+// off. That path sits behind all four export formats, so the failure it
+// produces is total and silent, and it cannot be reproduced in this
+// Chromium at all.
+//
+// So this doesn't try to reproduce it. It patches the two DOM calls the
+// fix is actually about and observes *when* they happen - the property
+// Safari cares about ("the URL outlives the click task") rather than this
+// app's particular way of arranging that. A rewrite that keeps the
+// property passes; a revert to the same-task revoke fails, in Chromium,
+// without needing a device.
+//
+// `addInitScript` (not `evaluate`) so the patch survives the reload the
+// persistence check does later, and so it is installed before any app code
+// can capture an un-patched reference.
+await page.addInitScript(() => {
+  const probe = { clicks: 0, revokes: 0, revokedInClickTask: false, anchorDetachedAtClick: false };
+  window.__downloadProbe = probe;
+  let inClickTask = false;
+
+  const realClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function patchedClick() {
+    // Only export's synthetic `<a download>`, never an ordinary link.
+    if (!this.hasAttribute("download")) return realClick.call(this);
+    probe.clicks += 1;
+    if (!this.isConnected) probe.anchorDetachedAtClick = true;
+    inClickTask = true;
+    try {
+      return realClick.call(this);
+    } finally {
+      // Queued from inside the click, so it necessarily runs before any
+      // timer `downloadBlob` schedules afterwards: anything that revokes
+      // before this fires shared the click's task.
+      setTimeout(() => { inClickTask = false; }, 0);
+    }
+  };
+
+  const realRevoke = URL.revokeObjectURL.bind(URL);
+  URL.revokeObjectURL = (url) => {
+    probe.revokes += 1;
+    if (inClickTask) probe.revokedInClickTask = true;
+    return realRevoke(url);
+  };
+});
+
 await page.goto(URL, { waitUntil: "networkidle" });
 await page.waitForSelector(".instruction-canvas__svg");
 await page.screenshot({ path: path.join(OUT, "01-desktop-initial.png"), fullPage: true });
@@ -804,6 +853,12 @@ await page.screenshot({ path: path.join(OUT, "07-export-warning-toast.png"), ful
 await page.locator(".app__toast-dismiss").click();
 const toastGoneAfterDismiss = (await page.locator(".app__toast").count()) === 0;
 
+// Read the download probe installed before `goto` above (finding 9). This
+// is the first export of the run, so one click has now happened through
+// `downloadBlob`; the remaining exports below go through the same function
+// and are re-checked once at the end.
+const downloadProbeAfterFirstExport = await page.evaluate(() => window.__downloadProbe);
+
 // Task 15 (SVG Export): same temp incomplete step still in place, so this
 // also re-exercises the task 14 warning-toast link for a second export
 // format. Regression test for a real gap found while building this: a
@@ -1017,6 +1072,24 @@ const pdfExportProducesMultiplePages =
   multiPagePdfDownload.suggestedFilename() === "pagination-test.pdf" &&
   multiPagePdfPageCount > 1;
 await page.screenshot({ path: path.join(OUT, "11b-pdf-export-multipage-doc.png"), fullPage: true });
+
+// Final read of the download probe (finding 9 - see `addInitScript` at the
+// top of this file). Taken here, after the fifth and last export of the
+// run and before the reload the autosave check does further down, because
+// that reload re-runs the init script and resets the counters.
+//
+// `clicks >= 5` (JSON, SVG, PNG, and two PDFs) is the guard that makes the
+// two "nothing bad happened" flags mean something: without it this passes
+// trivially on a run where no export ever reached `downloadBlob`. The
+// revoke *count* is deliberately not asserted - `REVOKE_DELAY_MS` is 60s
+// and a full run can outlast that, so a non-zero count here is correct
+// behavior, not a regression. Only its timing relative to the click is.
+const downloadProbe = await page.evaluate(() => window.__downloadProbe);
+const downloadDefersObjectUrlRevoke =
+  downloadProbeAfterFirstExport.clicks >= 1 &&
+  downloadProbe.clicks >= 5 &&
+  !downloadProbe.revokedInClickTask &&
+  !downloadProbe.anchorDetachedAtClick;
 
 await page.keyboard.press("Control+z");
 const summariesAfterUndoingPaginationTest = await stepTitles.allTextContents();
@@ -1376,6 +1449,12 @@ console.log("SVG_EXPORT_IS_SELF_CONTAINED_AND_STYLED=" + svgExportIsSelfContaine
 console.log("SVG_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + svgExportWarnedAboutIncompleteSteps);
 console.log("PNG_EXPORT_IS_RASTERIZED_AT_PIXEL_DENSITY=" + pngExportIsRasterizedAtPixelDensity);
 console.log("PNG_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + pngExportWarnedAboutIncompleteSteps);
+console.log("DOWNLOAD_DEFERS_OBJECT_URL_REVOKE=" + downloadDefersObjectUrlRevoke);
+console.log(
+  "DOWNLOAD_PROBE=" +
+    `clicks=${downloadProbe.clicks} revokes=${downloadProbe.revokes} ` +
+    `sameTaskRevoke=${downloadProbe.revokedInClickTask} detachedAnchor=${downloadProbe.anchorDetachedAtClick}`,
+);
 console.log("PDF_EXPORT_DOWNLOADED_VALID_PDF=" + pdfExportDownloadedValidPdf);
 console.log("PDF_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + pdfExportWarnedAboutIncompleteSteps);
 console.log("PRINT_STYLESHEET_ISOLATES_READONLY_CANVAS=" + printStylesheetIsolatesReadOnlyCanvas);

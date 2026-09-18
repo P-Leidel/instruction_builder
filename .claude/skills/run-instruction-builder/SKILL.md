@@ -203,7 +203,14 @@ the only one that needs the steps under "Run (agent path)".
    `lib/pdf-pagination.ts`'s own unit tests already prove in isolation
    for the pure algorithm, checked here end-to-end through the real
    DOM-bounds-in/jsPDF-out pipeline - then undoes the import so the
-   document is back to what it was before this check ran. It then
+   document is back to what it was before this check ran. Across all
+   five of those export clicks it also watches *how* the shared
+   `lib/download.ts` path behaves, not just that a file arrived:
+   `DOWNLOAD_DEFERS_OBJECT_URL_REVOKE` asserts the synthetic
+   `<a download>` was in the document when it was clicked and that
+   `URL.revokeObjectURL` was never called in the same task as that
+   click - the Safari-shaped failure Chromium cannot itself reproduce
+   (see Gotchas). It then
    imports a small valid
    document via the hidden file input (`setInputFiles`, which fires the same
    `change` event a real file picker would), confirms the confirm-before-
@@ -274,6 +281,8 @@ the only one that needs the steps under "Run (agent path)".
    `PNG_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=...`,
    `PDF_EXPORT_DOWNLOADED_VALID_PDF=...`,
    `PDF_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=...`,
+   `DOWNLOAD_DEFERS_OBJECT_URL_REVOKE=...` (with a `DOWNLOAD_PROBE=...`
+   breakdown - see the note below),
    `PRINT_STYLESHEET_ISOLATES_READONLY_CANVAS=...`,
    `PDF_EXPORT_PRODUCES_MULTIPLE_PAGES=...` (with the counted page
    count), `PAGINATION_TEST_UNDO_RESTORED_DOCUMENT=...`,
@@ -345,6 +354,22 @@ taken - watch the terminal output for the actual URL).
 
 ## Gotchas
 
+- **The download check patches the page, it doesn't reproduce the bug.**
+  `DOWNLOAD_DEFERS_OBJECT_URL_REVOKE` exists for a Safari/iOS failure
+  (revoking a blob URL before the transfer is handed off cancels the
+  download) that **Chromium tolerates and therefore cannot demonstrate**.
+  So the driver installs an `addInitScript` probe that wraps
+  `HTMLAnchorElement.prototype.click` and `URL.revokeObjectURL`, and
+  asserts the *property* Safari cares about: the anchor was connected to
+  the document at click time, and no revoke happened in the click's own
+  task. Two consequences worth knowing before editing it: the probe is an
+  init script (not `page.evaluate`) so it survives the reload the
+  persistence check does - which also means the counters **reset on that
+  reload**, so `downloadProbe` must be read before it; and the revoke
+  *count* is deliberately not asserted, because `REVOKE_DELAY_MS` is 60s
+  and a long run can legitimately outlast it. A green result here means
+  "this could not fail on Safari for that reason", not "this was tested on
+  Safari".
 - **`npx playwright install msedge` fails on this machine** with
   "Failed to install Microsoft Edge... insufficient privileges." Edge
   is only partially installed here (`Program Files
