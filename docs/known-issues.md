@@ -368,12 +368,13 @@ task, which shipped keyboard alternatives for step reordering and token
 - **What it is:** a whole-codebase review on 2026-09-18 (see
   [phase-3/audits/2026-09-18-architecture-review.html](./phase-3/audits/2026-09-18-architecture-review.html))
   produced 14 findings and re-graded every issue already tracked in this
-  file. Three of those findings have since been fixed - the
-  `CollapsedField` controlled-state write, and the field popover's missing
-  vertical flip and its `aria-modal`/Tab-trap contradiction. The remaining
-  eleven exist only inside that one HTML file, in a report's prose rather
-  than as tracked items anyone would find by reading this doc. Nothing
-  below the three fixed ones has an entry here yet.
+  file. Four of those findings have since been fixed - the
+  `CollapsedField` controlled-state write, the field popover's missing
+  vertical flip, its `aria-modal`/Tab-trap contradiction, and the driver
+  knowing only two viewport widths. The remaining ten exist only inside
+  that one HTML file, in a report's prose rather than as tracked items
+  anyone would find by reading this doc. Nothing below the four fixed ones
+  has an entry here yet.
 - **What the cleanup pass is:** fold the genuinely-deferred findings from
   that report into proper sections in this file, each with the same
   What it is / Why it's not fixed / Revisit when shape as everything else

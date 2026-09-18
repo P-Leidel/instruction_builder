@@ -146,6 +146,18 @@ the only one that needs the steps under "Run (agent path)".
    survived via IndexedDB, then reduces the viewport to 390px wide
    (mobile), screenshots that too, and asserts the page never grows wider
    than the viewport there (task 21's own regression check - see Gotchas).
+   It then does the same at both tablet viewports, 768x1024 and 1024x768 -
+   the band between phone and desktop, which nothing exercised before
+   2026-09-18 - screenshotting and axe-scanning each, asserting the layout
+   actually switches across the pair (`.app__main` is `flex` at 768px
+   portrait and `grid` at 1024px landscape, since the single 800px
+   breakpoint puts a portrait tablet on the *mobile* layout), and checking
+   the field popover flips above its trigger and stays inside the viewport
+   when opened with no room below. It restores 390x844 afterwards so
+   nothing downstream sees a different app. Note the tablet overflow
+   assertions use `<= 0`, not the mobile pass's `=== 0`: above 800px
+   `html { scrollbar-gutter: stable }` reserves 15px unconditionally, so
+   `scrollWidth` is legitimately *smaller* than `clientWidth` there.
    Next it exercises tasks
    15/16/17/18/19 (SVG/PNG/PDF/JSON Export, Import): adds a temporary
    empty step, clicks
@@ -243,7 +255,17 @@ the only one that needs the steps under "Run (agent path)".
    `UNDO_REDO_WORKED_END_TO_END=...`,
    `PREVIEW_HIDES_EDITING_CONTROLS=...`,
    `PERSISTED_ACROSS_RELOAD=...`,
-   `NO_HORIZONTAL_OVERFLOW_AT_MOBILE_WIDTH=...`, `CANVAS_KEYBOARD_FOCUSABLE=...`,
+   `NO_HORIZONTAL_OVERFLOW_AT_MOBILE_WIDTH=...`,
+   `NO_HORIZONTAL_OVERFLOW_AT_TABLET_PORTRAIT=...`,
+   `NO_HORIZONTAL_OVERFLOW_AT_TABLET_LANDSCAPE=...`,
+   `LAYOUT_SWITCHES_ACROSS_TABLET_ORIENTATIONS=...`,
+   `FIELD_POPOVER_STAYS_INSIDE_VIEWPORT=...` (with the per-orientation
+   results), `CANVAS_KEYBOARD_FOCUSABLE=...`,
+   `COPY_PASTE_WORKED_END_TO_END=...`,
+   `AUTOSAVE_NOT_CLOBBERED_BY_TAB_HIDE=...`,
+   `KEYBOARD_SHORTCUTS_SUSPENDED_BEHIND_MODALS=...`,
+   `NEW_DOC_DIALOG_CANCEL_LEAVES_DOCUMENT_UNCHANGED=...`,
+   `TOKEN_CATEGORY_ARROW_KEY_NAV_WORKS=...`,
    `JSON_EXPORT_DOWNLOADS_CURRENT_DOCUMENT=...`,
    `JSON_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=...`, `TOAST_DISMISSIBLE=...`,
    `SVG_EXPORT_IS_SELF_CONTAINED_AND_STYLED=...`,
@@ -265,8 +287,10 @@ the only one that needs the steps under "Run (agent path)".
    `IMPORT_DIALOG_TRAPS_FOCUS_AND_ESCAPE_CLOSES=...`,
    `ACCESSIBILITY_VIOLATIONS_MAIN_EDITOR=...`,
    `ACCESSIBILITY_VIOLATIONS_IMPORT_DIALOG=...`,
-   `ACCESSIBILITY_VIOLATIONS_MOBILE=...`, and any console errors it
-   captured. **Read the screenshots** (e.g. with the Read tool) - don't just
+   `ACCESSIBILITY_VIOLATIONS_MOBILE=...`,
+   `ACCESSIBILITY_VIOLATIONS_TABLET_PORTRAIT=...`,
+   `ACCESSIBILITY_VIOLATIONS_TABLET_LANDSCAPE=...`, and
+   `CONSOLE_ERRORS_COUNT=...` for any console errors it captured. **Read the screenshots** (e.g. with the Read tool) - don't just
    check the exit code.
 
 3. Stop the server when done (find the PID by port - see Gotchas for

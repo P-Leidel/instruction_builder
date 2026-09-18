@@ -183,14 +183,18 @@ in the app.
 
 ### The Time and Quantity panel — please test this hard
 
-It opens as a small floating panel underneath whichever button you tapped,
-and it is the newest and least-proven piece of the interface on touch.
+It opens as a small floating panel next to whichever button you tapped -
+normally underneath it, but above it instead when there is not enough room
+below. It is the newest and least-proven piece of the interface on touch.
 
-- [ ] Open "+ Time" when its button is near the **bottom** of the screen. Is
-      the panel fully visible, or does part of it sit off-screen?
+- [ ] Open "+ Time" when its button is near the **bottom** of the screen. It
+      should open *above* the button rather than running off the bottom
+      edge. Tell us if it opens downward anyway, or if the flip puts it
+      somewhere odd.
 - [ ] With the panel open, tap a number field so the on-screen keyboard
       comes up. Does the keyboard cover the panel?
-- [ ] Open the panel, then **rotate the device**. Does it end up somewhere
+- [ ] Open the panel, then **rotate the device**. It should re-decide where
+      to sit rather than staying where it was. Does it end up somewhere
       sensible?
 - [ ] Open it when its button is near the right edge of the screen - it
       should flip rather than run off the edge.

@@ -353,6 +353,28 @@ by construction - StepDetails carries it only while a step is selected
 with no token also selected, TokenDetails' one "editing" render branch
 only ever renders once a token is. See
 [phase-3/progress/task-30-user-feedback-fixes-10.md](./phase-3/progress/task-30-user-feedback-fixes-10.md).
+A 2026-09-18 whole-codebase health review then checked the six preceding
+remediation commits for regressions (none found) and re-graded every issue
+already tracked in known-issues.md on the same severity scale as its own
+fourteen new findings, so the two lists can be read together - archived at
+[phase-3/audits/2026-09-18-architecture-review.html](./phase-3/audits/2026-09-18-architecture-review.html).
+Two of its recommendations were taken before task 30's tablet round starts,
+settled via `/mattpocock-skills:grill-me` across five rounds: the Playwright
+driver now also drives 768x1024 and 1024x768 (the band between phone and
+desktop was never exercised, and 768px portrait gets the *mobile* layout
+while 1024px landscape gets the desktop one), and the field popover's
+placement arithmetic moved into a new pure `lib/field-placement.ts`. That
+extraction also added the vertical flip the panel never had, re-placement on
+resize/rotation, and - closing a contradiction the review named - dropped
+the Tab trap that `aria-modal="false"` had always denied was there.
+`CollapsedField` stopped writing local editing state while controlled in the
+same pass. The tablet viewports were deliberately committed *first*, so a
+pre-existing 768px problem could be told apart from one the placement change
+introduced; that baseline came back clean. Eleven findings, two
+documentation corrections and two ADRs worth writing remain, tracked in
+[known-issues.md](./known-issues.md#documentation-debt-from-the-2026-09-18-codebase-health-review)
+rather than only inside the report. See
+[phase-3/progress/architecture-2026-09-18-field-placement-and-tablet-viewports.md](./phase-3/progress/architecture-2026-09-18-field-placement-and-tablet-viewports.md).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
@@ -430,7 +452,7 @@ as "untitled-instructions.\<ext\>" because no UI lets the user set
 | 27 | Add Document Title UI | ✅ |
 | 28 | UI Polish Pass | ✅ |
 | 29 | Publish MVP | ✅ (live at <https://instructionbuilder-seven.vercel.app>) |
-| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md), [eighth](./phase-3/progress/task-30-user-feedback-fixes-8.md), [ninth](./phase-3/progress/task-30-user-feedback-fixes-9.md), and [tenth](./phase-3/progress/task-30-user-feedback-fixes-10.md) feedback passes shipped; testers work through [manual-testing-checklist.md](./manual-testing-checklist.md)) |
+| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md), [eighth](./phase-3/progress/task-30-user-feedback-fixes-8.md), [ninth](./phase-3/progress/task-30-user-feedback-fixes-9.md), and [tenth](./phase-3/progress/task-30-user-feedback-fixes-10.md) feedback passes shipped, plus a [2026-09-18 health review and the field-placement seam it recommended](./phase-3/progress/architecture-2026-09-18-field-placement-and-tablet-viewports.md); testers work through [manual-testing-checklist.md](./manual-testing-checklist.md)) |
 | 31 | Refine UX | Not started |
 
 See [phase-3/progress/README.md](./phase-3/progress/README.md) for detail

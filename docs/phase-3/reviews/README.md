@@ -23,6 +23,13 @@ per run (`YYYY-MM-DD-code-review.md`).
   incorrect claims found; produced a big/medium/small remediation plan and
   applied its two small, doc-only fixes directly (a `known-issues.md`
   clarity fix and a dev-server operational-guardrails note).
+- [2026-09-17-whole-codebase-audit-evaluation.md](./2026-09-17-whole-codebase-audit-evaluation.md)
+  did the same for a third external document (also archived in
+  [check/](./check/)), a whole-codebase audit: all seven of its findings
+  independently re-verified against source, one overclaim corrected and one
+  finding found to be worse than reported, plus additional issues found
+  during the evaluation itself. Produced the critical/high/medium/small
+  remediation plan that commits `1862108` and `49ca8de` worked through.
 
 Still accurate as a historical record of what each review found at the
 time.
