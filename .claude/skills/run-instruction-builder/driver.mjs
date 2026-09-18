@@ -694,8 +694,50 @@ async function measureViewport(label, width, height, screenshotName) {
   return { violations, ...metrics };
 }
 
+/**
+ * A field popover opened from a trigger with no room beneath it must flip
+ * above rather than hang off the bottom of the window (see
+ * lib/field-placement.ts). Before that flip existed the panel was always
+ * placed below, so on a tablet - where "+ Time" can easily sit low in a
+ * tall Step details column - part of the form was simply unreachable.
+ *
+ * The window is deliberately squeezed until the trigger sits on its bottom
+ * edge, rather than hoping the ordinary layout puts it there: without that
+ * the check would pass on any page that happens to be short, without ever
+ * exercising the flip. `noRoomBelowTrigger` asserts that precondition
+ * actually held, so a false pass isn't possible.
+ */
+async function popoverStaysInsideViewport(width) {
+  await editableCanvas.locator(".instruction-canvas__badge").first().click();
+  const trigger = page.locator(".step-details").locator(".collapsed-field__add, .collapsed-field__edit").first();
+  await trigger.evaluate((el) => el.scrollIntoView({ block: "end" }));
+  const box = await trigger.boundingBox();
+  if (!box) return false;
+  await page.setViewportSize({ width, height: Math.round(box.y + box.height) + 24 });
+  await trigger.evaluate((el) => el.scrollIntoView({ block: "end" }));
+  await trigger.click();
+  const measured = await page.evaluate(() => {
+    const panel = document.querySelector(".field-popover");
+    const button = document.querySelector(
+      ".step-details .collapsed-field__add, .step-details .collapsed-field__edit",
+    );
+    if (!panel || !button) return null;
+    const p = panel.getBoundingClientRect();
+    const b = button.getBoundingClientRect();
+    return {
+      noRoomBelowTrigger: window.innerHeight - b.bottom < p.height,
+      insideViewport:
+        p.top >= 0 && p.left >= 0 && p.bottom <= window.innerHeight && p.right <= window.innerWidth,
+    };
+  });
+  await page.keyboard.press("Escape");
+  return measured !== null && measured.noRoomBelowTrigger && measured.insideViewport;
+}
+
 const tabletPortrait = await measureViewport("tablet portrait 768px", 768, 1024, "04b-tablet-portrait.png");
+const popoverInsideViewportTabletPortrait = await popoverStaysInsideViewport(768);
 const tabletLandscape = await measureViewport("tablet landscape 1024px", 1024, 768, "04c-tablet-landscape.png");
+const popoverInsideViewportTabletLandscape = await popoverStaysInsideViewport(1024);
 await page.setViewportSize({ width: 390, height: 844 });
 
 // `<= 0`, not the `=== 0` the mobile check above uses. Past the 800px
@@ -1320,6 +1362,12 @@ console.log("NO_HORIZONTAL_OVERFLOW_AT_MOBILE_WIDTH=" + noHorizontalOverflowAtMo
 console.log("NO_HORIZONTAL_OVERFLOW_AT_TABLET_PORTRAIT=" + noHorizontalOverflowAtTabletPortrait);
 console.log("NO_HORIZONTAL_OVERFLOW_AT_TABLET_LANDSCAPE=" + noHorizontalOverflowAtTabletLandscape);
 console.log("LAYOUT_SWITCHES_ACROSS_TABLET_ORIENTATIONS=" + layoutSwitchesAcrossTabletOrientations);
+console.log(
+  "FIELD_POPOVER_STAYS_INSIDE_VIEWPORT=" +
+    (popoverInsideViewportTabletPortrait && popoverInsideViewportTabletLandscape) +
+    " (portrait: " + popoverInsideViewportTabletPortrait +
+    ", landscape: " + popoverInsideViewportTabletLandscape + ")",
+);
 console.log("CANVAS_KEYBOARD_FOCUSABLE=" + canvasControlFocused);
 console.log("JSON_EXPORT_DOWNLOADS_CURRENT_DOCUMENT=" + jsonExportDownloadsCurrentDocument);
 console.log("JSON_EXPORT_WARNS_ABOUT_INCOMPLETE_STEPS=" + exportWarnedAboutIncompleteSteps);

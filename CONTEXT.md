@@ -41,3 +41,28 @@ the document: it isn't saved, isn't part of undo/redo history, and doesn't
 touch the operating system's real clipboard - a browser tab reload or a
 document replace (New/Import) simply loses it, the same way selection does.
 _Avoid_: "copy buffer", "system clipboard" (this is never that).
+
+## Field popover
+
+A **field popover** is the small floating panel a collapsed field's edit
+form renders in - the four day/hour/minute/second boxes behind "+ Time",
+or the amount/unit pair behind "+ Quantity". It is anchored to the trigger
+button that opened it, and it floats above the layout rather than
+expanding inside it, because a **collapsed field**'s own footprint must
+never change just because its form opened: Token time and Quantity sit in
+one row, and either one growing in place shoves the other sideways
+mid-edit. See
+[src/components/FieldPopover/FieldPopover.tsx](./src/components/FieldPopover/FieldPopover.tsx)
+for the panel and
+[src/components/CollapsedField/CollapsedField.tsx](./src/components/CollapsedField/CollapsedField.tsx)
+for the collapsed/edit-toggle chrome around it.
+
+It is deliberately **non-modal**: nothing behind it is inert, there is no
+backdrop, Tab moves out of it normally, and Escape or a click outside
+closes it. Which of the four positions it takes around its trigger
+(below or above, left- or right-aligned) is **field placement**, decided
+by `resolveFieldPlacement` in
+[src/lib/field-placement.ts](./src/lib/field-placement.ts) and applied as a
+CSS modifier - the arithmetic is kept out of the panel itself so it can be
+tested without a browser. _Avoid_: "modal", "dialog", "tooltip" (it is
+none of these).

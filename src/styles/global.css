@@ -840,12 +840,34 @@ button {
   flex-direction: column;
   gap: 0.5rem;
   width: max-content;
-  max-width: calc(100vw - 2rem);
+  /* 16px = VIEWPORT_GUTTER (8px, lib/field-placement.ts) per edge, the
+     same number the placement flip is measured against, rather than a
+     second unrelated literal for the same idea. */
+  max-width: calc(100vw - 16px);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
   padding: 0.75rem;
+}
+
+/* The two flipped positions. Which one applies is decided by
+   `resolveFieldPlacement` (lib/field-placement.ts) and toggled onto the
+   element by FieldPopover.tsx - the arithmetic lives there so it can be
+   unit-tested without a browser, while the positioning itself stays here.
+
+   `--right` aligns the panel's right edge to the *trigger's* right edge,
+   not the window's, so it stays on screen as long as the trigger does.
+   `--above` mirrors the default `top` offset, keeping the same 0.4rem gap
+   between trigger and panel on whichever side it lands. */
+.field-popover--right {
+  left: auto;
+  right: 0;
+}
+
+.field-popover--above {
+  top: auto;
+  bottom: calc(100% + 0.4rem);
 }
 
 /* Token details */
