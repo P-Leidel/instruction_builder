@@ -362,3 +362,37 @@ task, which shipped keyboard alternatives for step reordering and token
   the browser keeps the page process alive briefly rather than tearing it
   down instantly.
 - **First noted:** 2026-09-13.
+
+## Documentation debt from the 2026-09-18 codebase health review
+
+- **What it is:** a whole-codebase review on 2026-09-18 (see
+  [phase-3/audits/2026-09-18-architecture-review.html](./phase-3/audits/2026-09-18-architecture-review.html))
+  produced 14 findings and re-graded every issue already tracked in this
+  file. Three of those findings have since been fixed - the
+  `CollapsedField` controlled-state write, and the field popover's missing
+  vertical flip and its `aria-modal`/Tab-trap contradiction. The remaining
+  eleven exist only inside that one HTML file, in a report's prose rather
+  than as tracked items anyone would find by reading this doc. Nothing
+  below the three fixed ones has an entry here yet.
+- **What the cleanup pass is:** fold the genuinely-deferred findings from
+  that report into proper sections in this file, each with the same
+  What it is / Why it's not fixed / Revisit when shape as everything else
+  here, and drop the ones that turn out to be neither deferred nor real.
+  Two documentation corrections the report identified belong in the same
+  pass. Separately, start a `docs/adr/` directory with two entries: the
+  decision to keep `CollapsedField`'s dual controlled/uncontrolled mode
+  rather than deleting it (recorded for now only as a comment at the guard
+  in `CollapsedField.tsx`), and the decision *not* to consolidate the
+  three no-op guards in `state/document.ts` behind a shared abstraction -
+  the latter specifically so a future architecture review stops
+  re-suggesting it.
+- **Why it's not fixed now:** deliberately scoped out of the change that
+  fixed the three findings above, to keep a placement fix from turning
+  into a documentation pass. Deciding what is truly deferred versus merely
+  unscheduled is its own judgement call, and better made once the tablet
+  testing currently underway has had its say on several of the same items
+  (the mobile layout order and the small-tokens-at-390px items in this
+  file are both in that group).
+- **Revisit when:** task 30's tablet round is finished and this change has
+  been exercised on real devices.
+- **First noted:** 2026-09-18.

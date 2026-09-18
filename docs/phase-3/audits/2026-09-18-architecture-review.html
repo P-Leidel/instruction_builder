@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codebase Health Review — 18 September 2026</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "neutral", themeVariables: { fontSize: "13px" } });
+</script>
+<style>
+  :root { color-scheme: light; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  code, .mono { font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace; }
+  .card-shadow { box-shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px -12px rgba(16,24,40,.18); }
+  .beam { background: linear-gradient(180deg,#fff 0%,#f8fafc 100%); }
+  .sev { font-variant-numeric: tabular-nums; }
+  .diag { border:1px solid #e2e8f0; border-radius:10px; padding:14px; background:#fff; }
+  .box { border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.25; text-align:center; }
+  .arrow { color:#94a3b8; text-align:center; font-size:18px; line-height:1; }
+  details > summary { cursor:pointer; }
+  .mermaid { display:flex; justify-content:center; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+<header class="border-b border-slate-200 beam">
+  <div class="max-w-6xl mx-auto px-6 py-10">
+    <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Visual Instruction Builder · Phase 3, task 30</p>
+    <h1 class="text-3xl md:text-4xl font-semibold text-slate-900 mt-2">Codebase health review</h1>
+    <p class="mt-3 text-slate-600 max-w-3xl">
+      Commissioned after the 2026-09-17 audit remediation, to answer one question first:
+      <em>did fixing those findings break anything?</em> Then a full relist of every deferred and known
+      issue with a severity attached, and the architecture candidates worth acting on next.
+    </p>
+    <div class="mt-5 flex flex-wrap gap-2 text-xs">
+      <span class="px-2.5 py-1 rounded-full bg-slate-900 text-white">HEAD <span class="mono">48fa437</span></span>
+      <span class="px-2.5 py-1 rounded-full bg-white border border-slate-300">18 September 2026</span>
+      <span class="px-2.5 py-1 rounded-full bg-white border border-slate-300">7,329 lines of <span class="mono">src/</span></span>
+      <span class="px-2.5 py-1 rounded-full bg-white border border-slate-300">Reviewed against source, not docs</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============ VERDICT ============ -->
+<section class="max-w-6xl mx-auto px-6 pt-10">
+  <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 card-shadow">
+    <div class="flex items-start gap-4">
+      <div class="shrink-0 w-11 h-11 rounded-xl bg-emerald-600 text-white grid place-items-center text-xl font-bold">✓</div>
+      <div>
+        <h2 class="text-xl font-semibold text-emerald-900">No regressions found in the six remediation commits</h2>
+        <p class="mt-2 text-emerald-900/80 max-w-3xl">
+          Every fix from the 2026-09-17 audit was traced back to its call sites in source. All six commits do
+          what their messages claim, and none of them broke a neighbouring behaviour. What they <em>did</em>
+          leave behind is <strong>asymmetry</strong>: three places where a fix was applied to one member of a
+          pair and not the other. Those are latent, not live — but they are exactly the shape that becomes a
+          bug the next time someone edits nearby.
+        </p>
+      </div>
+    </div>
+    <div class="mt-5 grid sm:grid-cols-4 gap-3 text-sm">
+      <div class="bg-white rounded-lg border border-emerald-200 px-4 py-3"><div class="text-2xl font-semibold text-slate-900">0</div><div class="text-slate-500">typecheck errors</div></div>
+      <div class="bg-white rounded-lg border border-emerald-200 px-4 py-3"><div class="text-2xl font-semibold text-slate-900">0</div><div class="text-slate-500">lint errors</div></div>
+      <div class="bg-white rounded-lg border border-emerald-200 px-4 py-3"><div class="text-2xl font-semibold text-slate-900">155</div><div class="text-slate-500">tests, 12 files, all green</div></div>
+      <div class="bg-white rounded-lg border border-emerald-200 px-4 py-3"><div class="text-2xl font-semibold text-slate-900">3.0s</div><div class="text-slate-500">clean production build</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SEVERITY KEY ============ -->
+<section class="max-w-6xl mx-auto px-6 pt-10">
+  <h2 class="text-lg font-semibold text-slate-900">Severity scale used throughout</h2>
+  <div class="mt-3 grid md:grid-cols-5 gap-3 text-sm">
+    <div class="rounded-lg border border-red-300 bg-red-50 p-3"><div class="font-semibold text-red-800">S1 · Critical</div><div class="text-red-900/70 mt-1">Loses or corrupts a user's saved work.</div></div>
+    <div class="rounded-lg border border-orange-300 bg-orange-50 p-3"><div class="font-semibold text-orange-800">S2 · High</div><div class="text-orange-900/70 mt-1">Broken behaviour an ordinary user will hit.</div></div>
+    <div class="rounded-lg border border-amber-300 bg-amber-50 p-3"><div class="font-semibold text-amber-800">S3 · Medium</div><div class="text-amber-900/70 mt-1">Degraded under specific, reachable conditions.</div></div>
+    <div class="rounded-lg border border-sky-300 bg-sky-50 p-3"><div class="font-semibold text-sky-800">S4 · Low</div><div class="text-sky-900/70 mt-1">Latent, cosmetic, or robustness only.</div></div>
+    <div class="rounded-lg border border-slate-300 bg-slate-100 p-3"><div class="font-semibold text-slate-700">S5 · Accepted</div><div class="text-slate-600 mt-1">Understood, documented, deliberately deferred.</div></div>
+  </div>
+  <p class="mt-3 text-sm text-slate-500">
+    Severity is about <em>consequence and reachability</em>, not about how hard the fix is. A latent invariant
+    that would silently delete a token scores higher than a visible cosmetic wobble.
+  </p>
+</section>
+
+<!-- ============ A. REGRESSION CHECK ============ -->
+<section class="max-w-6xl mx-auto px-6 pt-12">
+  <h2 class="text-2xl font-semibold text-slate-900">A. Commit-by-commit regression check</h2>
+  <p class="mt-2 text-slate-600 max-w-3xl">Each remediation commit, what it actually changed in source, and whether anything near it now misbehaves.</p>
+
+  <div class="mt-5 overflow-x-auto rounded-xl border border-slate-200 bg-white card-shadow">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-100 text-slate-600 text-left">
+        <tr><th class="px-4 py-3 font-semibold">Commit</th><th class="px-4 py-3 font-semibold">What it changed</th><th class="px-4 py-3 font-semibold">Verdict</th></tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <tr>
+          <td class="px-4 py-3 align-top mono text-xs whitespace-nowrap">1862108</td>
+          <td class="px-4 py-3 align-top">Autosave clobber guard, selection repair after a cross-step token move, three no-op history guards, shortcut suspension behind dialogs, <span class="mono">label || iconId</span>, <span class="mono">repairLegacyQuantity</span>.</td>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">Clean</span><div class="text-slate-500 mt-1 text-xs">The <span class="mono">skipNextAutosave</span> effect correctly still reads <span class="mono">document.value</span> on the skipped run, so the subscription survives. Guards verified against <span class="mono">document.test.ts</span>.</div></td>
+        </tr>
+        <tr>
+          <td class="px-4 py-3 align-top mono text-xs whitespace-nowrap">49ca8de</td>
+          <td class="px-4 py-3 align-top">PDF pagination fed from <span class="mono">CanvasLayout</span> instead of scraped DOM; fixed desktop layout for Preview and export; shared <span class="mono">runExport</span>/<span class="mono">runCanvasExport</span>; <span class="mono">lib/download.ts</span> extracted.</td>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">Clean</span><div class="text-slate-500 mt-1 text-xs">The hidden export canvas is hidden by <span class="mono">width:0;overflow:hidden</span>, not <span class="mono">display:none</span> — so <span class="mono">getComputedStyle</span> style-baking still resolves. That was the one way this could have broken silently.</div></td>
+        </tr>
+        <tr>
+          <td class="px-4 py-3 align-top mono text-xs whitespace-nowrap">a36b94d</td>
+          <td class="px-4 py-3 align-top"><span class="mono">DurationForm</span>'s Save gate now derives from the same <span class="mono">buildDuration</span> call Save makes.</td>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-xs font-medium">Asymmetry</span><div class="text-slate-500 mt-1 text-xs">Correct for <span class="mono">DurationForm</span>. Its sibling <span class="mono">QuantityForm</span> still has the old two-source-of-truth shape — see finding 1.</div></td>
+        </tr>
+        <tr>
+          <td class="px-4 py-3 align-top mono text-xs whitespace-nowrap">48d4931</td>
+          <td class="px-4 py-3 align-top">Shared <span class="mono">ConfirmDialog</span> shell extracted from the two confirm dialogs.</td>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">Clean</span><div class="text-slate-500 mt-1 text-xs">Hooks run before the <span class="mono">if (!open) return null</span> early return, so the rules of hooks hold for both the always-mounted and the conditionally-mounted caller. Pre-existing a11y gaps carried over unchanged — see finding 7.</div></td>
+        </tr>
+        <tr>
+          <td class="px-4 py-3 align-top mono text-xs whitespace-nowrap">c706d09</td>
+          <td class="px-4 py-3 align-top">Dead <span class="mono">meta.updatedAt</span> removed from the model, the four writers, and <span class="mono">migrate</span>'s shape check.</td>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">Clean</span><div class="text-slate-500 mt-1 text-xs">Grep confirms no remaining reader. Old documents keep the field as an inert extra property, which <span class="mono">migrate</span> passes through — see finding 12 for the broader pass-through question.</div></td>
+        </tr>
+        <tr>
+          <td class="px-4 py-3 align-top mono text-xs whitespace-nowrap">76f17fb</td>
+          <td class="px-4 py-3 align-top"><span class="mono">InstructionCanvas</span> gained an <span class="mono">svgRef</span> prop; App stopped reaching in by class name.</td>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">Clean</span><div class="text-slate-500 mt-1 text-xs">The seam is real. But it kept <span class="mono">svgElement: SVGSVGElement | null</span> downstream, which still makes every export able to silently do nothing — see candidate 4.</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-6 diag">
+    <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">The asymmetry pattern, in one picture</p>
+    <div class="grid md:grid-cols-2 gap-6">
+      <div>
+        <p class="text-xs font-semibold text-slate-600 mb-2">Fixed (a36b94d)</p>
+        <div class="space-y-1">
+          <div class="box bg-emerald-100 text-emerald-900 border border-emerald-300">DurationForm</div>
+          <div class="arrow">↓ one call</div>
+          <div class="box bg-emerald-600 text-white">buildDuration() — decides <em>both</em> "can save" and "what to save"</div>
+        </div>
+      </div>
+      <div>
+        <p class="text-xs font-semibold text-slate-600 mb-2">Not fixed (finding 1)</p>
+        <div class="space-y-1">
+          <div class="box bg-amber-100 text-amber-900 border border-amber-300">QuantityForm</div>
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <div class="arrow">↓</div><div class="arrow">↓</div>
+            <div class="box bg-amber-500 text-white">inline <span class="mono">isValid</span> — decides "can save"</div>
+            <div class="box bg-slate-600 text-white">buildQuantity() — decides "what to save"</div>
+          </div>
+          <p class="text-[11px] text-slate-500 pt-2">Two independent copies of the same rule. They agree today. Nothing makes them agree tomorrow.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ B. NEW FINDINGS ============ -->
+<section class="max-w-6xl mx-auto px-6 pt-14">
+  <h2 class="text-2xl font-semibold text-slate-900">B. Findings from this pass</h2>
+  <p class="mt-2 text-slate-600 max-w-3xl">Fourteen findings not currently tracked anywhere in <span class="mono">docs/</span>. Two were confirmed by running code, not just by reading it; those are marked.</p>
+
+  <div class="mt-6 space-y-4">
+
+    <!-- F4 -->
+    <article class="rounded-xl border border-amber-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-amber-500 text-white text-xs font-bold sev">S3 · Medium</span>
+        <span class="px-2 py-0.5 rounded bg-slate-900 text-white text-[11px] font-semibold">CONFIRMED BY EXECUTION</span>
+        <h3 class="font-semibold text-slate-900">4 · Moving a token to an unknown step id silently deletes the token</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/state/document.ts:424–455</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> <span class="mono">moveTokenCore</span> maps over the steps, filtering the token out of its source step and inserting it into the target. If no step matches <span class="mono">toStepId</span>, the removal still happens and the insertion never does. Because <span class="mono">changed</span> is set unconditionally whenever the source and target ids differ, the no-op guard doesn't catch it either: the token is deleted, and the deletion is recorded in undo history as a legitimate change.</p>
+      <div class="mt-3 rounded-lg bg-slate-900 text-slate-100 p-3 text-xs mono overflow-x-auto"><pre>// Verified against a real DocumentSession:
+sessionActions.moveToken(session, stepId, "t1", "no-such-step", 0);
+// → steps[0].tokens.length === 0   (the token is gone, not moved)</pre></div>
+      <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Reachability:</span> low today — the only caller derives <span class="mono">toStepId</span> from a live <span class="mono">data-step-id</span> hit test, so the id always exists at drop time. It is graded Medium because the failure mode is silent data loss, and because nothing in the type system or the function prevents a future caller (a keyboard "move token to step" affordance, which is already a tracked gap) from passing a stale id.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Solution:</span> resolve the target step before mutating, and return early if it isn't found — the same shape the function already uses for a missing source token one line above.</p>
+    </article>
+
+    <!-- F5 -->
+    <article class="rounded-xl border border-amber-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-amber-500 text-white text-xs font-bold sev">S3 · Medium</span>
+        <h3 class="font-semibold text-slate-900">5 · The PDF export chunk ships ~230 kB of libraries the app never runs</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/lib/pdf-export.ts:68</span>, <span class="mono text-xs">package.json</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> jsPDF 4.2.1's ESM build statically imports <span class="mono">html2canvas</span> and <span class="mono">dompurify</span> for its <span class="mono">.html()</span> API. This app only ever uses the svg2pdf.js path, so neither library is ever executed — but both land in the lazy chunk, and Vite can't tree-shake them out of a pre-minified bundle.</p>
+      <div class="mt-3 diag">
+        <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">What the first "Export PDF" click downloads</p>
+        <div class="space-y-1.5 text-xs">
+          <div class="flex items-center gap-2"><div class="w-28 shrink-0 text-slate-500 mono">jspdf</div><div class="h-5 rounded bg-slate-700" style="width:45%"></div><div class="mono text-slate-600">390 kB</div></div>
+          <div class="flex items-center gap-2"><div class="w-28 shrink-0 text-slate-500 mono">html2canvas</div><div class="h-5 rounded bg-red-500" style="width:23%"></div><div class="mono text-red-700 font-semibold">201 kB &nbsp;never executed</div></div>
+          <div class="flex items-center gap-2"><div class="w-28 shrink-0 text-slate-500 mono">index.es</div><div class="h-5 rounded bg-slate-700" style="width:17%"></div><div class="mono text-slate-600">151 kB</div></div>
+          <div class="flex items-center gap-2"><div class="w-28 shrink-0 text-slate-500 mono">svg2pdf</div><div class="h-5 rounded bg-slate-700" style="width:10%"></div><div class="mono text-slate-600">87 kB</div></div>
+          <div class="flex items-center gap-2"><div class="w-28 shrink-0 text-slate-500 mono">purify.es</div><div class="h-5 rounded bg-red-500" style="width:3.5%"></div><div class="mono text-red-700 font-semibold">29 kB &nbsp;never executed</div></div>
+        </div>
+        <p class="mt-3 text-xs text-slate-500">≈ 858 kB raw / ≈ 265 kB gzipped, of which ≈ 230 kB raw / ≈ 59 kB gzipped is dead weight. For comparison the entire app bundle is 106 kB / 31 kB gzipped.</p>
+      </div>
+      <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Why it matters now:</span> mobile and tablet testing starts this week, and <span class="mono">manual-testing-checklist.md</span> already warns testers that the first PDF export "fetches an extra piece in the background." On a phone on mobile data that pause is a quarter of a megabyte longer than it needs to be, and a failed fetch surfaces as a failed export.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Solution:</span> alias <span class="mono">html2canvas</span> and <span class="mono">dompurify</span> to an empty stub module in <span class="mono">vite.config</span>'s <span class="mono">resolve.alias</span>. Nothing in this app reaches the code paths that call them, so the stub is never touched at runtime. Verify by re-running the build and checking those two chunks are gone.</p>
+    </article>
+
+    <!-- F6 -->
+    <article class="rounded-xl border border-amber-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-amber-500 text-white text-xs font-bold sev">S3 · Medium</span>
+        <h3 class="font-semibold text-slate-900">6 · The Time/Quantity popover positions itself once, horizontally only</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/components/FieldPopover/FieldPopover.tsx:40–78</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> three limitations compound. The edge-flip runs inside <span class="mono">useEffect(…, [])</span>, so it never re-runs on resize or rotation. It only flips horizontally — there is no vertical handling at all, so a popover opened from a trigger low in the viewport renders below the fold. And focus is moved with <span class="mono">focus({ preventScroll: true })</span>, which deliberately stops the browser from scrolling it into view. Each decision is individually well-reasoned and documented in the file; together they mean a popover can open where the user cannot see it and the page will not move to help.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Reachability:</span> highest on a phone, where the viewport is short and the on-screen keyboard removes another 40% of it the moment the user taps an amount field. No automated check covers it: the driver measures overflow at 390px with nothing open.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Solution:</span> see candidate 3 — extract the placement decision into a pure function that takes the anchor rect, the popover size and the viewport, and returns a placement. That makes both the vertical case and the re-run-on-resize case testable without a browser, instead of adding more untested branches inline.</p>
+    </article>
+
+    <!-- F9 -->
+    <article class="rounded-xl border border-amber-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-amber-500 text-white text-xs font-bold sev">S3 · Medium</span>
+        <span class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[11px] font-semibold">NEEDS A DEVICE TO CONFIRM</span>
+        <h3 class="font-semibold text-slate-900">9 · Every download revokes its object URL synchronously</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/lib/download.ts:21–28</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> <span class="mono">downloadBlob</span> creates an object URL, clicks a detached <span class="mono">&lt;a download&gt;</span>, and calls <span class="mono">URL.revokeObjectURL</span> on the very next line. Chromium tolerates this. Safari — particularly iOS Safari, and particularly for larger blobs like a multi-page PDF — has a long history of cancelling the download when the URL is revoked before the transfer is handed off, and some browsers require the anchor to be in the document at all.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Why it matters now:</span> this is the single code path behind all four export formats, and it has only ever been exercised on desktop Chromium. It is listed as Medium rather than High because it is not yet reproduced — but if iPhone testers report "nothing happens when I export", this is the first place to look.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Solution:</span> append the anchor to <span class="mono">document.body</span> before clicking, remove it afterward, and defer the revoke by one turn of the event loop. Three lines, no behaviour change on desktop.</p>
+    </article>
+
+    <!-- F13 -->
+    <article class="rounded-xl border border-amber-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-amber-500 text-white text-xs font-bold sev">S3 · Medium</span>
+        <h3 class="font-semibold text-slate-900">13 · An unreadable save is protected for exactly one edit, then destroyed</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/state/persistence.ts:112–141</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> when <span class="mono">migrate()</span> rejects a saved document, the app falls back to a blank one and tells the user "The old save has not been overwritten." That is true at the moment it is shown, and <span class="mono">skipNextAutosave</span> correctly stops the blank document being written immediately. But the very next keystroke autosaves over the unreadable record permanently, with no warning and no way to get it back. The reassuring message and the actual guarantee have different lifetimes.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Solution:</span> before falling back, copy the unreadable record to a second IndexedDB key (<span class="mono">…:document.recovered</span>) so it survives regardless of what the user does next, and say so in the toast. Cheap, and it turns "your work is gone" into "your work is recoverable by someone who can read JSON."</p>
+    </article>
+
+    <!-- F7 -->
+    <article class="rounded-xl border border-amber-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-amber-500 text-white text-xs font-bold sev">S3 · Medium</span>
+        <span class="px-2 py-0.5 rounded bg-violet-100 text-violet-800 text-[11px] font-semibold">ACCESSIBILITY</span>
+        <h3 class="font-semibold text-slate-900">7 · The confirm dialogs are modal in behaviour but not in declaration</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/components/ConfirmDialog/ConfirmDialog.tsx:33</span>, <span class="mono text-xs">src/lib/dialog-focus-trap.ts:32–34</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> Import and New-document both carry <span class="mono">role="alertdialog"</span> and trap Tab between two buttons, but three things are missing: <span class="mono">aria-modal="true"</span> is never set; nothing marks the rest of the page inert or <span class="mono">aria-hidden</span>, so a screen reader in browse mode can still walk the document behind the dialog; and when the dialog closes, focus is never returned to the button that opened it, so a keyboard user lands back on <span class="mono">&lt;body&gt;</span> and has to Tab from the top. <span class="mono">FieldPopover</span> already restores focus correctly — the two dialogs are the ones that don't.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Note:</span> this is pre-existing, not introduced by the <span class="mono">ConfirmDialog</span> extraction. The extraction is what makes it cheap to fix, because there is now exactly one place to fix it.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Solution:</span> add <span class="mono">aria-modal="true"</span>, capture <span class="mono">document.activeElement</span> when the trap arms and restore it on teardown (the same pattern <span class="mono">FieldPopover</span> uses in its effect cleanup), and set <span class="mono">inert</span> on the app root while a dialog is open.</p>
+    </article>
+
+    <!-- F10 + F11 combined -->
+    <article class="rounded-xl border border-amber-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-amber-500 text-white text-xs font-bold sev">S3 · Medium</span>
+        <span class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[11px] font-semibold">STRUCTURAL</span>
+        <h3 class="font-semibold text-slate-900">10 &amp; 11 · The entire component tree has no unit tests, and the browser driver knows only two viewports</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/components/**</span> (1,905 lines, 13 components), <span class="mono text-xs">.claude/skills/run-instruction-builder/driver.mjs:22,649</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> all 155 tests live in <span class="mono">lib/</span>, <span class="mono">model/</span> and <span class="mono">state/</span>. There is not one test file under <span class="mono">src/components/</span>, and no DOM test environment is configured. The only verification any component gets is the browser driver — 56 checks, which is genuinely good coverage — but it runs at exactly two viewport widths, 1400px and 390px. Nothing between them is ever exercised.</p>
+      <div class="mt-4 diag">
+        <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">Viewport coverage against the one breakpoint that exists</p>
+        <div class="relative h-24">
+          <div class="absolute inset-x-0 top-9 h-2 rounded bg-slate-200"></div>
+          <div class="absolute top-9 h-2 rounded bg-amber-400" style="left:0%;width:2%"></div>
+          <div class="absolute top-9 h-2 rounded bg-amber-400" style="left:96%;width:4%"></div>
+          <div class="absolute top-2 text-[11px] mono text-slate-700" style="left:0%">390px ✓</div>
+          <div class="absolute top-2 text-[11px] mono text-slate-700" style="left:88%">1400px ✓</div>
+          <div class="absolute top-[3.1rem] border-l-2 border-dashed border-red-500 h-8" style="left:29%"></div>
+          <div class="absolute top-[4.6rem] text-[11px] mono text-red-700 -translate-x-1/2" style="left:29%">800px — the layout switch</div>
+          <div class="absolute top-[0.3rem] text-[11px] text-red-700 font-semibold" style="left:24%">iPad portrait 768px · iPad landscape 1024px · narrow desktop 850–1100px</div>
+          <div class="absolute top-9 h-2" style="left:22%;width:62%;background:repeating-linear-gradient(45deg,#fecaca,#fecaca 5px,#fee2e2 5px,#fee2e2 10px);border-radius:4px"></div>
+        </div>
+        <p class="mt-1 text-xs text-slate-500">The hatched band is the untested region. It contains both sides of the only breakpoint in the stylesheet, and it is exactly where the incoming tablet testers live.</p>
+      </div>
+      <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Solution, in two independent parts:</span> (a) add 768px and 1024px passes to the driver — this is cheap, needs no new dependency, and directly de-risks the testing round that is starting now; (b) treat the missing component test surface as an architecture problem rather than a tooling one — see candidate 3. Adding a DOM test environment would mean touching the pinned Vite version, which <span class="mono">known-issues.md</span> already defers for good reasons; pushing testable logic out of components does not.</p>
+    </article>
+
+    <!-- F1 -->
+    <article class="rounded-xl border border-sky-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-sky-500 text-white text-xs font-bold sev">S4 · Low</span>
+        <h3 class="font-semibold text-slate-900">1 · QuantityForm's Save gate still duplicates buildQuantity's rule</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/components/TokenDetails/QuantityForm.tsx:27–28</span>, <span class="mono text-xs">src/lib/quantity.ts:16</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> the form computes <span class="mono">isValid</span> inline and <span class="mono">buildQuantity</span> re-derives the identical rule. This is precisely the drift <span class="mono">a36b94d</span> just removed from <span class="mono">DurationForm</span>, left in place one directory away. They agree today; the fix is a two-line change that makes them unable to disagree.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Solution:</span> <span class="mono">const built = buildQuantity(amount, unit)</span>, then gate Save on <span class="mono">!built</span> — the same shape <span class="mono">DurationForm</span> now uses. Keep the inline error message, which is genuinely extra information the builder doesn't carry.</p>
+    </article>
+
+    <!-- F2 -->
+    <article class="rounded-xl border border-sky-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-sky-500 text-white text-xs font-bold sev">S4 · Low</span>
+        <span class="px-2 py-0.5 rounded bg-slate-900 text-white text-[11px] font-semibold">CONFIRMED BY EXECUTION</span>
+        <h3 class="font-semibold text-slate-900">2 · buildDuration stores a fractional seconds value whose own label disagrees with it</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/lib/duration.ts:56–69</span>, <span class="mono text-xs">src/components/DurationField/DurationForm.tsx:23–26</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> the d/h/m/s inputs are <span class="mono">type="text"</span> and coerced with <span class="mono">Number()</span>, so "1.5" is accepted as 1.5. <span class="mono">buildDuration</span> clamps the range but never rounds, so it returns a value that contradicts itself:</p>
+      <div class="mt-3 rounded-lg bg-slate-900 text-slate-100 p-3 text-xs mono overflow-x-auto"><pre>buildDuration(0, 0, 0, 1.5)
+// → { label: "1s", seconds: 1.5 }
+//     displayed ↑        ↑ stored, exported, and summed</pre></div>
+      <p class="mt-2 text-sm text-slate-700">The fractional part then accumulates through <span class="mono">sumDurations</span> into step totals and the document heading, where it stays invisible because <span class="mono">formatDuration</span> floors. JSON export round-trips the fractional value; the canvas, the PDF heading and the UI all show the floored one. <span class="mono">a36b94d</span> fixed the gate that let a sub-1-second entry through; it did not fix the builder that accepts a fractional one above 1.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Solution:</span> round the total in <span class="mono">buildDuration</span> before clamping. One line, and <span class="mono">duration.test.ts</span> is already the right place to pin it.</p>
+    </article>
+
+    <!-- F3 -->
+    <article class="rounded-xl border border-sky-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-sky-500 text-white text-xs font-bold sev">S4 · Low</span>
+        <h3 class="font-semibold text-slate-900">3 · CollapsedField writes local state even when it is controlled</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/components/CollapsedField/CollapsedField.tsx:71–78</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> <span class="mono">editing = controlledEditing ?? uncontrolledEditing</span>, but <span class="mono">setEditing</span> unconditionally writes <span class="mono">uncontrolledEditing</span> as well as calling <span class="mono">onEditingChange</span>. The component therefore holds two sources of truth and relies on an unstated invariant: that a controlled caller passes a non-<span class="mono">undefined</span> boolean on <em>every</em> render. Both current controlled callers do. The moment one passes <span class="mono">editing</span> conditionally, the stale local value takes over and the field opens or closes on its own.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Note:</span> this is the candidate flagged in the previous architecture report as having "the strongest deletion-test evidence on the list (two independently shipped bugs)". It is still open, and this pass confirms the invariant is still unenforced.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Solution:</span> only write local state when <span class="mono">controlledEditing === undefined</span>. Or, better, split the decision out of the component entirely — see candidate 3.</p>
+    </article>
+
+    <!-- F8 -->
+    <article class="rounded-xl border border-sky-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-sky-500 text-white text-xs font-bold sev">S4 · Low</span>
+        <span class="px-2 py-0.5 rounded bg-violet-100 text-violet-800 text-[11px] font-semibold">ACCESSIBILITY</span>
+        <h3 class="font-semibold text-slate-900">8 · FieldPopover traps Tab while declaring itself non-modal</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/components/FieldPopover/FieldPopover.tsx:80–98,101</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> the element is <span class="mono">role="dialog" aria-modal="false"</span>, which tells assistive technology "you can move out of this normally" — and then the keydown handler cycles Tab back to the first control, so you cannot. A keyboard user's only exits are Escape, Save, or Cancel. Either declaration would be defensible; the contradiction is what isn't.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Solution:</span> decide which it is. Given this popover edits a value and has an explicit Cancel, modal is the honest answer: set <span class="mono">aria-modal="true"</span> and keep the trap.</p>
+    </article>
+
+    <!-- F12 -->
+    <article class="rounded-xl border border-sky-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-sky-500 text-white text-xs font-bold sev">S4 · Low</span>
+        <h3 class="font-semibold text-slate-900">12 · migrate() passes unknown properties straight through into the saved document</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/model/migrate.ts:135</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> the final <span class="mono">return { ...doc, steps } as unknown as InstructionDocument</span> keeps every property the input JSON carried, validated or not, and the same applies per step and per token. An imported file can therefore inject arbitrary keys that are then autosaved and re-exported forever. There are also no length bounds: the UI caps titles at 50 characters and notes at 249, but an imported document is not checked against either, so a 10,000-character title renders straight into the toolbar input and the confirm dialog.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Reachability and impact:</span> low — this is a local-first app with no server and no rendering of raw HTML, so the exposure is bloat and layout damage, not injection. Worth folding into Phase 4 task 32 rather than fixing in isolation.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Solution:</span> construct the returned document from named fields instead of spreading, and clamp imported string lengths to the same constants the UI enforces.</p>
+    </article>
+
+    <!-- F14 -->
+    <article class="rounded-xl border border-sky-300 bg-white p-5 card-shadow">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-0.5 rounded bg-sky-500 text-white text-xs font-bold sev">S4 · Low</span>
+        <h3 class="font-semibold text-slate-900">14 · A single step taller than one PDF page overflows the page margins</h3>
+      </div>
+      <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/lib/pdf-export.ts:90–113</span></p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Problem:</span> <span class="mono">paginateSteps</span> deliberately places an over-tall step alone on its page rather than splitting it — correct. But <span class="mono">pdf-export</span> then renders that slice at <span class="mono">sliceHeight * scale</span>, which for such a step exceeds the usable page height, so it runs off the bottom of the A4 page instead of being scaled down to fit. The existing comment estimates this needs roughly 70+ tokens in one step.</p>
+      <p class="mt-2 text-sm text-slate-700"><span class="font-medium">Solution:</span> when a page holds exactly one step and its scaled height exceeds <span class="mono">USABLE_HEIGHT_MM</span>, derive the scale from the height instead of the width and centre the result horizontally.</p>
+    </article>
+
+  </div>
+</section>
+
+<!-- ============ C. RELISTED KNOWN / DEFERRED ============ -->
+<section class="max-w-6xl mx-auto px-6 pt-14">
+  <h2 class="text-2xl font-semibold text-slate-900">C. Every tracked issue, relisted with a severity</h2>
+  <p class="mt-2 text-slate-600 max-w-3xl">
+    Everything currently open in <span class="mono">docs/known-issues.md</span>, re-checked against source today and graded on the same scale as the new findings, so the two lists can be read together.
+  </p>
+
+  <div class="mt-5 overflow-x-auto rounded-xl border border-slate-200 bg-white card-shadow">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-100 text-slate-600 text-left">
+        <tr>
+          <th class="px-4 py-3 font-semibold">Severity</th>
+          <th class="px-4 py-3 font-semibold">Issue</th>
+          <th class="px-4 py-3 font-semibold">Still accurate?</th>
+          <th class="px-4 py-3 font-semibold">Recommended disposition</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <tr>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-amber-500 text-white text-xs font-bold whitespace-nowrap">S3</span></td>
+          <td class="px-4 py-3 align-top"><span class="font-medium">Mobile layout order buries the canvas below an empty Token details placeholder.</span><div class="text-xs text-slate-500 mt-1">Deferred to task 31.</div></td>
+          <td class="px-4 py-3 align-top text-slate-600">Yes — confirmed in <span class="mono">app.tsx</span>'s column order plus the single 800px query.</td>
+          <td class="px-4 py-3 align-top text-slate-600">Raised from the doc's implied low priority. This is the first thing every mobile tester meets, and mobile testing starts now. Worth doing <em>before</em> the tablet round rather than after it, so the feedback is about the real layout.</td>
+        </tr>
+        <tr>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-amber-500 text-white text-xs font-bold whitespace-nowrap">S3</span></td>
+          <td class="px-4 py-3 align-top"><span class="font-medium">No keyboard way to reorder a token, or move it to another step.</span><div class="text-xs text-slate-500 mt-1">Out of scope for task 22 by explicit agreement.</div></td>
+          <td class="px-4 py-3 align-top text-slate-600">Yes — drag is still the only path; steps do have Move up/down.</td>
+          <td class="px-4 py-3 align-top text-slate-600">Genuine WCAG 2.1.1 gap for a core operation, not a nice-to-have. Note that finding 4 above is the latent hazard that <em>would</em> be triggered by implementing it naively, so fix 4 first.</td>
+        </tr>
+        <tr>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-sky-500 text-white text-xs font-bold whitespace-nowrap">S4</span></td>
+          <td class="px-4 py-3 align-top"><span class="font-medium">Token/attachment vocabulary enumerated in several places.</span><div class="text-xs text-slate-500 mt-1"><span class="mono">TokenCategory</span> hand-copied into <span class="mono">TOKEN_CATEGORIES</span> and <span class="mono">STEP_TOKEN_CATEGORIES</span>; <span class="mono">AttachmentKind</span> a separate narrower type. Deferred to Phase 4 task 32.</div></td>
+          <td class="px-4 py-3 align-top text-slate-600">Yes, and it has shrunk — the reversed-order array pair is genuinely gone.</td>
+          <td class="px-4 py-3 align-top text-slate-600">Keep deferred to task 32. Fold finding 12 into the same piece of work: both are about <span class="mono">migrate</span>/<span class="mono">model</span> not owning the vocabulary it validates against.</td>
+        </tr>
+        <tr>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-sky-500 text-white text-xs font-bold whitespace-nowrap">S4</span></td>
+          <td class="px-4 py-3 align-top"><span class="font-medium">Token icons and labels are small at 390px.</span></td>
+          <td class="px-4 py-3 align-top text-slate-600">Yes — the <span class="mono">clamp(480px, 100%, 960px)</span> on the SVG means the canvas card scrolls sideways on a phone by design.</td>
+          <td class="px-4 py-3 align-top text-slate-600">Bundle with the mobile layout reorder above; they are one piece of work about the same screen.</td>
+        </tr>
+        <tr>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-slate-400 text-white text-xs font-bold whitespace-nowrap">S5</span></td>
+          <td class="px-4 py-3 align-top"><span class="font-medium">Full canvas re-render on any edit anywhere.</span><div class="text-xs text-slate-500 mt-1">Investigated during task 24 and deferred with a documented reason.</div></td>
+          <td class="px-4 py-3 align-top text-slate-600">Yes, and slightly worse than the doc says: <span class="mono">App</span> itself now also reads <span class="mono">document.value.steps</span>, and computes <em>two</em> full layouts per edit (live + export).</td>
+          <td class="px-4 py-3 align-top text-slate-600">Stay deferred — the reasoning holds at this app's scale. But update the doc to say "two layouts, three canvases", and see candidate 5 for the cheap half of the fix.</td>
+        </tr>
+        <tr>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-slate-400 text-white text-xs font-bold whitespace-nowrap">S5</span></td>
+          <td class="px-4 py-3 align-top"><span class="font-medium">An edit within ~200ms of closing the tab can be lost.</span></td>
+          <td class="px-4 py-3 align-top text-slate-600">Yes. The <span class="mono">pagehide</span>/<span class="mono">visibilitychange</span> flush and the 200ms debounce are both in place as described.</td>
+          <td class="px-4 py-3 align-top text-slate-600">Stay accepted — it is a browser limitation and the mitigation is correct. Already disclosed to testers.</td>
+        </tr>
+        <tr>
+          <td class="px-4 py-3 align-top"><span class="px-2 py-0.5 rounded bg-slate-400 text-white text-xs font-bold whitespace-nowrap">S5</span></td>
+          <td class="px-4 py-3 align-top"><span class="font-medium">Vite / esbuild / vitest dev-only advisories (3 moderate, 1 high, 1 critical).</span></td>
+          <td class="px-4 py-3 align-top text-slate-600">Yes. None reach the production bundle; the two operational guardrails (no <span class="mono">--host</span>, never <span class="mono">vitest --ui</span>) are the mitigation.</td>
+          <td class="px-4 py-3 align-top text-slate-600">Stay deferred. Worth noting that finding 10's "add a DOM test environment" temptation would force this upgrade — which is a further reason to prefer candidate 3's approach instead.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-5 rounded-xl border border-slate-200 bg-white p-5">
+    <h3 class="font-semibold text-slate-900 text-sm">Two documentation corrections worth making</h3>
+    <ul class="mt-2 space-y-2 text-sm text-slate-600 list-disc pl-5">
+      <li><span class="mono">known-issues.md</span>'s canvas re-render entry describes one component. It is now three mounted <span class="mono">InstructionCanvas</span> instances (live, Preview, hidden export) plus <span class="mono">App</span> itself, all subscribed to the whole document.</li>
+      <li>The same entry's "revisit if a document grows far beyond a handful of steps" trigger should also name the export canvas, since that one re-renders on every keystroke whether or not anyone is exporting.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ D. ARCHITECTURE CANDIDATES ============ -->
+<section class="max-w-6xl mx-auto px-6 pt-14">
+  <h2 class="text-2xl font-semibold text-slate-900">D. Architecture candidates</h2>
+  <p class="mt-2 text-slate-600 max-w-3xl">
+    Deepening opportunities, in the vocabulary of <span class="mono">/codebase-design</span>: a module is <strong>deep</strong> when a lot of behaviour sits behind a small <strong>interface</strong>, and a <strong>seam</strong> is where that interface lives. Each candidate is judged by the deletion test — would removing it concentrate complexity, or just move it?
+  </p>
+
+  <!-- C3 : STRONG -->
+  <article class="mt-6 rounded-xl border-2 border-emerald-400 bg-white p-6 card-shadow">
+    <div class="flex flex-wrap items-center gap-3">
+      <span class="px-2.5 py-1 rounded-full bg-emerald-600 text-white text-xs font-bold">Strong</span>
+      <span class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">TOP RECOMMENDATION</span>
+      <h3 class="text-lg font-semibold text-slate-900">Candidate 3 · Give field placement and field open/close state a real seam outside the components</h3>
+    </div>
+
+    <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/components/FieldPopover/FieldPopover.tsx</span>, <span class="mono text-xs">src/components/CollapsedField/CollapsedField.tsx</span>, <span class="mono text-xs">src/components/TokenDetails/TokenDetails.tsx</span> (<span class="mono">TimeAndQuantityRow</span>)</p>
+
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Problem:</span> two pieces of real decision logic are trapped inside render functions where nothing can test them. <span class="mono">FieldPopover</span> decides <em>where</em> a popover goes — currently one horizontal comparison, run once at mount, with no vertical case. <span class="mono">CollapsedField</span> decides <em>whether</em> a field is open — currently two overlapping state sources held together by an unwritten rule. Both are pure functions wearing component costumes. The consequences are already visible: findings 3 and 6 are both symptoms of the same missing seam, and the placement bug is the single most likely thing mobile testers will hit this week.</p>
+
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Solution:</span> extract two small pure modules into <span class="mono">lib/</span> — the same move that already paid off for <span class="mono">canvas-layout.ts</span> and <span class="mono">pointer-drag.ts</span>.</p>
+    <ul class="mt-2 text-sm text-slate-600 list-disc pl-5 space-y-1">
+      <li><span class="mono">resolveFieldPlacement(anchorRect, popoverSize, viewport)</span> → <span class="mono">{ horizontal: "left" | "right", vertical: "below" | "above" }</span>. Pure arithmetic, no DOM. The component's effect becomes: measure, call, apply — and re-run on resize, because now that is one extra dependency rather than one more untested branch.</li>
+      <li><span class="mono">resolveFieldEditing(controlled, local)</span>, or simply the discipline that local state is only written when <span class="mono">controlled === undefined</span>. Small enough that the honest version is a guard clause, not a module.</li>
+    </ul>
+
+    <div class="mt-5 grid md:grid-cols-2 gap-5">
+      <div class="diag">
+        <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">Before — decision inside the render</p>
+        <div class="space-y-1.5">
+          <div class="box bg-slate-200 text-slate-700 border border-slate-300">FieldPopover component</div>
+          <div class="ml-4 space-y-1.5">
+            <div class="box bg-amber-100 text-amber-900 border border-amber-300 text-left">useEffect(…, []) · runs once<br><span class="text-[11px] opacity-70">edge-flip: horizontal only, never re-run</span></div>
+            <div class="box bg-amber-100 text-amber-900 border border-amber-300 text-left">focus(preventScroll)</div>
+            <div class="box bg-amber-100 text-amber-900 border border-amber-300 text-left">outside-click listener</div>
+            <div class="box bg-amber-100 text-amber-900 border border-amber-300 text-left">Tab trap</div>
+          </div>
+          <div class="arrow pt-1">↓ test surface</div>
+          <div class="box bg-red-100 text-red-800 border border-red-300">a real browser, at two fixed widths</div>
+        </div>
+      </div>
+      <div class="diag">
+        <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">After — decision behind a seam</p>
+        <div class="space-y-1.5">
+          <div class="box bg-slate-200 text-slate-700 border border-slate-300">FieldPopover component</div>
+          <div class="ml-4 space-y-1.5">
+            <div class="box bg-slate-100 text-slate-600 border border-slate-300 text-left">measure → apply → listen<br><span class="text-[11px] opacity-70">no arithmetic left in here</span></div>
+          </div>
+          <div class="arrow">↓ calls</div>
+          <div class="box bg-emerald-600 text-white">lib/field-placement.ts<br><span class="text-[11px] opacity-80">resolveFieldPlacement(anchor, size, viewport)</span></div>
+          <div class="arrow pt-1">↓ test surface</div>
+          <div class="box bg-emerald-100 text-emerald-800 border border-emerald-300">Vitest, any viewport you can type</div>
+        </div>
+      </div>
+    </div>
+
+    <p class="mt-4 text-sm text-slate-700"><span class="font-medium">Benefits:</span> <em>leverage</em> — every future floating element in this app gets correct placement by calling one function rather than re-deriving the comparison. <em>Locality</em> — "where does a floating panel go?" becomes one file with one answer, instead of a rule embedded in one component's effect. And it converts the first genuinely untestable-by-Vitest behaviour in <span class="mono">src/components/</span> into a tested one without adding a DOM test environment, which would drag in the Vite major upgrade that <span class="mono">known-issues.md</span> defers.</p>
+
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Deletion test:</span> delete <span class="mono">field-placement.ts</span> and the vertical-flip rule, the edge-flip rule and the resize rule scatter back into every component that floats something. Complexity concentrates — it earns its keep.</p>
+  </article>
+
+  <!-- C1 : the no-op guard question -->
+  <article class="mt-5 rounded-xl border border-slate-300 bg-white p-6 card-shadow">
+    <div class="flex flex-wrap items-center gap-3">
+      <span class="px-2.5 py-1 rounded-full bg-slate-500 text-white text-xs font-bold">Speculative — recommend NOT doing</span>
+      <h3 class="text-lg font-semibold text-slate-900">Candidate 1 · Consolidating the three no-op guards</h3>
+    </div>
+    <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/state/document.ts:256, 269, 442, 483</span></p>
+    <p class="mt-3 text-sm text-slate-700">This was raised as an open question after the last review and deserves a straight answer, so it is included here as a candidate that should be <strong>closed, not built</strong>.</p>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">The case for:</span> three checks — <span class="mono">tokensEqual</span>, <span class="mono">clamped === fromIndex</span>, <span class="mono">attachmentsEqual</span> — were added in one commit, all serving one concept: "don't record history for a change that changed nothing." Three differently-named helpers for one idea looks like Duplicated Code.</p>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">The case against, which is stronger:</span> they only share a <em>purpose</em>, not a <em>shape</em>. One is per-slot identity over an array whose elements are provably never cloned. One is index arithmetic that is a <em>proof</em> of equality, not a comparison — reinserting at the removal index reconstructs the original exactly, which is cheaper and more precise than comparing arrays. One is shallow key/value equality over a flat object. A shared <span class="mono">noopGuard(current, next, isEqual)</span> would take the comparator as a parameter, meaning each call site still supplies the only part that differs, while the shared part collapses to <span class="mono">if (isEqual(a, b)) return;</span> — a single line, hoisted behind an indirection, for one caller each. That is textbook Speculative Generality.</p>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">And there is a specific thing to lose:</span> <span class="mono">reorderStepsCore</span>'s comment argues that the index check is "a precise stand-in for a full array-value-equality check, not just an approximation of one." Generalising it into a comparator parameter is exactly how that reasoning gets deleted, and how the next person "simplifies" it into a slower array comparison believing they are fixing an approximation.</p>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">What is worth doing instead — a five-minute version:</span> nothing structural. Add one sentence to <span class="mono">setSteps</span>'s doc comment naming the convention ("callers that can cheaply detect a no-op guard <em>before</em> calling this, so history is not polluted; see the three guards below, deliberately different in shape"). The concept becomes visible without an abstraction existing to hold it.</p>
+    <p class="mt-3 text-sm text-slate-600 italic">Deletion test result: deleting a hypothetical shared guard would move one line to three places, not concentrate anything. It fails the test, which is why this is the recommendation to decline.</p>
+  </article>
+
+  <!-- C4 -->
+  <article class="mt-5 rounded-xl border border-slate-300 bg-white p-6 card-shadow">
+    <div class="flex flex-wrap items-center gap-3">
+      <span class="px-2.5 py-1 rounded-full bg-sky-600 text-white text-xs font-bold">Worth exploring</span>
+      <h3 class="text-lg font-semibold text-slate-900">Candidate 4 · Stop letting a null SVG node mean "export silently did nothing"</h3>
+    </div>
+    <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/lib/document-actions.ts:80–101</span>, <span class="mono text-xs">src/app.tsx:90–114</span></p>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Problem:</span> <span class="mono">76f17fb</span> replaced a class-name <span class="mono">querySelector</span> with a typed ref — a real improvement — but kept <span class="mono">svgElement: SVGSVGElement | null</span> in <span class="mono">CanvasExportInput</span>. So the nullability propagates into every export entry point, and <span class="mono">runCanvasExport</span> handles it by returning <span class="mono">{}</span>: no file, no error, no toast. The user clicks Export and nothing at all happens. The code comment argues this is unreachable after first render, which is probably true — and if it is true, the type should say so rather than forcing three call sites to carry a case that cannot occur.</p>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Solution:</span> have <span class="mono">App</span> narrow once at the click handler, and make <span class="mono">CanvasExportInput.svgElement</span> non-nullable. If the ref really is null, that is a genuine error worth a toast, not a silent return.</p>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Benefits:</span> the interface stops lying about what can happen, and the one remaining path where an export can do nothing visible is removed just as mobile testers — who have the least ability to diagnose a silent failure — start exercising it.</p>
+  </article>
+
+  <!-- C5 -->
+  <article class="mt-5 rounded-xl border border-slate-300 bg-white p-6 card-shadow">
+    <div class="flex flex-wrap items-center gap-3">
+      <span class="px-2.5 py-1 rounded-full bg-sky-600 text-white text-xs font-bold">Worth exploring</span>
+      <h3 class="text-lg font-semibold text-slate-900">Candidate 5 · Move canvas layout behind a computed signal instead of App's render</h3>
+    </div>
+    <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/app.tsx:310–321</span>, <span class="mono text-xs">src/lib/canvas-layout.ts</span></p>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Problem:</span> <span class="mono">App</span> reads <span class="mono">document.value.steps</span> in its own body purely to feed two <span class="mono">useMemo</span> calls. That subscription makes the whole application root re-render on every keystroke, which is the opposite of what a signals architecture is for — and <span class="mono">state/document.ts</span> already demonstrates the right pattern with <span class="mono">selectedStep</span>/<span class="mono">selectedToken</span> as <span class="mono">computed()</span>.</p>
+    <div class="mt-4 mermaid">
+graph LR
+  subgraph Now
+    D1[document signal] --> A1[App render]
+    A1 --> M1["useMemo liveLayout"]
+    A1 --> M2["useMemo exportLayout"]
+    M1 --> C1[live canvas]
+    M2 --> C2[preview canvas]
+    M2 --> C3[hidden export canvas]
+  end
+  subgraph Proposed
+    D2[document signal] --> K1["computed exportLayout"]
+    D2 --> K2["computed liveLayout"]
+    K1 --> P2[preview canvas]
+    K1 --> P3[hidden export canvas]
+    K2 --> P1[live canvas]
+    A2[App render] -.->|no document subscription| P1
+  end
+    </div>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Benefits:</span> <em>locality</em> — "what is the current layout?" becomes one derived value with one definition, rather than two memos hanging off a component's render. <em>Leverage</em> — anything else that needs the layout (a future radial renderer, per <span class="mono">planned-additions.md</span> item 2) reads the signal instead of being handed a prop from the root.</p>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Honest limit:</span> this does <em>not</em> fix the known per-step re-render issue, which <span class="mono">known-issues.md</span> correctly traces to <span class="mono">computeCanvasLayout</span> recomputing every <span class="mono">cardY</span> from scratch. It fixes the cheaper, separate problem of the application root re-rendering for no reason. Worth doing on its own terms; worth not overselling.</p>
+  </article>
+
+  <!-- C2 -->
+  <article class="mt-5 rounded-xl border border-slate-300 bg-white p-6 card-shadow">
+    <div class="flex flex-wrap items-center gap-3">
+      <span class="px-2.5 py-1 rounded-full bg-slate-400 text-white text-xs font-bold">Speculative</span>
+      <h3 class="text-lg font-semibold text-slate-900">Candidate 2 · Splitting state/document.ts</h3>
+    </div>
+    <p class="mt-3 text-sm text-slate-600"><span class="font-medium text-slate-700">Files:</span> <span class="mono text-xs">src/state/document.ts</span> (782 lines — the largest file in the project)</p>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">The observation:</span> one file holds session construction, the undo/redo history engine with its coalescing clock, selection repair, and twenty-five mutators. On size alone it looks like a split candidate.</p>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Why it is only speculative:</span> the module is already <em>deep</em> in the sense that matters. Its interface is a set of zero-argument verbs plus one <span class="mono">createDocumentSession()</span> factory; history is already funnelled through a single <span class="mono">setSteps</span>, so there is exactly one place to watch. Splitting the history engine out would create a new seam that nothing varies across — one adapter, hypothetical, not real. Much of the 782 lines is doc comments recording why each decision was made, which is the opposite of the problem a split solves.</p>
+    <p class="mt-3 text-sm text-slate-700"><span class="font-medium">Revisit if:</span> a second document session ever needs a <em>different</em> history policy (a bounded-size one, or no history at all). That would be the second adapter that makes the seam real.</p>
+  </article>
+</section>
+
+<!-- ============ WHAT TO DO ============ -->
+<section class="max-w-6xl mx-auto px-6 pt-14 pb-16">
+  <h2 class="text-2xl font-semibold text-slate-900">What I would do, in order</h2>
+  <div class="mt-5 space-y-3">
+    <div class="rounded-xl border border-slate-200 bg-white p-5 card-shadow flex gap-4">
+      <div class="shrink-0 w-8 h-8 rounded-lg bg-slate-900 text-white grid place-items-center font-semibold text-sm">1</div>
+      <div>
+        <p class="font-semibold text-slate-900">Before the tablet testing round — the cheap, high-value ones</p>
+        <p class="text-sm text-slate-600 mt-1">Add 768px and 1024px passes to the driver (finding 11). Stub out <span class="mono">html2canvas</span>/<span class="mono">dompurify</span> (finding 5). Fix <span class="mono">downloadBlob</span>'s revoke timing (finding 9). Together: roughly an hour, no architecture, and they remove three of the most plausible ways the mobile round produces confusing reports.</p>
+      </div>
+    </div>
+    <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-5 card-shadow flex gap-4">
+      <div class="shrink-0 w-8 h-8 rounded-lg bg-emerald-600 text-white grid place-items-center font-semibold text-sm">2</div>
+      <div>
+        <p class="font-semibold text-emerald-900">Candidate 3 — the field placement seam</p>
+        <p class="text-sm text-emerald-900/80 mt-1">The one architectural change worth making now. It closes findings 3, 6 and 8 at once, it is the only candidate that directly de-risks the testing already in progress, and it is the first crack in "nothing under <span class="mono">src/components/</span> can be unit tested" that does not require touching the deferred Vite upgrade.</p>
+      </div>
+    </div>
+    <div class="rounded-xl border border-slate-200 bg-white p-5 card-shadow flex gap-4">
+      <div class="shrink-0 w-8 h-8 rounded-lg bg-slate-900 text-white grid place-items-center font-semibold text-sm">3</div>
+      <div>
+        <p class="font-semibold text-slate-900">The one-line correctness fixes, whenever you are next in those files</p>
+        <p class="text-sm text-slate-600 mt-1">Round in <span class="mono">buildDuration</span> (finding 2). Reconcile <span class="mono">QuantityForm</span>'s Save gate (finding 1). Guard the unknown target step in <span class="mono">moveTokenCore</span> (finding 4). Each is small; each removes a way a later change becomes a bug.</p>
+      </div>
+    </div>
+    <div class="rounded-xl border border-slate-200 bg-white p-5 card-shadow flex gap-4">
+      <div class="shrink-0 w-8 h-8 rounded-lg bg-slate-900 text-white grid place-items-center font-semibold text-sm">4</div>
+      <div>
+        <p class="font-semibold text-slate-900">Close candidate 1 explicitly</p>
+        <p class="text-sm text-slate-600 mt-1">Record the decision not to consolidate the three no-op guards, with the reasoning above, so a future review does not re-raise it. This is exactly the case an ADR exists for — <span class="mono">docs/adr/</span> does not exist yet, and this would be a good reason to start it.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-8 rounded-xl border border-slate-200 bg-white p-5">
+    <h3 class="font-semibold text-slate-900 text-sm">Overall</h3>
+    <p class="mt-2 text-sm text-slate-600">
+      This codebase is in good health. The remediation work did what it set out to do and did not break anything
+      around it. Nothing found in this pass is S1 or S2 — there is no live way to lose a user's saved work. The
+      documentation is unusually accurate about its own debt, which is rare and is why this review could spend its
+      time on source rather than on reconciling claims. The two structural weaknesses worth naming plainly are the
+      untested component tree and the untested viewport band between phone and desktop, and both land at the worst
+      possible moment given that tablet testing starts this week. Item 1 above addresses the second one for about an
+      hour of work.
+    </p>
+  </div>
+
+  <p class="mt-8 text-xs text-slate-400">
+    Reviewed at <span class="mono">48fa437</span> on 18 September 2026. Every claim traced to source; findings 2 and 4
+    additionally confirmed by executing the code against a real <span class="mono">DocumentSession</span>. Temporary
+    probe files were removed and the working tree is clean.
+  </p>
+</section>
+
+</body>
+</html>
