@@ -19,8 +19,10 @@ library expansion with 12 new generic actions and 15 new ingredients, a
 copy/paste-tokens feature, a matching selected-panel border, a follow-up
 architecture review, and the `StepCard`/`TokenChip` extraction it picked up),
 updated 2026-09-18 (a whole-codebase health review, the field-placement
-seam and vertical flip it recommended, and two new tablet viewports in the
-Playwright driver)
+seam and vertical flip it recommended, two new tablet viewports in the
+Playwright driver, and then the second remediation batch from the same
+review: `docs/adr/`, deferred object-URL revokes, genuinely modal confirm
+dialogs, and the mobile layout's empty Token details placeholder)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
 [../../project-plan.md](../../project-plan.md#implementation-plan)'s Phase 3
@@ -301,6 +303,7 @@ One file per task (or per notable pass), in task-number order:
 | — | External audit evaluation (`reviews/check/` claims independently re-verified; two doc-only fixes applied; remediation plan produced) plus `TokenPicker`'s tab-semantics fix (`role="radiogroup"`/`role="radio"` with wrapping arrow-key nav) and a stale driver check fixed along the way | [reviews/2026-09-17-external-audit-evaluation.md](../reviews/2026-09-17-external-audit-evaluation.md), [accessibility-tokenpicker-radiogroup.md](./accessibility-tokenpicker-radiogroup.md) |
 | — | Architecture: 2026-09-17 copy-paste-and-PDF follow-up review, then `StepCard`/`TokenChip` extraction (`InstructionCanvas.tsx` 602 → 198 lines; two small new duplications left open) | [audits/2026-09-17-copy-paste-and-pdf-followup-review.html](../audits/2026-09-17-copy-paste-and-pdf-followup-review.html), [architecture-stepcard-tokenchip-extraction.md](./architecture-stepcard-tokenchip-extraction.md) |
 | — | Architecture: 2026-09-18 codebase health review, then the field-placement seam (`lib/field-placement.ts` gains a vertical flip and resize re-placement; `FieldPopover`'s Tab trap dropped as `aria-modal="false"` always said it was; `CollapsedField` stops writing local state while controlled) and two new tablet viewports in the driver | [audits/2026-09-18-architecture-review.html](../audits/2026-09-18-architecture-review.html), [architecture-2026-09-18-field-placement-and-tablet-viewports.md](./architecture-2026-09-18-field-placement-and-tablet-viewports.md) |
+| — | Architecture: 2026-09-18 review remediation, batch 2 (`docs/adr/` started with three entries; `downloadBlob` defers its object-URL revoke and attaches the anchor; the confirm dialogs get `aria-modal` + `inert` + focus return and lose their hand-rolled Tab cycle; the empty Token details panel collapses below 800px) | [architecture-2026-09-18-modal-dialogs-and-mobile-layout.md](./architecture-2026-09-18-modal-dialogs-and-mobile-layout.md) |
 | 31 | Refine UX | *not started* |
 
 ## Verification
@@ -340,7 +343,11 @@ One file per task (or per notable pass), in task-number order:
   driver checks covering the unchanged rendered output; the 2026-09-18
   field-placement seam added a new `field-placement.test.ts`, +6 - the first
   new test file since the PDF pagination rework, and the first to cover logic
-  lifted *out* of a component rather than logic that was always in `lib/`),
+  lifted *out* of a component rather than logic that was always in `lib/`;
+  the 2026-09-18 remediation batch 2 added none - DOM sequencing, focus
+  and attribute wiring, and one CSS rule, all three covered by the driver
+  rather than Vitest, which is now a recorded decision rather than an
+  omission: see [adr/0003](../../adr/0003-no-component-test-environment.md)),
   and `npm run build` all pass cleanly.
 - See each task's own file above for full verification detail
   (browser-driven checks, bundle size deltas, and the decisions made along

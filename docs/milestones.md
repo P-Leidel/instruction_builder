@@ -370,11 +370,31 @@ the Tab trap that `aria-modal="false"` had always denied was there.
 `CollapsedField` stopped writing local editing state while controlled in the
 same pass. The tablet viewports were deliberately committed *first*, so a
 pre-existing 768px problem could be told apart from one the placement change
-introduced; that baseline came back clean. Eleven findings, two
-documentation corrections and two ADRs worth writing remain, tracked in
-[known-issues.md](./known-issues.md#documentation-debt-from-the-2026-09-18-codebase-health-review)
-rather than only inside the report. See
+introduced; that baseline came back clean. See
 [phase-3/progress/architecture-2026-09-18-field-placement-and-tablet-viewports.md](./phase-3/progress/architecture-2026-09-18-field-placement-and-tablet-viewports.md).
+A second batch from the same review followed, also before the tablet
+round, this time working the review's ten open findings and the four
+non-accepted items already in `known-issues.md` as **one** list on one
+severity scale rather than two graded separately: `docs/adr/` now exists
+with [three entries](./adr/README.md) (the review asked for it by name,
+because its own consolidation suggestion had been re-raised by two
+successive reviews with nothing recording the answer); every export defers
+its object-URL revoke and attaches the download anchor, the one code path
+behind all four formats and the likeliest way an iPhone tester reports
+"nothing happens when I export"; the confirm dialogs became modal in
+declaration as well as behaviour (`aria-modal`, `inert` behind them, focus
+returned to the opener) with their hand-rolled two-button Tab cycle
+deleted rather than kept alongside; and the mobile layout stopped burying
+the canvas below an empty Token details placeholder. That batch also found
+three problems the report hadn't: Escape silently stopped closing the
+dialogs once focus could leave them, the opener can't be read from
+`document.activeElement` because `inert` blurs it first, and the hidden
+export canvas had been a keyboard tab stop on every page view since task
+15. Eight findings and two documentation corrections remain, tracked in
+[known-issues.md](./known-issues.md#documentation-debt-from-the-2026-09-18-codebase-health-review)
+rather than only inside the report - along with a correction to the report
+itself, whose finding 5 overstates the PDF chunk's download cost. See
+[phase-3/progress/architecture-2026-09-18-modal-dialogs-and-mobile-layout.md](./phase-3/progress/architecture-2026-09-18-modal-dialogs-and-mobile-layout.md).
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
@@ -452,7 +472,7 @@ as "untitled-instructions.\<ext\>" because no UI lets the user set
 | 27 | Add Document Title UI | ✅ |
 | 28 | UI Polish Pass | ✅ |
 | 29 | Publish MVP | ✅ (live at <https://instructionbuilder-seven.vercel.app>) |
-| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md), [eighth](./phase-3/progress/task-30-user-feedback-fixes-8.md), [ninth](./phase-3/progress/task-30-user-feedback-fixes-9.md), and [tenth](./phase-3/progress/task-30-user-feedback-fixes-10.md) feedback passes shipped, plus a [2026-09-18 health review and the field-placement seam it recommended](./phase-3/progress/architecture-2026-09-18-field-placement-and-tablet-viewports.md); testers work through [manual-testing-checklist.md](./manual-testing-checklist.md)) |
+| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md), [eighth](./phase-3/progress/task-30-user-feedback-fixes-8.md), [ninth](./phase-3/progress/task-30-user-feedback-fixes-9.md), and [tenth](./phase-3/progress/task-30-user-feedback-fixes-10.md) feedback passes shipped, plus a [2026-09-18 health review and the field-placement seam it recommended](./phase-3/progress/architecture-2026-09-18-field-placement-and-tablet-viewports.md) and [that review's second remediation batch](./phase-3/progress/architecture-2026-09-18-modal-dialogs-and-mobile-layout.md); testers work through [manual-testing-checklist.md](./manual-testing-checklist.md)) |
 | 31 | Refine UX | Not started |
 
 See [phase-3/progress/README.md](./phase-3/progress/README.md) for detail

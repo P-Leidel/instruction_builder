@@ -398,13 +398,14 @@ task, which shipped keyboard alternatives for step reordering and token
 - **What it is:** a whole-codebase review on 2026-09-18 (see
   [phase-3/audits/2026-09-18-architecture-review.html](./phase-3/audits/2026-09-18-architecture-review.html))
   produced 14 findings and re-graded every issue already tracked in this
-  file. Four of those findings have since been fixed - the
+  file. Six of those findings have since been fixed - the
   `CollapsedField` controlled-state write, the field popover's missing
-  vertical flip, its `aria-modal`/Tab-trap contradiction, and the driver
-  knowing only two viewport widths. The remaining ten exist only inside
-  that one HTML file, in a report's prose rather than as tracked items
-  anyone would find by reading this doc. Nothing below the four fixed ones
-  has an entry here yet.
+  vertical flip, its `aria-modal`/Tab-trap contradiction, the driver
+  knowing only two viewport widths, every export's same-task object-URL
+  revoke (finding 9), and the confirm dialogs being modal in behaviour
+  only (finding 7). The remaining eight exist only inside that one HTML
+  file, in a report's prose rather than as tracked items anyone would find
+  by reading this doc.
 - **What the cleanup pass is:** fold the genuinely-deferred findings from
   that report into proper sections in this file, each with the same
   What it is / Why it's not fixed / Revisit when shape as everything else
@@ -424,6 +425,25 @@ task, which shipped keyboard alternatives for step reordering and token
   [0003](./adr/0003-no-component-test-environment.md) parks component-level
   unit testing (the report's finding 10), naming the coupling to the
   deferred Vite major upgrade above that nothing else in `docs/` recorded.
+- **A correction to the report itself, recorded here because it exists
+  nowhere else (2026-09-18).** Finding 5 ("the PDF export chunk ships
+  ~230 kB of libraries the app never runs") **overstates the cost**, and
+  the numbers should not be quoted from the report as they stand. jsPDF
+  4.2.1 imports `html2canvas` and `dompurify` **dynamically**
+  (`import("html2canvas")`), not statically as the report claims. Rollup
+  emits them as separate chunks with an empty preload-deps array, so they
+  sit on the CDN and are never requested. Driven against a real production
+  build, an Export PDF click fetches exactly `jspdf.es.min` (391 kB),
+  `svg2pdf.es.min` (87 kB) and `_commonjsHelpers` (0.24 kB) - **478 kB raw
+  / ~155 kB gzipped**, not the report's 858 kB / 265 kB. `index.es`
+  (151 kB) is not fetched either; the report counted it as downloaded. So
+  the real cost is roughly 381 kB of dead chunks *deployed* that no user
+  ever downloads - a deploy-size issue, not the mobile-data issue the
+  report framed it as, which is why it was requeued as ordinary work
+  rather than fixed before the tablet round. There is also a risk the
+  report missed: aliasing `dompurify` to a stub module means that if jsPDF
+  ever reaches for it on a path this app *does* use, it fails at runtime
+  rather than at build time.
 - **Why it's not fixed now:** deliberately scoped out of the change that
   fixed the three findings above, to keep a placement fix from turning
   into a documentation pass. Deciding what is truly deferred versus merely
