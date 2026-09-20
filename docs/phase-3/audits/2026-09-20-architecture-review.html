@@ -1,0 +1,1055 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review — Visual Instruction Builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose", themeVariables: { fontSize: "12px" } });
+    </script>
+    <style>
+      body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+      code, .mono { font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace; }
+      .mermaid { display: flex; justify-content: center; }
+      .seam { stroke-dasharray: 5 4; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .label { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+      .hatch { background-image: repeating-linear-gradient(45deg, #fecaca 0 6px, #fee2e2 6px 12px); }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+
+      <header class="space-y-6">
+        <div class="flex flex-wrap items-baseline justify-between gap-4 border-b border-slate-300 pb-5">
+          <div>
+            <h1 class="font-serif text-4xl tracking-tight">Architecture review</h1>
+            <p class="text-slate-600 mt-1">Visual Instruction Builder · deepening opportunities</p>
+          </div>
+          <div class="text-right text-sm text-slate-500 mono leading-6">
+            <div>HEAD c68c80d</div>
+            <div>20 September 2026</div>
+            <div>9,588 lines of src/</div>
+          </div>
+        </div>
+
+        <div class="grid sm:grid-cols-3 gap-4">
+          <div class="rounded-lg border border-slate-200 bg-white p-4">
+            <div class="label text-slate-500 mb-3">Legend</div>
+            <ul class="space-y-2 text-sm">
+              <li class="flex items-center gap-3"><span class="inline-block w-10 h-5 rounded border border-slate-400 bg-white"></span> module</li>
+              <li class="flex items-center gap-3"><svg width="40" height="20"><line class="seam" x1="0" y1="10" x2="40" y2="10" stroke="#64748b" stroke-width="2"/></svg> seam</li>
+              <li class="flex items-center gap-3"><svg width="40" height="20"><line x1="0" y1="10" x2="34" y2="10" stroke="#dc2626" stroke-width="2"/><path d="M34 5 L40 10 L34 15 Z" fill="#dc2626"/></svg> leakage</li>
+              <li class="flex items-center gap-3"><span class="inline-block w-10 h-5 rounded deep"></span> deep module</li>
+            </ul>
+          </div>
+          <div class="rounded-lg border border-slate-200 bg-white p-4 sm:col-span-2">
+            <div class="label text-slate-500 mb-3">Where this pass looked, and what it left alone</div>
+            <p class="text-sm text-slate-700 leading-relaxed">
+              The hot spots in <code class="mono text-xs">git log</code>: the drag path
+              (<code class="mono text-xs">c68c80d</code>, today), <code class="mono text-xs">state/document.ts</code>,
+              <code class="mono text-xs">app.tsx</code>, the canvas cluster and the export pipeline.
+              Decisions recorded in <code class="mono text-xs">docs/adr/</code> 0001–0003 are settled and not re-litigated;
+              items already carrying a reasoned revisit trigger in <code class="mono text-xs">known-issues.md</code>
+              (full-canvas re-render, step-reorder marker, the style-baking allowlist) are not re-raised.
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-12">
+
+        <!-- ══════ CANDIDATE 1 ══════ -->
+        <article id="c1" class="rounded-xl border border-slate-200 bg-white p-7 space-y-6 shadow-sm">
+          <div class="space-y-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="rounded-full bg-emerald-600 text-white text-xs font-semibold px-3 py-1">Strong</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
+              <span class="rounded-full bg-indigo-50 text-indigo-700 text-xs px-3 py-1 border border-indigo-200">Top recommendation</span>
+            </div>
+            <h2 class="font-serif text-2xl">1 · Resolve a drop against the layout, not against the DOM</h2>
+            <div class="mono text-xs text-slate-500 space-y-0.5">
+              <div>src/lib/pointer-drag.ts:340–380, 268–314</div>
+              <div>src/lib/canvas-layout.ts:339–362, 425–448</div>
+              <div>src/components/InstructionCanvas/TokenChip.tsx:118–145, 165–172</div>
+              <div>src/components/TokenPicker/TokenPicker.tsx:97–120</div>
+              <div>src/styles/global.css:180–185, 487</div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <div class="label text-slate-500 mb-3">Before — geometry derived twice, through markup</div>
+              <pre class="mermaid">
+flowchart TB
+  L["canvas-layout<br/>computeCanvasLayout"] --> CP["chipPositions<br/>cx, cy, col, row"]
+  CP --> SC["StepCard / TokenChip<br/>render"]
+  SC -. "data-step-index<br/>data-step-id<br/>data-token-index" .-> DOM["rendered SVG<br/>+ CSS that must cooperate"]
+  DOM -.->|"elementFromPoint<br/>+ N x getBoundingClientRect"| PD["pointer-drag<br/>resolveTokenDropTarget"]
+  PD --> RS["resolveDropSlot<br/>pure, tested"]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#7f1d1d;
+  classDef ok stroke:#059669,stroke-width:2px;
+  class DOM,PD leak
+  class RS ok
+              </pre>
+            </div>
+            <div class="rounded-lg border border-slate-900 bg-white p-4">
+              <div class="label text-slate-500 mb-3">After — one seam, one geometry</div>
+              <pre class="mermaid">
+flowchart TB
+  L["canvas-layout<br/>computeCanvasLayout"] --> CP["CanvasLayout"]
+  CP --> SC["StepCard / TokenChip<br/>render only"]
+  CP --> PD["resolveDropTarget<br/>point, layout"]
+  SVG["the canvas being dragged over"] -->|"one getScreenCTM()"| PT["client point<br/>into canvas units"]
+  PT --> PD
+  PD --> OUT["TokenDropSlot<br/>previewed and committed"]
+  classDef deep fill:#0f172a,color:#ffffff,stroke:#0f172a,stroke-width:2px;
+  class PD deep
+              </pre>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm leading-relaxed">
+            <div>
+              <div class="label text-slate-500 mb-1">Problem</div>
+              <p><code class="mono text-xs">computeCanvasLayout</code> already knows every chip's exact position, and
+              the drag path throws that away to re-derive it out of rendered markup — twice per drag.</p>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-1">Solution</div>
+              <p>Convert the pointer's client point into canvas units once via <code class="mono text-xs">getScreenCTM()</code>,
+              resolve step and slot purely against the <code class="mono text-xs">CanvasLayout</code> the canvas was rendered
+              from, and commit the slot the preview already established.</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm space-y-2">
+              <div class="label text-red-700">A. The seam is in neither interface</div>
+              <p class="text-red-900 leading-relaxed">
+                <code class="mono text-xs">data-step-index</code>, <code class="mono text-xs">data-step-id</code> and
+                <code class="mono text-xs">data-token-index</code> are the whole contract between the canvas modules
+                and the drag module. Nothing type-checks them; a rename in
+                <code class="mono text-xs">TokenChip.tsx:125</code> breaks drag silently.
+              </p>
+              <p class="text-red-900 leading-relaxed">
+                Three CSS rules are load-bearing on it and say so nowhere:
+                <code class="mono text-xs">.drag-ghost { pointer-events: none }</code> (global.css:487 — the ghost sits
+                exactly under the pointer, and its comment explains text selection, not hit-testing); the export
+                canvas's <code class="mono text-xs">width: 0</code> (global.css:180); and
+                <code class="mono text-xs">@media print</code> restoring that canvas to
+                <code class="mono text-xs">width: auto</code>. <code class="mono text-xs">StepCard</code> emits the
+                drag protocol's attributes unconditionally, so all three mounted canvases publish it — only zero
+                sizing keeps two of them unreachable.
+              </p>
+            </div>
+
+            <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm space-y-2">
+              <div class="label text-red-700">B. The preview and the commit are two resolutions</div>
+              <p class="text-red-900 leading-relaxed">
+                <code class="mono text-xs">TokenChip.tsx:134</code> resolves on every move to draw the marker;
+                <code class="mono text-xs">:141</code> resolves again, independently, to perform the move.
+                <code class="mono text-xs">TokenPicker</code> splits the same way. The preview runs through
+                <code class="mono text-xs">beginPointerDrag</code>'s rAF coalescing; the commit uses raw
+                <code class="mono text-xs">pointerup</code> coordinates.
+              </p>
+              <p class="text-red-900 leading-relaxed">
+                Worse, <code class="mono text-xs">endDrag()</code> at <code class="mono text-xs">:137</code> —
+                which calls <code class="mono text-xs">setDropTarget(null)</code> and
+                <code class="mono text-xs">setIsDragging(false)</code> — runs <em>before</em> the second resolution.
+                That re-read is correct only because the render it scheduled has not flushed. The rule is written down
+                nowhere, and "the marker said here, the chip landed there" is the whole bug class living in this gap.
+              </p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm space-y-2">
+            <div class="label text-amber-800">C. The testability trap this is an instance of</div>
+            <p class="text-amber-900 leading-relaxed">
+              <code class="mono text-xs">resolveDropSlot</code> and <code class="mono text-xs">resolveTokenPointerOutcome</code>
+              are pure and tested. <code class="mono text-xs">resolveTokenDropTarget</code> and
+              <code class="mono text-xs">resolveStepDropIndex</code> — the two that read the DOM — have
+              <strong>zero</strong> unit tests. All three defects fixed in <code class="mono text-xs">c68c80d</code>
+              (today) lived in that untested caller.
+            </p>
+            <p class="text-amber-900 leading-relaxed">
+              The tested model has already drifted from the real input. The fixture builds every rect exactly
+              <code class="mono text-xs">CHIP_H</code> tall (<code class="mono text-xs">pointer-drag.test.ts:64</code>),
+              but <code class="mono text-xs">data-token-index</code> sits on the wrapping
+              <code class="mono text-xs">&lt;g&gt;</code>, whose box includes the token-time label drawn at
+              <code class="mono text-xs">y={-CHIP_TIME_HEADER_HEIGHT + 10}</code>. A timed chip's client rect starts
+              ~14 units higher than an untimed sibling's — and
+              <code class="mono text-xs">groupIntoRows</code> measures a row's whole vertical span against whichever
+              chip sorted first. Rows are ~98 units apart so it holds today, but the row span depends on which chip
+              happens to have a time attached.
+            </p>
+          </div>
+
+          <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm space-y-2">
+            <div class="label text-slate-600">D. Two more symptoms of the same missing seam</div>
+            <p class="text-slate-800 leading-relaxed">
+              <code class="mono text-xs">canvas-layout.ts</code>'s module comment says the geometry primitives are
+              private so nobody re-derives them — then <code class="mono text-xs">insertionMarkerPosition</code>
+              re-derives two anyway: <code class="mono text-xs">:349</code> hand-copies
+              <code class="mono text-xs">computeRowStartYs</code>' first row, <code class="mono text-xs">:361</code>
+              hand-copies <code class="mono text-xs">chipPosition</code>. The comment above the first one admits the
+              hazard rather than preventing it.
+            </p>
+            <p class="text-slate-800 leading-relaxed">
+              And <code class="mono text-xs">TokenDropTarget.index</code> is documented "always within
+              [0, tokens.length]", which its consumer does not believe:
+              <code class="mono text-xs">StepCard.tsx:222</code> clamps it defensively. Either the invariant holds and
+              the clamp is noise, or it does not and the doc is wrong. A reader cannot tell which.
+            </p>
+            <p class="text-slate-800 leading-relaxed">
+              The sibling function in the same file already does this right:
+              <code class="mono text-xs">resolveStepDropIndex(clientY, container)</code> takes its container and scopes
+              its query to it. Two resolvers, one file, one job, opposite scoping discipline, no comment on the difference.
+            </p>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-x-8 gap-y-2">
+            <div>
+              <div class="label text-slate-500 mb-2">Wins</div>
+              <ul class="text-sm space-y-1.5 list-disc list-inside text-slate-800">
+                <li>Locality: one module owns chip geometry</li>
+                <li>Interface stops being markup and CSS</li>
+                <li>Preview and commit stop disagreeing</li>
+                <li>Whole resolution becomes testable</li>
+                <li>Leverage: keyboard token-move gets slots free</li>
+              </ul>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-2">Deletion test</div>
+              <p class="text-sm text-slate-800 leading-relaxed">
+                Delete the DOM-scanning half and the attribute contract, the rect building, the
+                <code class="mono text-xs">elementFromPoint</code> fallback and the three CSS rules that prop it up all
+                vanish into <code class="mono text-xs">canvas-layout</code>, which already holds the numbers.
+                Complexity <strong>concentrates</strong>.
+              </p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+            <div class="label text-slate-600 mb-1">Honest cost</div>
+            <p class="text-slate-800 leading-relaxed">
+              <code class="mono text-xs">TokenPicker</code> is a second drag source with no canvas ref and no layout in
+              scope, so the layout has to be reachable from outside <code class="mono text-xs">App</code>'s render —
+              that is candidate 4, which this depends on. Client rects also survive any CSS transform for free; a CTM
+              conversion has to be shown to. <code class="mono text-xs">getScreenCTM()</code> does account for transforms
+              and scroll, but that is a claim the driver has to check, not a free property.
+            </p>
+          </div>
+        </article>
+
+        <!-- ══════ CANDIDATE 2 ══════ -->
+        <article id="c2" class="rounded-xl border border-slate-200 bg-white p-7 space-y-6 shadow-sm">
+          <div class="space-y-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="rounded-full bg-emerald-600 text-white text-xs font-semibold px-3 py-1">Strong</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
+              <span class="rounded-full bg-red-50 text-red-700 text-xs px-3 py-1 border border-red-200 line-through decoration-2">live symptom</span>
+              <span class="rounded-full bg-slate-800 text-white text-xs px-3 py-1">corrected · see below</span>
+              <span class="rounded-full bg-emerald-50 text-emerald-800 text-xs px-3 py-1 border border-emerald-200">done 2026-09-20</span>
+            </div>
+            <h2 class="font-serif text-2xl">2 · Give selection repair the funnel <code class="mono text-xl">setSteps</code> already is</h2>
+            <div class="mono text-xs text-slate-500 space-y-0.5">
+              <div>src/state/document.ts:180–189 &nbsp;repairSelection</div>
+              <div>src/state/document.ts:200–203, 465 &nbsp;the two callers</div>
+              <div>src/state/document.ts:385–391, 536–538 &nbsp;the two hand-written copies</div>
+              <div>src/state/document.ts:222–229 &nbsp;setSteps — the funnel that exists</div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <div class="label text-slate-500 mb-3">Before — four policies, six mutators</div>
+              <div class="space-y-1.5 text-[10px] mono">
+                <div class="rounded border border-slate-300 bg-white px-3 py-2 flex justify-between gap-2"><span>restoreDocument</span><span class="text-emerald-700">repairSelection</span></div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-2 flex justify-between gap-2"><span>moveTokenCore</span><span class="text-emerald-700">repairSelection</span></div>
+                <div class="rounded border-2 border-red-400 hatch px-3 py-2 flex justify-between gap-2"><span class="text-red-900 font-semibold">removeStepCore</span><span class="text-red-900">hand-written</span></div>
+                <div class="rounded border border-amber-400 bg-amber-50 px-3 py-2 flex justify-between gap-2"><span class="text-amber-900">removeTokenFromStepCore</span><span class="text-amber-900">hand-written</span></div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-2 flex justify-between gap-2"><span>replaceDocumentCore</span><span class="text-slate-500">selectStepCore</span></div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-2 flex justify-between gap-2"><span>addTokenToStepCore</span><span class="text-slate-400">nothing</span></div>
+              </div>
+              <svg width="100%" height="34" viewBox="0 0 300 34" preserveAspectRatio="none" class="block mt-2">
+                <line x1="150" y1="0" x2="150" y2="24" stroke="#94a3b8" stroke-width="1.5"/>
+                <path d="M145 20 L150 30 L155 20 Z" fill="#94a3b8"/>
+              </svg>
+              <div class="rounded border border-slate-400 bg-white px-3 py-2 text-center mono text-[10px]">setSteps · history funnel only</div>
+            </div>
+
+            <div class="rounded-lg border border-slate-900 bg-white p-4">
+              <div class="label text-slate-500 mb-3">After — one funnel, two invariants</div>
+              <div class="space-y-1.5 text-[10px] mono mb-3">
+                <div class="rounded border border-slate-300 bg-white px-3 py-2">removeStepCore &nbsp;<span class="text-slate-400">no selection code</span></div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-2">removeTokenFromStepCore &nbsp;<span class="text-slate-400">no selection code</span></div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-2">moveTokenCore · addTokenToStepCore · …</div>
+              </div>
+              <svg width="100%" height="26" viewBox="0 0 300 26" preserveAspectRatio="none" class="block">
+                <line class="seam" x1="0" y1="13" x2="300" y2="13" stroke="#64748b" stroke-width="2"/>
+              </svg>
+              <div class="deep rounded px-3 py-5 text-white text-center mt-1">
+                <div class="mono text-xs font-semibold">setSteps</div>
+                <div class="text-[10px] text-slate-400 mt-1.5">record history · then repair selection</div>
+              </div>
+              <p class="mono text-[9px] text-slate-500 mt-2 text-center">
+                undo/redo keeps its documented deviation: it repairs against a snapshot, not the live steps
+              </p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm leading-relaxed">
+            <div>
+              <div class="label text-slate-500 mb-1">Problem</div>
+              <p>"What happens to the selection when the document changes" is answered in six places with four policies,
+              and nothing tells a seventh mutator which one it needs.</p>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-1">Solution</div>
+              <p>Repair selection inside <code class="mono text-xs">setSteps</code>, the funnel every mutator already
+              goes through, and delete the two hand-written copies.</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm space-y-2">
+            <div class="label text-red-700">The symptom is live today</div>
+            <p class="text-red-900 leading-relaxed">
+              <code class="mono text-xs">repairSelection</code>'s own comment is scar tissue from getting this wrong
+              once: a token dragged across steps left <code class="mono text-xs">selectedStepId</code> stale, so
+              "<code class="mono text-xs">TokenDetails</code> and <code class="mono text-xs">StepDetails</code> each
+              ended up reporting 'not selected' for two different, both-wrong reasons." The fix was to call
+              <code class="mono text-xs">repairSelection</code> from one more site rather than make repair a property of
+              mutation — so the same failure is still reachable one mutator over.
+            </p>
+            <p class="text-red-900 leading-relaxed">
+              Delete the step that is currently selected while one of its tokens is also selected.
+              <code class="mono text-xs">removeStepCore:388</code> reassigns
+              <code class="mono text-xs">selectedStepId</code> to <code class="mono text-xs">steps[0]</code> and never
+              clears <code class="mono text-xs">selectedTokenId</code>. The
+              <code class="mono text-xs">selectedToken</code> computed then resolves to
+              <code class="mono text-xs">null</code>, so <code class="mono text-xs">TokenDetails</code> shows its empty
+              placeholder — while <code class="mono text-xs">StepDetails</code> reads the stale-but-truthy
+              <code class="mono text-xs">selectedTokenId</code> directly and drops its selected border. Two panels,
+              two wrong answers, exactly the shape the comment describes. Cosmetic, not data loss — but it is the
+              documented bug, still present.
+            </p>
+          </div>
+
+          <div class="rounded-lg border-2 border-slate-900 bg-white p-4 text-sm space-y-2">
+            <div class="label text-slate-900">Correction — the symptom above does not reproduce</div>
+            <p class="text-slate-800 leading-relaxed">
+              Checked before any change was made: <code class="mono text-xs">removeStepCore:389</code> does not assign
+              <code class="mono text-xs">selectedStepId</code> directly, it calls
+              <code class="mono text-xs">selectStepCore</code> — which sets <code class="mono text-xs">selectedTokenId</code>
+              to <code class="mono text-xs">null</code> as well. Deleting the selected step with one of its tokens
+              selected leaves <code class="mono text-xs">selectedTokenId</code> at
+              <code class="mono text-xs">null</code> and the <code class="mono text-xs">selectedToken</code> computed at
+              <code class="mono text-xs">null</code>; the two panels agree. The finding misread that one line, and with
+              it the claim that this candidate carried a user-reachable symptom.
+            </p>
+            <p class="text-slate-800 leading-relaxed">
+              The restructuring itself still holds on its own terms and shipped on 2026-09-20 — the three hand-written
+              copies are gone and <code class="mono text-xs">setSteps</code> owns the invariant — but it landed as a
+              structural change with no behaviour change, not as a bug fix. See
+              <code class="mono text-xs">docs/phase-3/progress/architecture-2026-09-20-selection-repair-funnel.md</code>.
+            </p>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-x-8 gap-y-2">
+            <div>
+              <div class="label text-slate-500 mb-2">Wins</div>
+              <ul class="text-sm space-y-1.5 list-disc list-inside text-slate-800">
+                <li>Locality: one place watches selection</li>
+                <li>A seventh mutator inherits it free</li>
+                <li>Deletes logic rather than relocating it</li>
+                <li>Closes a reachable two-panel disagreement</li>
+              </ul>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-2">Deletion test</div>
+              <p class="text-sm text-slate-800 leading-relaxed">
+                Both hand-written guards are behaviourally subsets of
+                <code class="mono text-xs">repairSelection</code> on the same input, so folding them in removes code
+                outright. <code class="mono text-xs">setSteps</code> already exists "so undo/redo history only needs one
+                funnel point to watch" — this is a second invariant that wants the same funnel and does not have it.
+                Complexity <strong>concentrates</strong>.
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <!-- ══════ CANDIDATE 3 ══════ -->
+        <article id="c3" class="rounded-xl border border-slate-200 bg-white p-7 space-y-6 shadow-sm">
+          <div class="space-y-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="rounded-full bg-emerald-600 text-white text-xs font-semibold px-3 py-1">Strong</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
+              <span class="rounded-full bg-red-50 text-red-700 text-xs px-3 py-1 border border-red-200">live symptom · confirmed</span>
+              <span class="rounded-full bg-slate-800 text-white text-xs px-3 py-1">scope widened · see below</span>
+              <span class="rounded-full bg-emerald-50 text-emerald-800 text-xs px-3 py-1 border border-emerald-200">done 2026-09-20</span>
+            </div>
+            <h2 class="font-serif text-2xl">3 · One token-write seam behind the five mutators</h2>
+            <div class="mono text-xs text-slate-500 space-y-0.5">
+              <div>src/state/document.ts:300–321 &nbsp;setTokenAttachment</div>
+              <div>src/state/document.ts:527–548 &nbsp;removeTokenFromStepCore</div>
+              <div>src/state/document.ts:580–596 &nbsp;updateTokenLabelCore</div>
+              <div>src/state/document.ts:597–613 &nbsp;updateTokenNoteCore</div>
+              <div>src/state/document.ts:634–649 &nbsp;setTokenTimeCore</div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <div class="label text-slate-500 mb-3">Before — one shape, five hand-copies</div>
+              <div class="space-y-2">
+                <div class="rounded border border-slate-300 bg-white px-3 py-2">
+                  <div class="mono text-[10px] text-slate-900 font-semibold">setTokenAttachment</div>
+                  <div class="mono text-[9px] text-slate-400 leading-snug">steps.map &rarr; id===stepId &rarr; tokens.map &rarr; id===tokenId &rarr; spread</div>
+                  <div class="mono text-[9px] text-emerald-700">+ attachmentsEqual guard</div>
+                </div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-2">
+                  <div class="mono text-[10px] text-slate-900 font-semibold">updateTokenLabelCore</div>
+                  <div class="mono text-[9px] text-slate-400 leading-snug">steps.map &rarr; id===stepId &rarr; tokens.map &rarr; id===tokenId &rarr; spread</div>
+                  <div class="mono text-[9px] text-slate-500">+ coalesce: true</div>
+                </div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-2">
+                  <div class="mono text-[10px] text-slate-900 font-semibold">updateTokenNoteCore</div>
+                  <div class="mono text-[9px] text-slate-400 leading-snug">steps.map &rarr; id===stepId &rarr; tokens.map &rarr; id===tokenId &rarr; spread</div>
+                  <div class="mono text-[9px] text-slate-500">+ coalesce: true</div>
+                </div>
+                <div class="rounded border-2 border-red-400 hatch px-3 py-2">
+                  <div class="mono text-[10px] text-red-900 font-semibold">setTokenTimeCore</div>
+                  <div class="mono text-[9px] text-red-700 leading-snug">steps.map &rarr; id===stepId &rarr; tokens.map &rarr; id===tokenId &rarr; spread</div>
+                  <div class="mono text-[9px] text-red-900 font-semibold">no guard — the copy that drifted</div>
+                </div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-2">
+                  <div class="mono text-[10px] text-slate-900 font-semibold">removeTokenFromStepCore</div>
+                  <div class="mono text-[9px] text-slate-400 leading-snug">steps.map &rarr; id===stepId &rarr; tokens.filter</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-lg border border-slate-900 bg-white p-4">
+              <div class="label text-slate-500 mb-3">After — five one-liners over one traversal</div>
+              <div class="space-y-1.5 mb-4">
+                <div class="rounded border border-slate-300 bg-white px-3 py-1.5 mono text-[10px]">setTokenAttachment &nbsp;<span class="text-slate-400">patch + isEqual</span></div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-1.5 mono text-[10px]">updateTokenLabelCore &nbsp;<span class="text-slate-400">patch + coalesce</span></div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-1.5 mono text-[10px]">updateTokenNoteCore &nbsp;<span class="text-slate-400">patch + coalesce</span></div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-1.5 mono text-[10px]">setTokenTimeCore &nbsp;<span class="text-slate-400">patch + isEqual</span></div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-1.5 mono text-[10px]">removeTokenFromStepCore &nbsp;<span class="text-slate-400">patch = remove</span></div>
+              </div>
+              <svg width="100%" height="26" viewBox="0 0 300 26" preserveAspectRatio="none" class="block">
+                <line class="seam" x1="0" y1="13" x2="300" y2="13" stroke="#64748b" stroke-width="2"/>
+              </svg>
+              <div class="deep rounded px-3 py-5 text-white text-center mt-1">
+                <div class="mono text-xs font-semibold">updateTokenIn(session, stepId, tokenId, patch, opts)</div>
+                <div class="text-[10px] text-slate-400 mt-1.5">traversal · identity-preserving spread · history options</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm leading-relaxed">
+            <div>
+              <div class="label text-slate-500 mb-1">Problem</div>
+              <p>Five mutators hand-write the identical step-then-token traversal, and the copies have already drifted apart.</p>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-1">Solution</div>
+              <p>One private traversal taking a patch plus its history options; each mutator supplies only what differs.</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm space-y-2">
+            <div class="label text-red-700">The drift, concretely</div>
+            <p class="text-red-900 leading-relaxed">
+              <code class="mono text-xs">setTokenAttachment</code> checks <code class="mono text-xs">attachmentsEqual</code>
+              before writing, so re-saving an unchanged Quantity records nothing.
+              <code class="mono text-xs">setTokenTimeCore</code> — the same token, the same
+              <code class="mono text-xs">CollapsedField</code> chrome, one field over — has no such check, so opening
+              Token time and pressing Save without changing anything pushes an undo entry and wipes redo.
+              The same behaviour was asked of two copies; only one of them got it.
+            </p>
+          </div>
+
+          <div class="rounded-lg border-2 border-slate-900 bg-white p-4 text-sm space-y-3">
+            <div class="label text-slate-900">Confirmed, and wider than stated — implemented 2026-09-20</div>
+            <p class="text-slate-800 leading-relaxed">
+              Unlike candidate 2, this symptom reproduces. Probed at <code class="mono text-xs">c68c80d</code> before any
+              change, by re-saving a value identical to the one already stored:
+            </p>
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left text-slate-500">
+                  <th class="font-normal pb-1">Probe</th>
+                  <th class="font-normal pb-1"><code class="mono">past</code></th>
+                  <th class="font-normal pb-1">Verdict</th>
+                </tr>
+              </thead>
+              <tbody class="align-top">
+                <tr class="border-t border-slate-200">
+                  <td class="py-1.5 pr-3">Token time, unchanged Save</td>
+                  <td class="py-1.5 pr-3 mono">2 &rarr; 3</td>
+                  <td class="py-1.5 text-red-800 font-semibold">records an empty undo entry — as stated</td>
+                </tr>
+                <tr class="border-t border-slate-200">
+                  <td class="py-1.5 pr-3">Step time, unchanged Save</td>
+                  <td class="py-1.5 pr-3 mono">1 &rarr; 2</td>
+                  <td class="py-1.5 text-red-800 font-semibold">same bug — not named by this finding</td>
+                </tr>
+                <tr class="border-t border-slate-200">
+                  <td class="py-1.5 pr-3">Quantity attachment, re-save</td>
+                  <td class="py-1.5 pr-3 mono">2 &rarr; 2</td>
+                  <td class="py-1.5 text-slate-600">correctly guarded</td>
+                </tr>
+                <tr class="border-t border-slate-200">
+                  <td class="py-1.5 pr-3"><code class="mono">removeTokenFromStep</code>, unknown token id</td>
+                  <td class="py-1.5 pr-3 mono">0 &rarr; 1</td>
+                  <td class="py-1.5 text-red-800 font-semibold">records a change that didn't happen</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="text-slate-800 leading-relaxed">
+              <code class="mono text-xs">setStepTime</code> sits outside this candidate's token-only scope but carries
+              the identical gap one level up — same <code class="mono text-xs">DurationField</code>, same form, same
+              symptom. Fixing only the token side would have closed one drift while leaving its twin in place, so it
+              got the comparator too. It guards by hand rather than behind a parallel
+              <code class="mono text-xs">updateStepIn</code>: the step-level traversal is a single
+              <code class="mono text-xs">steps.map</code>, and hoisting one line behind an indirection is the move
+              ADR 0002 declines.
+            </p>
+            <p class="text-slate-800 leading-relaxed">
+              The seam shipped as specified, with both properties made unconditional rather than per-field: a patch
+              that changes nothing writes nothing, and a write naming a step or token the document doesn't hold does
+              nothing. ADR 0002's revisit clause fired exactly as written — two call sites needing one comparator — so
+              <code class="mono text-xs">attachmentsEqual</code> was broadened to
+              <code class="mono text-xs">fieldValuesEqual</code> and that ADR carries a dated update; the decision
+              against a comparator-taking <code class="mono text-xs">noopGuard</code> is unchanged. See
+              <a class="underline decoration-slate-400" href="../progress/architecture-2026-09-20-token-write-seam.md">architecture-2026-09-20-token-write-seam.md</a>.
+            </p>
+          </div>
+
+          <div class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm">
+            <div class="label text-amber-800 mb-1">&#9888; Reads near ADR 0002 — but is not it</div>
+            <p class="text-amber-900 leading-relaxed">
+              ADR 0002 declined a shared <code class="mono text-xs">noopGuard(current, next, isEqual)</code> because the
+              three history guards share a <em>purpose</em> and not a <em>shape</em> — each would still pass the only
+              differing part as a parameter. This is the opposite case: five call sites writing the <em>same shape</em>,
+              which the ADR's own revisit clause sets aside as "ordinary de-duplication, and that is a different
+              question from this one." Nothing here touches
+              <code class="mono text-xs">reorderStepsCore</code>'s index-arithmetic argument, which is what ADR 0002 exists to protect.
+            </p>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-x-8 gap-y-2">
+            <div>
+              <div class="label text-slate-500 mb-2">Wins</div>
+              <ul class="text-sm space-y-1.5 list-disc list-inside text-slate-800">
+                <li>Locality: one traversal, one place to fix</li>
+                <li>Guards cannot drift per field again</li>
+                <li>Interface shrinks; implementation absorbs it</li>
+                <li>Pairs with candidate 2 at the same funnel</li>
+              </ul>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-2">Deletion test</div>
+              <p class="text-sm text-slate-800 leading-relaxed">
+                Delete <code class="mono text-xs">updateTokenIn</code> and the same five-line nested map reappears in
+                five mutators, each free to forget a guard again. Complexity <strong>concentrates</strong>.
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <!-- ══════ CANDIDATE 4 ══════ -->
+        <article id="c4" class="rounded-xl border border-slate-200 bg-white p-7 space-y-6 shadow-sm">
+          <div class="space-y-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="rounded-full bg-amber-500 text-white text-xs font-semibold px-3 py-1">Worth exploring</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">carried over · now load-bearing</span>
+            </div>
+            <h2 class="font-serif text-2xl">4 · Move the canvas layout onto a computed signal</h2>
+            <div class="mono text-xs text-slate-500 space-y-0.5">
+              <div>src/app.tsx:318–320</div>
+              <div>src/lib/canvas-layout.ts</div>
+              <div>src/state/document.ts:130–135 &nbsp;selectedStep / selectedToken — the pattern already in use</div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <div class="label text-slate-500 mb-3">Before — layout hangs off a render</div>
+              <div class="relative h-[250px]">
+                <div class="absolute inset-x-0 top-0 rounded border border-slate-400 bg-white px-3 py-2 text-center">
+                  <div class="mono text-[10px] font-semibold">document signal</div>
+                </div>
+                <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 340 250" preserveAspectRatio="none">
+                  <line x1="170" y1="34" x2="170" y2="62" stroke="#dc2626" stroke-width="2"/>
+                  <path d="M164 58 L170 70 L176 58 Z" fill="#dc2626"/>
+                  <line x1="110" y1="145" x2="60" y2="180" stroke="#94a3b8" stroke-width="1.5"/>
+                  <line x1="170" y1="145" x2="170" y2="180" stroke="#94a3b8" stroke-width="1.5"/>
+                  <line x1="230" y1="145" x2="285" y2="180" stroke="#94a3b8" stroke-width="1.5"/>
+                </svg>
+                <div class="absolute inset-x-5 top-[70px] rounded border-2 border-red-400 hatch px-3 py-3 text-center">
+                  <div class="mono text-[10px] font-semibold text-red-900">App render</div>
+                  <div class="mono text-[9px] text-red-800 mt-1">reads document.value.steps</div>
+                  <div class="mono text-[9px] text-red-800">useMemo liveLayout</div>
+                  <div class="mono text-[9px] text-red-800">useMemo exportLayout</div>
+                </div>
+                <div class="absolute left-0 bottom-0 w-[30%] rounded border border-slate-300 bg-white px-2 py-2 text-center mono text-[9px]">live canvas</div>
+                <div class="absolute left-[35%] bottom-0 w-[30%] rounded border border-slate-300 bg-white px-2 py-2 text-center mono text-[9px]">preview canvas</div>
+                <div class="absolute right-0 bottom-0 w-[30%] rounded border border-slate-300 bg-white px-2 py-2 text-center mono text-[9px]">export canvas</div>
+              </div>
+              <p class="mono text-[10px] text-red-700 mt-2">every keystroke re-renders the application root</p>
+            </div>
+
+            <div class="rounded-lg border border-slate-900 bg-white p-4">
+              <div class="label text-slate-500 mb-3">After — layout is a derived value</div>
+              <div class="relative h-[250px]">
+                <div class="absolute inset-x-0 top-0 rounded border border-slate-400 bg-white px-3 py-2 text-center">
+                  <div class="mono text-[10px] font-semibold">document signal</div>
+                </div>
+                <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 340 250" preserveAspectRatio="none">
+                  <line x1="130" y1="34" x2="80" y2="72" stroke="#94a3b8" stroke-width="1.5"/>
+                  <line x1="210" y1="34" x2="260" y2="72" stroke="#94a3b8" stroke-width="1.5"/>
+                  <line x1="80" y1="134" x2="52" y2="180" stroke="#94a3b8" stroke-width="1.5"/>
+                  <line x1="260" y1="134" x2="170" y2="180" stroke="#94a3b8" stroke-width="1.5"/>
+                  <line x1="260" y1="134" x2="290" y2="180" stroke="#94a3b8" stroke-width="1.5"/>
+                </svg>
+                <div class="absolute left-0 top-[76px] w-[45%] deep rounded px-2 py-3 text-center text-white">
+                  <div class="mono text-[10px] font-semibold">computed</div>
+                  <div class="mono text-[9px] text-slate-400">liveLayout</div>
+                </div>
+                <div class="absolute right-0 top-[76px] w-[45%] deep rounded px-2 py-3 text-center text-white">
+                  <div class="mono text-[10px] font-semibold">computed</div>
+                  <div class="mono text-[9px] text-slate-400">exportLayout</div>
+                </div>
+                <div class="absolute left-0 bottom-0 w-[30%] rounded border border-slate-300 bg-white px-2 py-2 text-center mono text-[9px]">live canvas</div>
+                <div class="absolute left-[35%] bottom-0 w-[30%] rounded border border-slate-300 bg-white px-2 py-2 text-center mono text-[9px]">preview canvas</div>
+                <div class="absolute right-0 bottom-0 w-[30%] rounded border border-slate-300 bg-white px-2 py-2 text-center mono text-[9px]">export canvas</div>
+              </div>
+              <p class="mono text-[10px] text-emerald-700 mt-2">App no longer subscribes to the document at all</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm leading-relaxed">
+            <div>
+              <div class="label text-slate-500 mb-1">Problem</div>
+              <p><code class="mono text-xs">App</code> reads <code class="mono text-xs">document.value.steps</code> in its own body only to feed two
+              <code class="mono text-xs">useMemo</code>s, so the application root re-renders on every keystroke and the layout is reachable only as a prop.</p>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-1">Solution</div>
+              <p>Two <code class="mono text-xs">computed()</code> values beside the document, exactly as
+              <code class="mono text-xs">selectedStep</code> and <code class="mono text-xs">selectedToken</code> already are.</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm">
+            <div class="label text-indigo-800 mb-1">Why it is raised again</div>
+            <p class="text-indigo-900 leading-relaxed">
+              The 2026-09-18 pass graded this "worth doing on its own terms; worth not overselling", and it is still
+              open. Since then the drag path has become the hottest area in the repo, and candidate 1 needs the layout
+              readable by <code class="mono text-xs">TokenPicker</code>, which holds no ref and no prop. That makes this
+              the enabling seam rather than a standalone tidy-up. <code class="mono text-xs">isDesktop</code> moves with
+              it — it becomes a small signal rather than a hook inside <code class="mono text-xs">App</code>.
+            </p>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-x-8 gap-y-2">
+            <div>
+              <div class="label text-slate-500 mb-2">Wins</div>
+              <ul class="text-sm space-y-1.5 list-disc list-inside text-slate-800">
+                <li>Locality: one definition of the layout</li>
+                <li>Leverage: any module can read it</li>
+                <li>Unblocks candidate 1's seam</li>
+                <li>Root stops re-rendering per keystroke</li>
+              </ul>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-2">Deletion test</div>
+              <p class="text-sm text-slate-800 leading-relaxed">
+                Weaker than candidates 1, 2 and 3: deleting the computed moves two
+                <code class="mono text-xs">useMemo</code>s back into <code class="mono text-xs">App</code> rather than
+                scattering them across N callers. It earns its place through what it <em>enables</em>, not through
+                concentration alone, and is graded on that basis.
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <!-- ══════ CANDIDATE 5 ══════ -->
+        <article id="c5" class="rounded-xl border border-slate-200 bg-white p-7 space-y-6 shadow-sm">
+          <div class="space-y-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="rounded-full bg-amber-500 text-white text-xs font-semibold px-3 py-1">Worth exploring</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
+            </div>
+            <h2 class="font-serif text-2xl">5 · Make the export interface say what it actually needs</h2>
+            <div class="mono text-xs text-slate-500 space-y-0.5">
+              <div>src/lib/document-actions.ts:76–101, 136–142</div>
+              <div>src/app.tsx:84–110, 421, 500</div>
+              <div>src/lib/pdf-export.ts:68–70</div>
+              <div>src/components/InstructionCanvas/InstructionCanvas.tsx:126</div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <div class="label text-slate-500 mb-3">Before — two unstated requirements</div>
+              <div class="space-y-1">
+                <div class="rounded border border-slate-300 bg-white px-3 py-2 mono text-[10px]">exportSvgRef.current &nbsp;<span class="text-red-700">SVGSVGElement | null</span></div>
+                <div class="text-center text-slate-400 text-xs">&darr;</div>
+                <div class="grid grid-cols-3 gap-1">
+                  <div class="rounded border border-red-300 bg-red-50 px-2 py-2 mono text-[9px] text-center text-red-900">runSvgExport<br/><span class="text-red-600">| null</span></div>
+                  <div class="rounded border border-red-300 bg-red-50 px-2 py-2 mono text-[9px] text-center text-red-900">runPngExport<br/><span class="text-red-600">| null</span></div>
+                  <div class="rounded border border-red-300 bg-red-50 px-2 py-2 mono text-[9px] text-center text-red-900">runPdfExport<br/><span class="text-red-600">| null</span><br/><span class="text-red-600">+ layout</span></div>
+                </div>
+                <div class="text-center text-slate-400 text-xs">&darr;</div>
+                <div class="rounded border-2 border-red-400 hatch px-3 py-3 text-center">
+                  <div class="mono text-[10px] text-red-900 font-semibold">runCanvasExport</div>
+                  <div class="mono text-[10px] text-red-900 mt-1">if (!svgElement) return {};</div>
+                </div>
+                <div class="text-center text-slate-400 text-xs">&darr;</div>
+                <div class="rounded border border-slate-300 bg-white px-3 py-2 text-center mono text-[10px] text-slate-500">no file · no error · no toast</div>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-900 bg-white p-4">
+              <div class="label text-slate-500 mb-3">After — one value carries both facts</div>
+              <div class="space-y-1">
+                <div class="rounded border border-slate-300 bg-white px-3 py-2 mono text-[10px]">exportSvgRef.current &nbsp;<span class="text-slate-500">SVGSVGElement | null</span></div>
+                <div class="text-center text-slate-400 text-xs">&darr;</div>
+                <div class="deep rounded px-3 py-4 text-center text-white">
+                  <div class="mono text-[10px] font-semibold">ExportCanvas</div>
+                  <div class="mono text-[9px] text-slate-400 mt-1">{ svgElement, layout } — built together, once</div>
+                  <div class="mono text-[9px] text-slate-400">null becomes an error toast, here</div>
+                </div>
+                <svg width="100%" height="22" viewBox="0 0 300 22" preserveAspectRatio="none" class="block"><line class="seam" x1="0" y1="11" x2="300" y2="11" stroke="#64748b" stroke-width="2"/></svg>
+                <div class="grid grid-cols-3 gap-1">
+                  <div class="rounded border border-emerald-300 bg-emerald-50 px-2 py-2 mono text-[9px] text-center text-emerald-900">runSvgExport</div>
+                  <div class="rounded border border-emerald-300 bg-emerald-50 px-2 py-2 mono text-[9px] text-center text-emerald-900">runPngExport</div>
+                  <div class="rounded border border-emerald-300 bg-emerald-50 px-2 py-2 mono text-[9px] text-center text-emerald-900">runPdfExport</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm leading-relaxed">
+            <div>
+              <div class="label text-slate-500 mb-1">Problem</div>
+              <p>The interface says an export can be handed nothing — and does not say that the SVG node and the layout
+              must be the same canvas.</p>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-1">Solution</div>
+              <p>Build the node and its layout as one value where both are known, and make the field non-nullable
+              past that point.</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm space-y-2">
+            <div class="label text-red-700">The pairing nobody enforces</div>
+            <p class="text-red-900 leading-relaxed">
+              <code class="mono text-xs">app.tsx:421</code> passes <code class="mono text-xs">exportLayout</code> to
+              <code class="mono text-xs">handleExportPdf</code>; <code class="mono text-xs">app.tsx:500</code>, eighty
+              lines away, renders the canvas <code class="mono text-xs">exportSvgRef</code> points at with the same
+              <code class="mono text-xs">exportLayout</code>. <code class="mono text-xs">pdf-export.ts:68–70</code> then
+              slices that node using <code class="mono text-xs">cardY</code>/<code class="mono text-xs">height</code>
+              from the other argument. Nothing types, asserts or names the requirement that they match. Pass
+              <code class="mono text-xs">liveLayout</code> by mistake and every page slices at the wrong offsets —
+              silently, in a downloaded file.
+            </p>
+            <p class="text-red-900 leading-relaxed">
+              The 2026-09-17 remediation was right to stop scraping those numbers off the DOM, but it traded a coupling
+              that was self-consistent <em>by construction</em> for one that is consistent only by convention. Binding
+              the two into one value gets both properties.
+            </p>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-x-8 gap-y-2">
+            <div>
+              <div class="label text-slate-500 mb-2">Wins</div>
+              <ul class="text-sm space-y-1.5 list-disc list-inside text-slate-800">
+                <li>Interface stops lying about its inputs</li>
+                <li>Node and layout cannot be mismatched</li>
+                <li>No export path fails invisibly</li>
+                <li>Three call sites drop a dead case</li>
+              </ul>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-2">Deletion test</div>
+              <p class="text-sm text-slate-800 leading-relaxed">
+                Delete <code class="mono text-xs">ExportCanvas</code> and the pairing rule goes back to living in two
+                places eighty lines apart, enforced by a comment. Concentrates — and the nullability half is a
+                narrowing, which passes on locality rather than on the deletion test.
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <!-- ══════ CANDIDATE 6 ══════ -->
+        <article id="c6" class="rounded-xl border border-slate-200 bg-white p-7 space-y-6 shadow-sm">
+          <div class="space-y-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="rounded-full bg-amber-500 text-white text-xs font-semibold px-3 py-1">Worth exploring</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
+            </div>
+            <h2 class="font-serif text-2xl">6 · A keyboard outcome resolver, the way pointers already have one</h2>
+            <div class="mono text-xs text-slate-500 space-y-0.5">
+              <div>src/app.tsx:173–275</div>
+              <div>src/lib/pointer-drag.ts:252–265 &nbsp;resolveTokenPointerOutcome — the precedent</div>
+              <div>docs/adr/0003-no-component-test-environment.md</div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <div class="label text-slate-500 mb-3">Cross-section — two input modalities, one extracted</div>
+              <div class="space-y-3">
+                <div>
+                  <div class="mono text-[9px] text-emerald-700 mb-1">POINTER — done</div>
+                  <div class="border-l-4 border-slate-800 bg-slate-50 pl-3 py-1.5 mono text-[10px]">TokenChip onPointerDown</div>
+                  <div class="border-l-4 border-emerald-600 bg-emerald-50 pl-3 py-1.5 mono text-[10px]">resolveTokenPointerOutcome <span class="text-emerald-800">· tested</span></div>
+                  <div class="border-l-4 border-slate-800 bg-slate-50 pl-3 py-1.5 mono text-[10px]">selectStep / selectToken / moveToken</div>
+                </div>
+                <div>
+                  <div class="mono text-[9px] text-red-700 mb-1">KEYBOARD — not done</div>
+                  <div class="border-l-4 border-slate-800 bg-slate-50 pl-3 py-1.5 mono text-[10px]">window keydown, inside useEffect</div>
+                  <div class="border-l-4 border-red-500 hatch pl-3 py-1.5 mono text-[10px] text-red-900">the branch <span class="text-red-800">· unreachable from any test</span></div>
+                  <div class="border-l-4 border-slate-800 bg-slate-50 pl-3 py-1.5 mono text-[10px]">undo / redo / copy / paste</div>
+                </div>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-900 bg-white p-4">
+              <div class="label text-slate-500 mb-3">After — same shape as the pointer resolver</div>
+              <div class="space-y-1 mb-3 mono text-[10px]">
+                <div class="rounded border border-slate-300 bg-white px-3 py-2">app.tsx &nbsp;<span class="text-slate-400">registers the listener, dispatches the result</span></div>
+              </div>
+              <svg width="100%" height="24" viewBox="0 0 300 24" preserveAspectRatio="none" class="block">
+                <line class="seam" x1="0" y1="12" x2="300" y2="12" stroke="#64748b" stroke-width="2"/>
+              </svg>
+              <div class="deep rounded px-3 py-5 text-white text-center mt-1">
+                <div class="mono text-[11px] font-semibold">resolveShortcutOutcome(event facts, state)</div>
+                <div class="mono text-[9px] text-slate-400 mt-1.5">{ kind: "undo" | "redo" | "copy" | "paste" | "none" }</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm leading-relaxed">
+            <div>
+              <div class="label text-slate-500 mb-1">Problem</div>
+              <p>Two <code class="mono text-xs">keydown</code> dispatchers map (modifier, key, shift, target kind,
+              suspended) to an action, sealed inside a <code class="mono text-xs">useEffect</code> that registers a
+              <code class="mono text-xs">window</code> listener. Nothing can reach the decision.</p>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-1">Solution</div>
+              <p>Move the branch to <code class="mono text-xs">lib/</code> as a pure resolver; leave the listener
+              registration and the dispatch in <code class="mono text-xs">app.tsx</code>.</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm space-y-2">
+            <div class="label text-indigo-800">This is ADR 0003's own strategy, applied to its last holdout</div>
+            <p class="text-indigo-900 leading-relaxed">
+              ADR 0003 declined a DOM test environment and committed instead to: "Where a component holds logic worth
+              testing in isolation, the logic moves out to <code class="mono text-xs">src/lib/</code>." That move already
+              produced <code class="mono text-xs">canvas-layout.ts</code>, <code class="mono text-xs">pointer-drag.ts</code>,
+              <code class="mono text-xs">quantity.ts</code> and <code class="mono text-xs">field-placement.ts</code>.
+              <code class="mono text-xs">app.tsx</code>'s keyboard layer is the same shape and never got it.
+            </p>
+            <p class="text-indigo-900 leading-relaxed">
+              The behaviour worth pinning is a deliberate asymmetry nothing asserts: undo/redo checks only
+              <code class="mono text-xs">keyboardShortcutsSuspended()</code>, while copy/paste also checks
+              <code class="mono text-xs">isTextEntryTarget(event.target)</code> so native text copy is not hijacked.
+              <code class="mono text-xs">confirmDialogOpen()</code> carries a further twenty-line contract about which
+              call site subscribes <code class="mono text-xs">App</code> and which does not.
+            </p>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-x-8 gap-y-2">
+            <div>
+              <div class="label text-slate-500 mb-2">Wins</div>
+              <ul class="text-sm space-y-1.5 list-disc list-inside text-slate-800">
+                <li>Both input modalities get one shape</li>
+                <li>The text-entry asymmetry gets asserted</li>
+                <li>Interface is the test surface, at last</li>
+                <li>No new dependency, per ADR 0003</li>
+              </ul>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-2">Deletion test</div>
+              <p class="text-sm text-slate-800 leading-relaxed">
+                Delete the resolver and the branch returns to a <code class="mono text-xs">window</code> handler where no
+                test can reach it — the same position <code class="mono text-xs">resolveTokenPointerOutcome</code> was
+                extracted out of, for the same reason. Concentrates.
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <!-- ══════ CANDIDATE 7 ══════ -->
+        <article id="c7" class="rounded-xl border border-slate-200 bg-white p-7 space-y-6 shadow-sm">
+          <div class="space-y-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="rounded-full bg-amber-500 text-white text-xs font-semibold px-3 py-1">Worth exploring</span>
+              <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
+            </div>
+            <h2 class="font-serif text-2xl">7 · One field shape, built at two structural depths</h2>
+            <div class="mono text-xs text-slate-500 space-y-0.5">
+              <div>src/components/DurationField/DurationField.tsx &nbsp;58 lines, a module</div>
+              <div>src/components/TokenDetails/TokenDetails.tsx:36–76 &nbsp;QuantityRow, a local function</div>
+              <div>src/components/TokenDetails/QuantityForm.tsx:27–34 · src/lib/quantity.ts</div>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <div class="label text-slate-500 mb-3">Mass — interface against implementation</div>
+              <div class="flex items-end justify-around h-[190px] gap-8 pt-4">
+                <div class="flex flex-col items-center gap-2 w-1/3">
+                  <div class="w-full bg-amber-300 border border-amber-500 rounded-t" style="height:92px"></div>
+                  <div class="w-full bg-slate-300 border border-slate-400" style="height:24px"></div>
+                  <div class="mono text-[9px] text-center leading-tight">DurationField<br/><span class="text-slate-500">6 props in, 8 out</span></div>
+                </div>
+                <div class="flex flex-col items-center gap-2 w-1/3">
+                  <div class="w-full bg-amber-300 border border-amber-500 rounded-t" style="height:100px"></div>
+                  <div class="w-full bg-slate-700 border border-slate-800" style="height:100px"></div>
+                  <div class="mono text-[9px] text-center leading-tight">CollapsedField<br/><span class="text-slate-500">9 props · real chrome</span></div>
+                </div>
+              </div>
+              <div class="flex items-center gap-4 mt-3 mono text-[9px] text-slate-500">
+                <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 bg-amber-300 border border-amber-500"></span>interface</span>
+                <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 bg-slate-700"></span>implementation</span>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <div class="label text-slate-500 mb-3">Two spellings of one thing</div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <div class="mono text-[9px] text-slate-500 mb-1">"+ TIME"</div>
+                  <div class="space-y-1">
+                    <div class="border-l-4 border-slate-800 bg-slate-50 pl-2 py-1.5 mono text-[9px]">StepDetails</div>
+                    <div class="border-l-4 border-amber-500 bg-amber-50 pl-2 py-1.5 mono text-[9px]">DurationField</div>
+                    <div class="border-l-4 border-slate-800 bg-slate-50 pl-2 py-1.5 mono text-[9px]">CollapsedField</div>
+                    <div class="border-l-4 border-slate-800 bg-slate-50 pl-2 py-1.5 mono text-[9px]">DurationForm</div>
+                  </div>
+                </div>
+                <div>
+                  <div class="mono text-[9px] text-slate-500 mb-1">"+ QUANTITY"</div>
+                  <div class="space-y-1">
+                    <div class="border-l-4 border-slate-800 bg-slate-50 pl-2 py-1.5 mono text-[9px]">TokenDetails</div>
+                    <div class="border-l-4 border-slate-400 bg-white pl-2 py-1.5 mono text-[9px] text-slate-500">QuantityRow <span class="text-[8px]">(local fn)</span></div>
+                    <div class="border-l-4 border-slate-800 bg-slate-50 pl-2 py-1.5 mono text-[9px]">CollapsedField</div>
+                    <div class="border-l-4 border-slate-800 bg-slate-50 pl-2 py-1.5 mono text-[9px]">QuantityForm</div>
+                  </div>
+                </div>
+              </div>
+              <p class="mono text-[9px] text-slate-500 mt-3 leading-relaxed">
+                Same shape, same <code>renderValue={(v) =&gt; v.label}</code>. One is a component directory with two
+                files; the other is 37 lines inside its consumer. Nothing says which is right.
+              </p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-6 text-sm leading-relaxed">
+            <div>
+              <div class="label text-slate-500 mb-1">Problem</div>
+              <p><code class="mono text-xs">DurationField</code> is shallow — six props in, eight straight out, one
+              element of implementation — and its twin is not a module at all.</p>
+            </div>
+            <div>
+              <div class="label text-slate-500 mb-1">Solution</div>
+              <p>Pick one spelling: either delete <code class="mono text-xs">DurationField</code> and let both callers use
+              <code class="mono text-xs">CollapsedField</code> directly, or promote
+              <code class="mono text-xs">QuantityRow</code> to a module beside it.</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm space-y-2">
+            <div class="label text-slate-600">Why this is graded Worth exploring and not Strong</div>
+            <p class="text-slate-800 leading-relaxed">
+              The deletion test is <strong>symmetric</strong> here, which is exactly why the codebase drifted into two
+              answers. Deleting <code class="mono text-xs">DurationField</code> moves its wiring into two call sites —
+              but <code class="mono text-xs">QuantityRow</code> is the existence proof that this costs about 37 lines and
+              is already considered acceptable. Promoting <code class="mono text-xs">QuantityRow</code> instead
+              concentrates nothing but makes the convention legible. Either beats having both.
+            </p>
+            <p class="text-slate-800 leading-relaxed">
+              One tiebreaker for deletion: <code class="mono text-xs">label</code> exists only to phrase aria-labels, and
+              gets lowercased in two files (<code class="mono text-xs">CollapsedField.tsx:99</code>,
+              <code class="mono text-xs">DurationForm.tsx:107</code>) while
+              <code class="mono text-xs">QuantityForm</code> hardcodes its equivalents — three implementations of one
+              aria-labelling convention.
+            </p>
+          </div>
+
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm space-y-2">
+            <div class="label text-amber-800">Two shallow modules in the same cluster, worth folding in</div>
+            <p class="text-amber-900 leading-relaxed">
+              <code class="mono text-xs">lib/quantity.ts</code> is 18 lines with one export and <strong>no test file</strong>
+              — while its mirror <code class="mono text-xs">duration.ts</code> has 129 lines of tests. It was extracted
+              for testability and never tested. Its only caller then re-implements it:
+              <code class="mono text-xs">QuantityForm.tsx:28</code> spells out
+              <code class="mono text-xs">buildQuantity</code>'s predicate inline to gate Save, which is precisely the
+              drift <code class="mono text-xs">DurationForm.tsx:38–43</code> carries a comment about having already fixed.
+            </p>
+            <p class="text-amber-900 leading-relaxed">
+              <code class="mono text-xs">validate.ts:45–47</code>'s
+              <code class="mono text-xs">shouldFlagIncompleteStep(step, result)</code> is one line of behaviour behind two
+              parameters, one of which is its own sibling's output on the other. One call site. Tracing why a step shows
+              "!" costs four files for one boolean.
+            </p>
+          </div>
+
+          <div class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm">
+            <div class="label text-amber-800 mb-1">&#9888; Adjacent to ADR 0001 — deliberately not reopening it</div>
+            <p class="text-amber-900 leading-relaxed">
+              ADR 0001 kept <code class="mono text-xs">CollapsedField</code>'s dual controlled/uncontrolled mode and set
+              its own revisit trigger: a third or fourth <em>controlled</em> caller with no uncontrolled one. That has not
+              happened, and nothing here argues it should be revisited.
+              <code class="mono text-xs">CollapsedField</code> is the one genuinely deep module in this cluster and stays as it is.
+            </p>
+          </div>
+        </article>
+
+      </section>
+
+      <!-- ══════ TOP RECOMMENDATION ══════ -->
+      <section id="top-recommendation">
+        <div class="rounded-xl deep text-white p-8 space-y-5">
+          <div class="label text-slate-400">Top recommendation</div>
+          <h2 class="font-serif text-3xl">
+            <a href="#c1" class="underline decoration-slate-600 hover:decoration-white">Candidate 1 — resolve a drop against the layout</a>
+          </h2>
+          <p class="text-slate-300 leading-relaxed max-w-3xl">
+            Drag is the hottest code in the repo and the only place three defects shipped together this month, all of
+            them in the one part of the path no unit test can reach. The geometry those defects were about is already
+            computed, already pure and already tested one module away — while the current path derives it twice per drag
+            through markup, with three CSS rules and one unflushed render holding it up. Closing that seam puts "where
+            does a chip sit" in one module and makes the whole resolution testable: the move that already paid off for
+            <code class="mono text-sm text-slate-200">canvas-layout.ts</code> and
+            <code class="mono text-sm text-slate-200">field-placement.ts</code>, and the one ADR 0003 commits this
+            project to instead of a DOM test environment.
+          </p>
+          <div class="border-t border-slate-700 pt-5 space-y-2.5 text-sm text-slate-300">
+            <div class="label text-slate-400 mb-2">Order</div>
+            <div class="flex gap-3"><span class="mono text-slate-500 shrink-0">1.</span><span><a href="#c2" class="underline decoration-slate-600">Candidate 2</a> — cheapest, independent of everything else. <strong>Done 2026-09-20</strong>; the "symptom a user can hit today" part of the case for it was wrong, see the correction on that candidate.</span></div>
+            <div class="flex gap-3"><span class="mono text-slate-500 shrink-0">2.</span><span><a href="#c4" class="underline decoration-slate-600">Candidate 4</a> — the layout has to be readable outside <code class="mono text-xs">App</code> before candidate 1 has anywhere to stand.</span></div>
+            <div class="flex gap-3"><span class="mono text-slate-500 shrink-0">3.</span><span><a href="#c1" class="underline decoration-slate-600">Candidate 1</a> — the seam itself. Run the driver's drag checks before and after; the CTM claim is the part to verify.</span></div>
+            <div class="flex gap-3"><span class="mono text-slate-500 shrink-0">4.</span><span><a href="#c3" class="underline decoration-slate-600">Candidate 3</a> — <strong>Done 2026-09-20</strong>, alongside candidate 2 at the same funnel. Symptom confirmed by probe; scope widened to <code class="mono text-xs">setStepTimeCore</code>, which had the same missing guard one level up.</span></div>
+            <div class="flex gap-3"><span class="mono text-slate-500 shrink-0">5.</span><span><a href="#c5" class="underline decoration-slate-600">5</a>, <a href="#c6" class="underline decoration-slate-600">6</a> and <a href="#c7" class="underline decoration-slate-600">7</a> — self-contained, no dependencies, any order.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="text-xs text-slate-500 border-t border-slate-300 pt-6 mono leading-relaxed">
+        Reviewed at c68c80d on 20 September 2026 · every claim traced to source ·
+        decisions in docs/adr/ 0001–0003 treated as settled
+      </footer>
+    </main>
+  </body>
+</html>

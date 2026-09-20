@@ -89,6 +89,120 @@ describe("selectStep / selectToken", () => {
   });
 });
 
+/**
+ * Selection repair is a property of `setSteps`, not of individual mutators
+ * (2026-09-20 architecture review, candidate 2). These pin that at the
+ * funnel: every case below goes through a mutator that contains no
+ * selection code of its own.
+ */
+describe("selection repair through setSteps", () => {
+  it("clears the token selection when the step holding it is removed", () => {
+    const session = createDocumentSession();
+    sessionActions.addStep(session);
+    const [first, second] = session.document.value.steps;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, first.id, token);
+    sessionActions.selectToken(session, first.id, token.id);
+
+    sessionActions.removeStep(session, first.id);
+
+    expect(session.selectedStepId.value).toBe(second.id);
+    expect(session.selectedTokenId.value).toBeNull();
+    expect(session.selectedToken.value).toBeNull();
+  });
+
+  it("leaves a selected token alone when some other step is removed", () => {
+    const session = createDocumentSession();
+    sessionActions.addStep(session);
+    const [first, second] = session.document.value.steps;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, second.id, token);
+    sessionActions.selectToken(session, second.id, token.id);
+
+    sessionActions.removeStep(session, first.id);
+
+    expect(session.selectedStepId.value).toBe(second.id);
+    expect(session.selectedTokenId.value).toBe(token.id);
+  });
+
+  it("clears both when the last remaining step is removed", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, stepId, token);
+    sessionActions.selectToken(session, stepId, token.id);
+
+    sessionActions.removeStep(session, stepId);
+
+    expect(session.document.value.steps).toEqual([]);
+    expect(session.selectedStepId.value).toBeNull();
+    expect(session.selectedTokenId.value).toBeNull();
+  });
+
+  it("clears the token selection when that token is removed from its step", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, stepId, token);
+    sessionActions.selectToken(session, stepId, token.id);
+
+    sessionActions.removeTokenFromStep(session, stepId, token.id);
+
+    expect(session.selectedStepId.value).toBe(stepId);
+    expect(session.selectedTokenId.value).toBeNull();
+  });
+
+  it("leaves the selection alone when a different token is removed", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const selected = createToken("action", "knife");
+    const other = createToken("action", "spoon");
+    sessionActions.addTokenToStep(session, stepId, selected);
+    sessionActions.addTokenToStep(session, stepId, other);
+    sessionActions.selectToken(session, stepId, selected.id);
+
+    sessionActions.removeTokenFromStep(session, stepId, other.id);
+
+    expect(session.selectedTokenId.value).toBe(selected.id);
+    expect(session.selectedToken.value?.id).toBe(selected.id);
+  });
+
+  it("leaves the selection alone on a mutation that only edits in place", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, stepId, token);
+    sessionActions.selectToken(session, stepId, token.id);
+
+    sessionActions.updateStepTitle(session, stepId, "Chop");
+    sessionActions.updateTokenLabel(session, stepId, token.id, "Cleaver");
+
+    expect(session.selectedStepId.value).toBe(stepId);
+    expect(session.selectedTokenId.value).toBe(token.id);
+  });
+
+  it("never leaves a selected id pointing at something the document doesn't hold", () => {
+    const session = createDocumentSession();
+    sessionActions.addStep(session);
+    const [first, second] = session.document.value.steps;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, first.id, token);
+    sessionActions.selectToken(session, first.id, token.id);
+
+    // Every mutator that can invalidate a selection, run back to back.
+    sessionActions.moveToken(session, first.id, token.id, second.id, 0);
+    sessionActions.selectToken(session, second.id, token.id);
+    sessionActions.reorderSteps(session, 1, 0);
+    sessionActions.removeTokenFromStep(session, second.id, token.id);
+    sessionActions.removeStep(session, second.id);
+
+    const steps = session.document.value.steps;
+    const step = steps.find((s) => s.id === session.selectedStepId.value);
+    expect(step ?? null).not.toBeNull();
+    expect(session.selectedTokenId.value).toBeNull();
+  });
+});
+
 describe("moveToken", () => {
   it("reorders within the same step, adjusting for the pre-removal index (forward move)", () => {
     const session = createDocumentSession();
@@ -425,6 +539,141 @@ describe("time", () => {
   });
 });
 
+/**
+ * Every write to a single token inside a single step goes through
+ * `updateTokenIn` (2026-09-20 architecture review, candidate 3). These pin
+ * the two properties that live at that seam rather than in each mutator:
+ * a write that changes nothing records nothing, and a write naming
+ * something the document doesn't hold does nothing at all. Before the seam,
+ * only the attachment mutators had either - `setTokenTime` had neither,
+ * which is what made an unchanged Save on Token time push an undo entry.
+ */
+describe("token writes through updateTokenIn", () => {
+  function sessionWithToken() {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife", "Chop");
+    sessionActions.addTokenToStep(session, stepId, token);
+    return { session, stepId, tokenId: token.id };
+  }
+
+  it("re-saving an unchanged token time records no history and leaves redo alone", () => {
+    const { session, stepId, tokenId } = sessionWithToken();
+    sessionActions.setTokenTime(session, stepId, tokenId, { iconId: "clock", label: "1m", seconds: 60 });
+    sessionActions.undo(session);
+    sessionActions.redo(session);
+    const before = session.document.value;
+    const historyLength = session.past.value.length;
+    const futureLength = session.future.value.length;
+
+    // A new object with identical fields, which is exactly what DurationForm
+    // hands over: it re-seeds its draft from `value.seconds` on every open
+    // and rebuilds the attachment on Save, so an unchanged Save is never
+    // identity-equal to the value already on the token.
+    sessionActions.setTokenTime(session, stepId, tokenId, { iconId: "clock", label: "1m", seconds: 60 });
+
+    expect(session.document.value).toBe(before);
+    expect(session.past.value).toHaveLength(historyLength);
+    expect(session.future.value).toHaveLength(futureLength);
+  });
+
+  it("re-saving an unchanged step time records no history and leaves redo alone", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    sessionActions.setStepTime(session, stepId, { iconId: "clock", label: "1m", seconds: 60 });
+    sessionActions.undo(session);
+    sessionActions.redo(session);
+    const before = session.document.value;
+    const historyLength = session.past.value.length;
+    const futureLength = session.future.value.length;
+
+    sessionActions.setStepTime(session, stepId, { iconId: "clock", label: "1m", seconds: 60 });
+
+    expect(session.document.value).toBe(before);
+    expect(session.past.value).toHaveLength(historyLength);
+    expect(session.future.value).toHaveLength(futureLength);
+  });
+
+  it("clearing a time that is already unset is a no-op, at both levels", () => {
+    const { session, stepId, tokenId } = sessionWithToken();
+    const before = session.document.value;
+    const historyLength = session.past.value.length;
+
+    sessionActions.setTokenTime(session, stepId, tokenId, undefined);
+    sessionActions.setStepTime(session, stepId, undefined);
+
+    expect(session.document.value).toBe(before);
+    expect(session.past.value).toHaveLength(historyLength);
+  });
+
+  it("re-writing an identical label or note records nothing", () => {
+    const { session, stepId, tokenId } = sessionWithToken();
+    sessionActions.updateTokenNote(session, stepId, tokenId, "Careful");
+    const before = session.document.value;
+    const historyLength = session.past.value.length;
+
+    sessionActions.updateTokenLabel(session, stepId, tokenId, "Chop");
+    sessionActions.updateTokenNote(session, stepId, tokenId, "Careful");
+
+    expect(session.document.value).toBe(before);
+    expect(session.past.value).toHaveLength(historyLength);
+  });
+
+  it("is a no-op for a token id the step doesn't hold", () => {
+    const { session, stepId } = sessionWithToken();
+    const before = session.document.value;
+    const historyLength = session.past.value.length;
+
+    sessionActions.updateTokenLabel(session, stepId, "no-such-token", "Chop");
+    sessionActions.setTokenTime(session, stepId, "no-such-token", { iconId: "clock", label: "1m", seconds: 60 });
+    sessionActions.removeTokenFromStep(session, stepId, "no-such-token");
+
+    expect(session.document.value).toBe(before);
+    expect(session.past.value).toHaveLength(historyLength);
+  });
+
+  it("is a no-op for a step id the document doesn't hold", () => {
+    const { session, tokenId } = sessionWithToken();
+    const before = session.document.value;
+    const historyLength = session.past.value.length;
+
+    sessionActions.updateTokenLabel(session, "no-such-step", tokenId, "Dice");
+    sessionActions.attachToToken(session, "no-such-step", tokenId, { kind: "warning", value: { iconId: "warn" } });
+    sessionActions.removeTokenFromStep(session, "no-such-step", tokenId);
+
+    expect(session.document.value).toBe(before);
+    expect(session.past.value).toHaveLength(historyLength);
+  });
+
+  it("patches one field without disturbing the rest of the token", () => {
+    const { session, stepId, tokenId } = sessionWithToken();
+    sessionActions.updateTokenNote(session, stepId, tokenId, "Careful");
+    sessionActions.attachToToken(session, stepId, tokenId, { kind: "warning", value: { iconId: "warn" } });
+
+    sessionActions.setTokenTime(session, stepId, tokenId, { iconId: "clock", label: "1m", seconds: 60 });
+
+    expect(session.document.value.steps[0].tokens[0]).toEqual({
+      id: tokenId,
+      category: "action",
+      iconId: "knife",
+      label: "Chop",
+      note: "Careful",
+      warning: { iconId: "warn" },
+      time: { iconId: "clock", label: "1m", seconds: 60 },
+    });
+  });
+
+  it("leaves every other step untouched by identity", () => {
+    const { session, stepId, tokenId } = sessionWithToken();
+    sessionActions.addStep(session);
+    const otherStep = session.document.value.steps[1];
+
+    sessionActions.updateTokenLabel(session, stepId, tokenId, "Dice");
+
+    expect(session.document.value.steps[1]).toBe(otherStep);
+  });
+});
+
 describe("copyToken / pasteToken", () => {
   it("copies a token's full content into the clipboard with a fresh id", () => {
     const session = createDocumentSession();
@@ -625,9 +874,10 @@ describe("undo / redo", () => {
       sessionActions.selectToken(session, stepId, token.id);
 
       sessionActions.removeTokenFromStep(session, stepId, token.id);
-      // removeTokenFromStep already clears selectedTokenId directly; redo
+      // removeTokenFromStep's own clearing comes from setSteps; redo
       // restoring the removal (with the token now selected again first)
-      // exercises restoreDocument's own repair path instead.
+      // exercises restoreDocument's separate repair path instead, which is
+      // the one path that doesn't go through setSteps.
       sessionActions.undo(session); // token is back
       sessionActions.selectToken(session, stepId, token.id);
       sessionActions.redo(session); // token is removed again

@@ -18,7 +18,7 @@ changed nothing":
 
 | Guard | Where | What it compares |
 |---|---|---|
-| `attachmentsEqual` | `attachToToken` | shallow key/value equality over a flat attachment object |
+| `fieldValuesEqual` | `updateTokenIn`, `setStepTimeCore` | shallow key/value equality over a flat attachment object |
 | `tokensEqual` | `moveTokenCore` | per-slot identity over an array whose elements are provably never cloned |
 | `clamped === fromIndex` | `reorderStepsCore` | index arithmetic, not a comparison at all |
 
@@ -67,3 +67,25 @@ as one of these three - not merely the same purpose. Three call sites each
 supplying their own comparator is Speculative Generality; two call sites
 sharing one comparator is ordinary de-duplication, and that is a different
 question from this one.
+
+## Update, 2026-09-20 - the revisit clause fired, and the decision held
+
+The 2026-09-20 architecture review's
+[candidate 3](../phase-3/audits/2026-09-20-architecture-review.html#c3)
+found that `setTokenTime` needed exactly the comparison `attachToToken`
+already had - the same flat-object shape, not merely the same purpose - and
+had shipped without it, so an unchanged Save on Token time recorded an undo
+entry and wiped redo. `setStepTime` had the same gap. That is the
+"two call sites sharing one comparator" the clause above sets aside as
+ordinary de-duplication, so the comparator was broadened from
+`attachmentsEqual` to `fieldValuesEqual` and the table row updated.
+
+**The decision itself is unchanged.** There is still no
+`noopGuard(current, next, isEqual)`. What was built is a *traversal* -
+`updateTokenIn` - that happens to own one comparison of its own; the
+comparison is not a parameter, and no call site supplies one. `tokensEqual`
+and `reorderStepsCore`'s `clamped === fromIndex`, the two guards whose
+shapes genuinely differ and which this ADR exists to protect, were not
+touched. `setStepTimeCore` calls the comparator directly rather than
+inheriting it from a step-level seam, precisely because hoisting its
+one-line `steps.map` behind an indirection is the move this ADR declines.
