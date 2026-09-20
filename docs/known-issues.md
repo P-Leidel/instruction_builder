@@ -587,7 +587,12 @@ audited decision, or is too large to land without its own design pass.
   pointer-move-driven `requestAnimationFrame` flush), separate handling for
   the page's vertical scroll versus the canvas's own horizontal scroll, and
   a drop hit-test that keeps updating as content moves under a stationary
-  pointer.
+  pointer. Sharpened 2026-09-20: drop resolution stopped reading the DOM,
+  so what used to reject a pointer over clipped-away canvas - `elementFromPoint`
+  finding nothing there - is now an explicit `isInsideViewport` check in
+  [pointer-drag.ts](../src/lib/pointer-drag.ts). Behaviour is unchanged, but
+  the limitation now has one named line of code holding it, which is where
+  an auto-scroll implementation would have to start.
 - **Step-reorder drag shows no insertion marker.** `StepCard`'s drag handle
   sets only `dragGhost`, never `dropTarget`
   ([StepCard.tsx](../src/components/InstructionCanvas/StepCard.tsx)), so

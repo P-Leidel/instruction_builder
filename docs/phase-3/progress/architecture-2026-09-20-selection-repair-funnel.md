@@ -1,5 +1,8 @@
 # Selection repair moved into `setSteps`
 
+> 📌 **Doc status: CURRENT** — one file in the
+> [Phase 3 Progress Log](./README.md).
+
 **Date:** 2026-09-20
 **Source:** [2026-09-20 architecture review](../audits/2026-09-20-architecture-review.html), candidate 2
 **Scope:** [`src/state/document.ts`](../../../src/state/document.ts), [`src/state/document.test.ts`](../../../src/state/document.test.ts)

@@ -413,7 +413,7 @@ async function dragBoxToBox(fromBox, toBox) {
 // Drops at an exact point rather than a box's center - which a token drop
 // now needs, because a chip's horizontal midpoint is a real boundary:
 // the left half inserts before it, the right half after it
-// (`resolveDropSlot`, lib/pointer-drag.ts). Dropping exactly on the center
+// (`resolveDropTarget`, lib/canvas-layout.ts). Dropping exactly on the center
 // is a tie, the same way dropping exactly on a step's vertical midpoint is
 // for a step reorder - see SKILL.md's gotcha.
 async function dragBoxToPoint(fromBox, toX, toY) {
@@ -1596,6 +1596,132 @@ const storedAfterHide = await readStoredDocument();
 const autosaveNotClobberedByTabHide =
   storedAfterHide?.schemaVersion === 2 && storedAfterHide?.meta?.title === "From the future (hide test)";
 
+// 2026-09-20 candidate 1: a drop is no longer resolved by asking the DOM
+// what is under the pointer. The pointer's client coordinates are converted
+// into the canvas's own design units once, through the rendered <svg>'s
+// getScreenCTM(), and the slot is then worked out purely from the
+// CanvasLayout (lib/canvas-layout.ts's resolveDropTarget). Unit tests cover
+// the geometry exhaustively and cannot cover the conversion at all - it
+// needs a real element with a real matrix, and this project has no DOM test
+// environment (ADR 0003).
+//
+// So these three checks are the conversion's only coverage, and they are
+// deliberately the three cases where a client *rect* used to get the right
+// answer for free and a matrix has to earn it: the page scrolled away from
+// the origin, the mobile breakpoint (where the SVG renders at a different
+// scale than its viewBox and overflows its own scroll container), and a
+// CSS zoom in the ancestor chain. Every drag below asserts a *move landing
+// in a specific slot*, not merely that something moved - a conversion that
+// was off by a constant would still move a token somewhere.
+//
+// Run last, and from a document this block builds itself, so nothing above
+// depends on the state it leaves behind.
+await page.locator(".app__toast-dismiss").click();
+const ctmCanvas = page.locator(".app__main .instruction-canvas").first();
+const ctmPicker = page.locator(".token-picker");
+
+async function addTokensToStep(stepIndex, names) {
+  await ctmCanvas.locator(".instruction-canvas__badge").nth(stepIndex).click();
+  for (const name of names) {
+    await ctmPicker.getByRole("button", { name, exact: true }).click();
+  }
+}
+await addTokensToStep(0, ["Chop", "Stir", "Boil", "Bake"]);
+await ctmCanvas.locator(".instruction-canvas__add-step").click();
+await addTokensToStep(1, ["Serve"]);
+
+const ctmStepTokens = (index) =>
+  ctmCanvas.locator(".instruction-canvas__tokens").nth(index).locator(".instruction-canvas__token");
+const ctmLabels = (index) => ctmStepTokens(index).locator(".instruction-canvas__chip-label").allTextContents();
+
+/**
+ * Drags step 1's first chip onto the LEFT half of step 2's first chip and
+ * reports whether it landed at index 0 there - the left half specifically,
+ * because a chip's horizontal midpoint is the boundary between "insert
+ * before" and "insert after", so landing on the wrong side of it is exactly
+ * the failure a mis-scaled conversion would produce.
+ */
+async function dragFirstChipToFrontOfStep2() {
+  const sourceBefore = await ctmLabels(0);
+  const targetBefore = await ctmLabels(1);
+  const source = await ctmStepTokens(0).nth(0).boundingBox();
+  const target = await ctmStepTokens(1).nth(0).boundingBox();
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + 3, target.y + target.height / 2, { steps: 10 });
+  await page.mouse.up();
+  const sourceAfter = await ctmLabels(0);
+  const targetAfter = await ctmLabels(1);
+  return (
+    targetAfter[0] === sourceBefore[0] &&
+    targetAfter.length === targetBefore.length + 1 &&
+    sourceAfter.length === sourceBefore.length - 1
+  );
+}
+
+await page.setViewportSize({ width: 1280, height: 420 });
+await ctmCanvas.locator(".instruction-canvas__step-bg").nth(1).scrollIntoViewIfNeeded();
+const scrollOffset = await page.evaluate(() => window.scrollY);
+const dropLandsCorrectlyWhenScrolled = (await dragFirstChipToFrontOfStep2()) && scrollOffset > 0;
+
+await page.setViewportSize({ width: 420, height: 900 });
+await ctmCanvas.locator(".instruction-canvas__step-bg").nth(1).scrollIntoViewIfNeeded();
+const mobileCanvasOverflows = await ctmCanvas.evaluate((el) => el.scrollWidth > el.clientWidth);
+const dropLandsCorrectlyAtMobileWidth = await dragFirstChipToFrontOfStep2();
+
+// The negative case the mobile geometry creates, and the only place
+// resolving against the layout is *less* forgiving than hit-testing the DOM
+// was. The <svg> is held at its 480px floor inside a narrower card, so the
+// card clips it - but getScreenCTM() knows nothing about clipping, and a
+// client point over the page background beside the card still converts to a
+// canvas point well inside a step. isInsideViewport (lib/pointer-drag.ts)
+// is what rejects it.
+//
+// Self-validating on purpose: asserting "nothing moved" alone would pass
+// just as happily if the point had converted to somewhere outside the
+// canvas anyway, which is the boring reason a guard looks like it works.
+// marginPointIsInsideCanvas proves the point really is one the geometry
+// would otherwise accept, so the two together mean the guard did the work.
+const marginProbe = await ctmCanvas.evaluate((card) => {
+  const svg = card.querySelector(".instruction-canvas__svg");
+  const chip = card.querySelector(".instruction-canvas__token");
+  const cardRect = card.getBoundingClientRect();
+  const chipRect = chip.getBoundingClientRect();
+  const clientX = cardRect.left + card.clientLeft + card.clientWidth + 6;
+  const clientY = chipRect.top + chipRect.height / 2;
+  const point = new DOMPoint(clientX, clientY).matrixTransform(svg.getScreenCTM().inverse());
+  const viewBoxWidth = svg.viewBox.baseVal.width;
+  const PADDING = 16;
+  return {
+    clientX,
+    clientY,
+    canvasX: point.x,
+    viewBoxWidth,
+    insideCanvasBand: point.x >= PADDING && point.x < viewBoxWidth - PADDING,
+    reachable: clientX < window.innerWidth,
+  };
+});
+
+async function dragFirstChipTo(clientX, clientY) {
+  const before = JSON.stringify([await ctmLabels(0), await ctmLabels(1)]);
+  const source = await ctmStepTokens(0).nth(0).boundingBox();
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(clientX, clientY, { steps: 10 });
+  await page.mouse.up();
+  return before === JSON.stringify([await ctmLabels(0), await ctmLabels(1)]);
+}
+
+const marginPointIsInsideCanvas = marginProbe.insideCanvasBand && marginProbe.reachable;
+const mobileMarginDropIsIgnored =
+  marginPointIsInsideCanvas && (await dragFirstChipTo(marginProbe.clientX, marginProbe.clientY));
+
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.evaluate(() => (document.documentElement.style.zoom = "1.4"));
+await ctmCanvas.locator(".instruction-canvas__step-bg").nth(1).scrollIntoViewIfNeeded();
+const dropLandsCorrectlyWhenZoomed = await dragFirstChipToFrontOfStep2();
+await page.evaluate(() => (document.documentElement.style.zoom = ""));
+
 await browser.close();
 
 console.log("SCREENSHOTS_DIR=" + OUT);
@@ -1684,5 +1810,12 @@ console.log("ACCESSIBILITY_VIOLATIONS_IMPORT_DIALOG=" + accessibilityViolationsI
 console.log("ACCESSIBILITY_VIOLATIONS_MOBILE=" + accessibilityViolationsMobile);
 console.log("ACCESSIBILITY_VIOLATIONS_TABLET_PORTRAIT=" + accessibilityViolationsTabletPortrait);
 console.log("ACCESSIBILITY_VIOLATIONS_TABLET_LANDSCAPE=" + accessibilityViolationsTabletLandscape);
+console.log("DROP_LANDS_CORRECTLY_WHEN_SCROLLED=" + dropLandsCorrectlyWhenScrolled);
+console.log("DROP_LANDS_CORRECTLY_AT_MOBILE_WIDTH=" + dropLandsCorrectlyAtMobileWidth + " (canvas overflows its container: " + mobileCanvasOverflows + ")");
+console.log("DROP_LANDS_CORRECTLY_WHEN_ZOOMED=" + dropLandsCorrectlyWhenZoomed);
+console.log(
+  "MOBILE_MARGIN_DROP_IS_IGNORED=" + mobileMarginDropIsIgnored +
+    ` (point beside the card at clientX=${Math.round(marginProbe.clientX)} converts to canvas x=${Math.round(marginProbe.canvasX)} of ${marginProbe.viewBoxWidth}, inside the band: ${marginProbe.insideCanvasBand})`,
+);
 console.log("CONSOLE_ERRORS_COUNT=" + errors.length);
 for (const e of errors) console.log(e);

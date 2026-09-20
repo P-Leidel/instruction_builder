@@ -1,5 +1,14 @@
 # Handoff — Candidate 4: move the canvas layout onto computed signals
 
+> 🗄️ **Doc status: HISTORICAL — superseded (2026-09-20).** The work this
+> handoff scoped shipped the same day the handoff was written, with all
+> eight settled decisions implemented as recorded below, so it is frozen
+> here as the plan of record rather than maintained. See
+> [../progress/architecture-2026-09-20-canvas-layout-signals.md](../progress/architecture-2026-09-20-canvas-layout-signals.md)
+> for what actually shipped. See
+> [../../milestones.md](../../milestones.md#documentation-status-conventions)
+> for what CURRENT/HISTORICAL mean project-wide.
+
 **Repo:** `D:\websites\instruction_builder` (branch `main`, HEAD `c68c80d`)
 **Date:** 2026-09-20
 **Status:** design fully settled by a grilling session; **no code written yet**

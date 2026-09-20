@@ -115,6 +115,13 @@ the value here is in the awkward cases.
 - [ ] A quick click with no movement should just **select**, never move
       anything.
 - [ ] Use the Move up / Move down buttons as well as dragging.
+- [ ] **Give one token a time (Token details -> Time) and then drag things
+      around it.** A timed token draws a label above itself, and until
+      2026-09-20 that label made the whole row it sits in accept drops in
+      the wrong place. Drop onto its neighbours as well as onto it.
+- [ ] Press Ctrl+Z straight after moving a token into a different step. It
+      should go back where it came from, once - not vanish, and not take
+      two presses.
 
 ### Window sizes
 
@@ -180,6 +187,10 @@ in the app.
       mis-tapping.
 - [ ] Try pinch-zoom and double-tap on the canvas - report anything that
       breaks or gets stuck.
+- [ ] **Drag a token off the right-hand edge of the canvas card and let go
+      there.** The canvas is wider than the card on a phone, so part of it
+      is cut off; a drop out there is meant to do nothing at all. Report it
+      if the token moves anyway, or lands somewhere you did not point at.
 
 ### The Time and Quantity panel — please test this hard
 

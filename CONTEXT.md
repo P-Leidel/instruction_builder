@@ -96,11 +96,30 @@ field popover's old `aria-modal="false"`-plus-Tab-trap contradict itself.
 _Avoid_: "popover", "modal" on its own (this app has exactly one modal
 pattern and one non-modal one - name which), "alert" (that is the toast).
 
+## Canvas point
+
+A **canvas point** is a position in the canvas's own design units - the
+coordinate space `computeCanvasLayout` returns every `cardY`, `cx` and `cy`
+in, and the space all drop resolution happens in (`CanvasPoint` in
+[src/lib/canvas-layout.ts](./src/lib/canvas-layout.ts)).
+
+It is deliberately not a client coordinate. The `<svg>` canvas is scaled by
+its `viewBox`, scrolled inside its container, and zoomable independently of
+the page, so the two spaces agree only by accident. Exactly one function
+converts between them: `clientToCanvasPoint` in
+[src/lib/pointer-drag.ts](./src/lib/pointer-drag.ts), composing the
+element's `getScreenCTM()`. That call and the clipping check beside it
+(`isInsideViewport`, which decides whether the point is somewhere the canvas
+can actually be seen) are the only two DOM reads left in the drag path.
+
+_Avoid_: calling a client pixel a canvas point, or vice versa. Name which
+space a coordinate is in whenever both are in scope.
+
 ## Drop target / drop slot
 
 A **drop target** is where a dragged token would land: a step id plus a
 drop-before index within that step's tokens (`TokenDropTarget` in
-[src/lib/pointer-drag.ts](./src/lib/pointer-drag.ts)). It is the whole
+[src/lib/canvas-layout.ts](./src/lib/canvas-layout.ts)). It is the whole
 instruction a move needs - `moveToken` and `addTokenToStep` take exactly
 this and nothing more.
 
@@ -114,11 +133,24 @@ to pick one. The `dropTarget` signal
 ([src/state/drag.ts](./src/state/drag.ts)) holds a drop slot for that
 reason; the narrower drop target stays what the document mutators consume.
 
-Both are resolved from live client coordinates by a bounding-rect scan over
-a step's rendered chips, not by hit-testing the element under the pointer:
-the gap between two chips has no element of its own, so a hit-test has
-nothing to report there. See `resolveDropSlot`'s own comment for why that
-matters and what it fixed.
+`ChipSlot`, in the same module, is the step-less half of that pair: an
+index and a row within *one* step's chips, which is what the resolver
+produces before a step id is attached to it, and what
+`insertionMarkerPosition` takes. It is deliberately not called a drop slot,
+so that term keeps naming exactly one type.
+
+Both are resolved by `resolveDropTarget` from a **canvas point** against the
+same `CanvasLayout` the canvas was rendered from - never by hit-testing the
+element under the pointer, and, since 2026-09-20, never by measuring a
+rendered chip either. Two properties follow, and both are load-bearing. The
+gap between two chips has no element of its own, so a hit-test has nothing
+to report there, whereas a scan over positioned hit boxes always resolves
+every point inside a step to some slot. And a chip's hit box is exactly
+`CHIP_WIDTH` by `CHIP_HEIGHT` whatever that chip draws inside itself, so
+attaching a time or a quantity to a token cannot shift the slot boundaries
+around it - which measuring the rendered box did do. See
+[the write-up](./docs/phase-3/progress/architecture-2026-09-20-layout-hit-testing.md)
+for what that cost and how it was found.
 
 _Avoid_: "drop zone" (nothing in this app highlights a region as droppable -
 every point inside a step resolves to a specific slot), and using "drop

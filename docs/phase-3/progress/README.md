@@ -22,7 +22,13 @@ updated 2026-09-18 (a whole-codebase health review, the field-placement
 seam and vertical flip it recommended, two new tablet viewports in the
 Playwright driver, and then the second remediation batch from the same
 review: `docs/adr/`, deferred object-URL revokes, genuinely modal confirm
-dialogs, and the mobile layout's empty Token details placeholder)
+dialogs, and the mobile layout's empty Token details placeholder), updated
+2026-09-20 (task 30's eleventh feedback pass on token drop accuracy and the
+text-selection bug it turned up, then a further architecture review with
+four candidates shipped: the selection-repair funnel, the token-write seam,
+the canvas layout on computed signals, and drop resolution moved off the DOM
+onto that layout - plus the `moveToken` unknown-destination bug reviewing
+that path exposed)
 Scope: Phase 3, "Recipe Content & Launch" - reprioritized from the original
 plan's "Generic Instruction Framework" (see
 [../../project-plan.md](../../project-plan.md#implementation-plan)'s Phase 3
@@ -286,16 +292,37 @@ through it and silently appended the token to the end of the step; a chip
 could only ever be inserted *before*, never after (the user's "tokens should
 connect on both sides"); and a press that wobbled past the uniform 6px
 threshold became a drag onto the token's own slot, which `moveTokenCore`
-no-ops - so a tap did nothing at all. The chip lookup is a bounding-rect
-midpoint scan now, the insertion marker carries the hovered row so it draws
-on the right side of a row boundary, an own-slot drop falls back to the tap,
-and touch gets its own 12px threshold. See
-[token-drop-accuracy.md](./token-drop-accuracy.md). A follow-up report from
+no-ops - so a tap did nothing at all. The chip lookup became a bounding-rect
+midpoint scan (since replaced - see the architecture round below), the
+insertion marker carries the hovered row so it draws on the right side of a
+row boundary, an own-slot drop falls back to the tap, and touch gets its own
+12px threshold. See [token-drop-accuracy.md](./token-drop-accuracy.md). A follow-up report from
 the same round - "while dragging they keep marking the text" - turned out to
 be a separate, one-rule bug: neither the canvas SVG nor the "Add to step"
 panel opted out of text selection, so a grab that missed a chip or a picker
 button swiped a highlight across their labels instead of dragging. See
 [drag-marked-text-instead-of-dragging.md](../../fixed-issues/drag-marked-text-instead-of-dragging.md).
+
+A 2026-09-20 architecture review closed the day, and four of its candidates
+shipped. Two tightened seams in `state/document.ts`: selection repair moved
+into one place instead of three mutators that had drifted, and every write
+to one token inside one step goes through a single traversal - which turned
+two properties that had previously held in some copies and not others into
+unconditional ones. The other two were the canvas, and the second needed the
+first: `computeCanvasLayout`'s two callers became module-level `computed()`
+signals, which let any module read the live layout without a prop or a ref,
+and drop resolution then stopped reading the DOM altogether and now resolves
+a pointer against that same layout. That change also fixed a bug the
+drop-accuracy pass had left behind - a chip with a token-time label measured
+taller than an untimed sibling, so it pulled its whole row's hit box out of
+position - and closed a hole the DOM hit-test had been covering by accident,
+since a coordinate transform, unlike `elementFromPoint`, maps happily onto
+canvas that is scrolled or clipped out of sight. Reviewing that same drop
+path turned up one more defect: `moveToken` validated the step a token came
+*from* but never the step it was going *to*, so an unknown destination
+removed the token and re-inserted it nowhere, destroying it and writing the
+destruction as an ordinary undo entry. See
+[move-token-unknown-destination-destroyed-token.md](../../fixed-issues/move-token-unknown-destination-destroyed-token.md).
 
 ## What shipped
 
@@ -323,11 +350,16 @@ One file per task (or per notable pass), in task-number order:
 | — | Architecture: 2026-09-18 codebase health review, then the field-placement seam (`lib/field-placement.ts` gains a vertical flip and resize re-placement; `FieldPopover`'s Tab trap dropped as `aria-modal="false"` always said it was; `CollapsedField` stops writing local state while controlled) and two new tablet viewports in the driver | [audits/2026-09-18-architecture-review.html](../audits/2026-09-18-architecture-review.html), [architecture-2026-09-18-field-placement-and-tablet-viewports.md](./architecture-2026-09-18-field-placement-and-tablet-viewports.md) |
 | — | Architecture: 2026-09-18 review remediation, batch 2 (`docs/adr/` started with three entries; `downloadBlob` defers its object-URL revoke and attaches the anchor; the confirm dialogs get `aria-modal` + `inert` + focus return and lose their hand-rolled Tab cycle; the empty Token details panel collapses below 800px) | [architecture-2026-09-18-modal-dialogs-and-mobile-layout.md](./architecture-2026-09-18-modal-dialogs-and-mobile-layout.md) |
 | — | Token drag-and-drop drop accuracy (bounding-rect midpoint scan replaces the chip hit-test; row-aware insertion marker; own-slot drop falls back to the tap; per-pointer-type thresholds; `pointercancel` stops selecting; one guarded `dropTarget` setter; the dragged chip dims) | [token-drop-accuracy.md](./token-drop-accuracy.md) |
+| — | Architecture: 2026-09-20 review, candidate 2's selection-repair funnel (three mutators' hand-rolled repairs replaced by one `repairSelection` inside `setSteps`) | [architecture-2026-09-20-selection-repair-funnel.md](./architecture-2026-09-20-selection-repair-funnel.md) |
+| — | Architecture: 2026-09-20 review, candidate 3's token-write seam (five mutators' duplicated step-then-token traversal folded into `updateTokenIn`; unknown-id and no-op-patch guards become unconditional) | [architecture-2026-09-20-token-write-seam.md](./architecture-2026-09-20-token-write-seam.md) |
+| — | Architecture: 2026-09-20 review, candidate 4 (the two `computeCanvasLayout` `useMemo`s become `liveLayout`/`exportLayout` computeds in a new `state/canvas.ts`; `useIsDesktop` becomes an `isDesktop` signal; the audit's headline win shown not to hold) | [architecture-2026-09-20-canvas-layout-signals.md](./architecture-2026-09-20-canvas-layout-signals.md) |
+| — | Architecture: 2026-09-20 review, candidate 1 (drop resolution moves out of the DOM and into `canvas-layout.ts` against the rendered `CanvasLayout`; three public entry points collapse to one, with `resolveDropSlot` moving in and going private; timed chips stop distorting their row's hit box; a viewport guard replaces the clipping `elementFromPoint` used to do for free) | [architecture-2026-09-20-layout-hit-testing.md](./architecture-2026-09-20-layout-hit-testing.md), [plans/2026-09-20-candidate-1-layout-hit-testing-spec.md](../plans/2026-09-20-candidate-1-layout-hit-testing-spec.md) |
+| — | A two-axis code review (standards and spec) of the whole 2026-09-20 arc: no behavioural defect, eleven documentation and comment findings cleared, `DropSlot` renamed `ChipSlot` off a glossary collision, `insertionMarkerPosition` and `resolveDropSlot` given whole values instead of split-up ones, the drag teardown pulled into `clearDrag`, and two code-comment decisions promoted to ADRs | [adr/0004](../../adr/0004-every-point-in-a-step-resolves-to-a-slot.md), [adr/0005](../../adr/0005-viewport-guard-on-token-drops-only.md) |
 | 31 | Refine UX | *not started* |
 
 ## Verification
 
-- `npm run lint`, `npm run typecheck`, `npm test` (179 tests across 13
+- `npm run lint`, `npm run typecheck`, `npm test` (217 tests across 14
   files - the
   pre-launch audit only updated 3 existing `duration.test.ts` assertions'
   expected strings for the new human-readable format; the canvas deepening
@@ -373,7 +405,14 @@ One file per task (or per notable pass), in task-number order:
   per-pointer-type thresholds, and 3 in `canvas-layout.test.ts` for the
   row-boundary marker - because that change moved drop geometry *out* of a
   DOM hit-test and into pure logic, which is exactly the kind of thing
-  Vitest can cover),
+  Vitest can cover; the 2026-09-20 architecture round added 38 more - 7 for
+  the selection-repair funnel, 8 for the token-write seam, 5 for the
+  canvas-layout computeds in a new `state/canvas.test.ts` (the phase's second
+  new test file), a net 15 for layout-based drop resolution - ten synthetic-
+  fixture `resolveDropSlot` cases deleted, 18 added for `resolveDropTarget`
+  and `resolveStepDropIndex` against real `computeCanvasLayout` output and
+  7 for `beginPointerDrag` - and 3 for
+  `moveToken`/`addTokenToStep`'s unknown-step guards),
   and `npm run build` all pass cleanly.
 - See each task's own file above for full verification detail
   (browser-driven checks, bundle size deltas, and the decisions made along
@@ -384,4 +423,12 @@ One file per task (or per notable pass), in task-number order:
 See [../../milestones.md](../../milestones.md) for the current status at a
 glance, or the full task list in
 [../../project-plan.md](../../project-plan.md#step-by-step-project-tasks).
-Tasks 25-29 are done. Task 30 (Test Real Users) is next.
+Tasks 25-29 are done. Task 30 (Test Real Users) is in progress - eleven
+feedback passes shipped, with testers working through
+[../../manual-testing-checklist.md](../../manual-testing-checklist.md).
+Task 31 (Refine UX) has not started. Three candidates from the 2026-09-20
+architecture review are still open, all graded "worth exploring" rather than
+"strong": the export interface asking for more than it needs (5), a keyboard
+outcome resolver to match the pointer one (6), and one field shape built at
+two structural depths (7). See
+[../audits/2026-09-20-architecture-review.html](../audits/2026-09-20-architecture-review.html).

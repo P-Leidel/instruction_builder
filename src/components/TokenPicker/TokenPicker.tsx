@@ -1,9 +1,10 @@
 import type { TokenCategory } from "../../model/instruction";
 import { createToken } from "../../model/instruction";
 import { addTokenToSelectedStep, addTokenToStep } from "../../state/document";
-import { dragGhost, setDropTarget } from "../../state/drag";
+import { clearDrag, dragGhost, dropTarget, setDropTarget } from "../../state/drag";
+import { resolveLiveDropTarget } from "../../state/canvas";
 import { activeTokenCategory } from "../../state/ui";
-import { beginPointerDrag, resolveTokenDropTarget, createClickAfterDragGuard } from "../../lib/pointer-drag";
+import { beginPointerDrag, createClickAfterDragGuard } from "../../lib/pointer-drag";
 import { SAMPLE_TOKENS, CATEGORY_LABELS, type SampleToken } from "../../data/sample-tokens";
 import { Icon } from "../Icon/Icon";
 
@@ -94,18 +95,18 @@ export function TokenPicker() {
               beginPointerDrag(event, {
                 onMove: (x, y) => {
                   dragGhost.value = { label: sample.label, x, y };
-                  setDropTarget(resolveTokenDropTarget(x, y));
+                  setDropTarget(resolveLiveDropTarget(x, y));
                 },
-                onCancel: () => {
-                  dragGhost.value = null;
-                  setDropTarget(null);
-                },
-                onDrop: (x, y, wasDrag) => {
-                  dragGhost.value = null;
-                  setDropTarget(null);
+                onCancel: clearDrag,
+                onDrop: (_x, _y, wasDrag) => {
+                  // Same rule as TokenChip's drop: commit the slot the
+                  // insertion marker was previewing, captured before the
+                  // teardown below clears it, rather than resolving the
+                  // release point a second time.
+                  const target = dropTarget.value;
+                  clearDrag();
                   if (!wasDrag) return;
                   dragGuard.markDragged();
-                  const target = resolveTokenDropTarget(x, y);
                   if (target) {
                     addTokenToStep(
                       target.stepId,

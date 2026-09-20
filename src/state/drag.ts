@@ -1,5 +1,5 @@
 import { signal } from "@preact/signals";
-import type { TokenDropSlot } from "../lib/pointer-drag";
+import type { TokenDropSlot } from "../lib/canvas-layout";
 
 /**
  * Transient drag-in-progress UI state (task 9), separate from document/
@@ -19,7 +19,7 @@ export const dragGhost = signal<DragGhost | null>(null);
  * pointer is currently over. `StepCard` uses the slot to render a live
  * insertion-point marker (not just a highlight on the whole step), updating
  * as the pointer moves over different chips. Typed as `TokenDropSlot` (not a
- * separate local type) since it only ever holds `resolveTokenDropTarget`'s
+ * separate local type) since it only ever holds `resolveDropTarget`'s
  * return value - which carries the hovered row alongside the drop index,
  * because the index alone doesn't say where to draw at a row boundary (see
  * `TokenDropSlot`'s own comment). Consumers that only perform the move, like
@@ -46,4 +46,23 @@ export function setDropTarget(next: TokenDropSlot | null): void {
     return;
   }
   dropTarget.value = next;
+}
+
+/**
+ * Tears down everything a drag leaves behind in this module - the floating
+ * ghost and the hovered drop slot - in one call.
+ *
+ * Both drag sources end a drag on two paths each (drop and cancel), and all
+ * four have to clear exactly this pair: a ghost left behind follows the
+ * pointer with no drag under it, and a stale drop slot keeps an insertion
+ * marker drawn in a step nothing is hovering. That pairing was hand-written
+ * at three of those four sites and extracted at the fourth, which is the
+ * same drift `setDropTarget` above exists to prevent - so it gets the same
+ * treatment: one teardown beside the signals it tears down. A caller with
+ * its own local drag state (TokenChip dims its source chip) still wraps this
+ * rather than replacing it, because that state isn't ours to clear.
+ */
+export function clearDrag(): void {
+  dragGhost.value = null;
+  setDropTarget(null);
 }

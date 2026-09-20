@@ -68,6 +68,8 @@
               <span class="rounded-full bg-emerald-600 text-white text-xs font-semibold px-3 py-1">Strong</span>
               <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
               <span class="rounded-full bg-indigo-50 text-indigo-700 text-xs px-3 py-1 border border-indigo-200">Top recommendation</span>
+              <span class="rounded-full bg-slate-800 text-white text-xs px-3 py-1">two claims sharpened &middot; see below</span>
+              <span class="rounded-full bg-emerald-50 text-emerald-800 text-xs px-3 py-1 border border-emerald-200">done 2026-09-20</span>
             </div>
             <h2 class="font-serif text-2xl">1 · Resolve a drop against the layout, not against the DOM</h2>
             <div class="mono text-xs text-slate-500 space-y-0.5">
@@ -240,6 +242,55 @@ flowchart TB
               that is candidate 4, which this depends on. Client rects also survive any CSS transform for free; a CTM
               conversion has to be shown to. <code class="mono text-xs">getScreenCTM()</code> does account for transforms
               and scroll, but that is a claim the driver has to check, not a free property.
+            </p>
+          </div>
+
+          <div class="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm space-y-3">
+            <div class="label text-emerald-800">Landed 2026-09-20 &mdash; and what probing first changed</div>
+            <p class="text-emerald-900 leading-relaxed">
+              Implemented as specified: <code class="mono text-xs">resolveDropTarget(point, layout)</code> and
+              <code class="mono text-xs">resolveStepDropIndex(point, layout)</code> in
+              <code class="mono text-xs">canvas-layout.ts</code>, fed by one
+              <code class="mono text-xs">clientToCanvasPoint</code> in <code class="mono text-xs">pointer-drag.ts</code>.
+              Write-up: <code class="mono text-xs">docs/phase-3/progress/architecture-2026-09-20-layout-hit-testing.md</code>.
+              The <strong>Honest cost</strong> above was right to flag the CTM as a claim to check: the driver now checks
+              it under page scroll, at the mobile breakpoint where the canvas genuinely overflows its scroll container,
+              and under a CSS zoom. All three pass.
+            </p>
+            <p class="text-emerald-900 leading-relaxed">
+              Two of this article's claims were <strong>understated</strong>, both established by probe before any code
+              was written. The timed-chip hit box was called something that "holds today": it does not. With the first
+              chip of row 1 carrying a duration, a 7-unit band in the gap between the rows resolved to row 1 index 7
+              where an untimed document resolved to row 0 index 1 &mdash; a whole row and six slots apart, decided by
+              whether a token happened to have a time attached. And the preview/commit gap was diagnosed as the second
+              read being "correct only because the render has not flushed"; the real mechanism is the
+              <code class="mono text-xs">requestAnimationFrame</code> coalescing, which is why a drag released before
+              its first frame painted committed a drop <em>nothing had previewed</em>, and one released after travelling
+              past its last painted frame committed a point the preview never saw. Neither depends on render timing at
+              all.
+            </p>
+            <p class="text-emerald-900 leading-relaxed">
+              The <strong>Deletion test</strong> above was too strong in two places.
+              <code class="mono text-xs">data-step-index</code> does not vanish &mdash; the Playwright driver locates
+              step groups by it, so it stops being the drag contract and stays the driver contract. The three CSS rules
+              do not vanish either: <code class="mono text-xs">.drag-ghost</code>'s
+              <code class="mono text-xs">pointer-events: none</code> and the export canvas's zero sizing are both wanted
+              on their own merits. What actually changed is that they stopped being load-bearing on an undeclared
+              contract, and their comments now say so.
+              <code class="mono text-xs">data-token-index</code> is gone.
+            </p>
+            <p class="text-emerald-900 leading-relaxed">
+              One cost the <strong>Honest cost</strong> paragraph did not name, found by driving the app rather than by
+              reading it: a matrix knows nothing about <em>clipping</em>. At a 420px viewport the canvas
+              <code class="mono text-xs">&lt;svg&gt;</code> is held at its 480px floor inside a 388px card, so it runs
+              109px past the card's right edge &mdash; and every client point in that strip converts, perfectly
+              correctly, to a canvas point inside a step. <code class="mono text-xs">elementFromPoint</code> rejected
+              those points for free because there is no canvas painted there; resolving against the layout has to reject
+              them on purpose. <code class="mono text-xs">isInsideViewport</code> does, which is why
+              <code class="mono text-xs">state/canvas.ts</code> registers the clipping card alongside the
+              <code class="mono text-xs">&lt;svg&gt;</code> rather than the element alone. The step-reorder resolver
+              deliberately keeps no such guard: it replaced a function that took a <code class="mono text-xs">clientY</code>
+              and nothing else, and a vertical-list drag should stay horizontally indifferent.
             </p>
           </div>
         </article>
@@ -570,6 +621,8 @@ flowchart TB
               <span class="rounded-full bg-amber-500 text-white text-xs font-semibold px-3 py-1">Worth exploring</span>
               <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">in-process</span>
               <span class="rounded-full bg-slate-100 text-slate-600 text-xs px-3 py-1">carried over · now load-bearing</span>
+              <span class="rounded-full bg-slate-800 text-white text-xs px-3 py-1">claimed win withdrawn &middot; see below</span>
+              <span class="rounded-full bg-emerald-50 text-emerald-800 text-xs px-3 py-1 border border-emerald-200">done 2026-09-20</span>
             </div>
             <h2 class="font-serif text-2xl">4 · Move the canvas layout onto a computed signal</h2>
             <div class="mono text-xs text-slate-500 space-y-0.5">
@@ -631,7 +684,8 @@ flowchart TB
                 <div class="absolute left-[35%] bottom-0 w-[30%] rounded border border-slate-300 bg-white px-2 py-2 text-center mono text-[9px]">preview canvas</div>
                 <div class="absolute right-0 bottom-0 w-[30%] rounded border border-slate-300 bg-white px-2 py-2 text-center mono text-[9px]">export canvas</div>
               </div>
-              <p class="mono text-[10px] text-emerald-700 mt-2">App no longer subscribes to the document at all</p>
+              <p class="mono text-[10px] text-slate-400 mt-2 line-through">App no longer subscribes to the document at all</p>
+              <p class="mono text-[10px] text-red-700">false &mdash; the toolbar title input still reads it; see below</p>
             </div>
           </div>
 
@@ -659,6 +713,45 @@ flowchart TB
             </p>
           </div>
 
+          <div class="rounded-lg border-2 border-slate-900 bg-white p-4 text-sm space-y-3">
+            <div class="label text-slate-900">Implemented 2026-09-20 &mdash; with one win withdrawn and one cost caught</div>
+            <p class="text-slate-800 leading-relaxed">
+              <strong>The re-render win does not hold, and never could have.</strong> The "After" diagram above claims
+              <code class="mono text-xs">App</code> stops subscribing to the document. It does not: the toolbar's
+              document-title input reads <code class="mono text-xs">document.value.meta.title</code>, and
+              <code class="mono text-xs">document</code> is a single signal holding the whole document, so Preact's
+              per-signal subscription re-renders the root on every token keystroke either way. Removing the two
+              <code class="mono text-xs">useMemo</code>s changes nothing there. This is decidable by reading the code,
+              not a measurement that was taken. The candidate's value is the leverage its own deletion test already
+              concedes &mdash; and that part landed intact.
+            </p>
+            <p class="text-slate-800 leading-relaxed">
+              <strong>A naive port would have made performance worse.</strong> The
+              <code class="mono text-xs">useMemo</code>s declared <code class="mono text-xs">[steps]</code>, and
+              <code class="mono text-xs">updateTitle</code> rebuilds the document around the <em>same</em>
+              <code class="mono text-xs">steps</code> array &mdash; so title keystrokes never recomputed geometry. A
+              <code class="mono text-xs">computed()</code> reading <code class="mono text-xs">document.value.steps</code>
+              directly would have recomputed both layouts on every one of them. <code class="mono text-xs">state/canvas.ts</code>
+              therefore derives through a private <code class="mono text-xs">steps</code> computed, which returns the
+              unchanged array, doesn't bump its version, and leaves both layouts on their cached values. A test holds it;
+              removing it fails that test.
+            </p>
+            <p class="text-slate-800 leading-relaxed">
+              <strong>The computeds live in a new <code class="mono text-xs">state/canvas.ts</code>, not beside the
+              document.</strong> The Solution panel above says "beside the document, exactly as
+              <code class="mono text-xs">selectedStep</code> and <code class="mono text-xs">selectedToken</code> already
+              are" &mdash; i.e. inside <code class="mono text-xs">createDocumentSession()</code>. That was declined: a
+              viewport is a property of the browser window, not of a document session, and two sessions open at once
+              would still share one screen. <code class="mono text-xs">isDesktop</code> and
+              <code class="mono text-xs">startViewportTracking()</code> live there too, the latter split out of module
+              scope so the <code class="mono text-xs">environment: "node"</code> suite can import the module at all
+              &mdash; the same contract <code class="mono text-xs">initPersistence()</code> already has.
+              <code class="mono text-xs">InstructionCanvas</code> keeps its plain
+              <code class="mono text-xs">layout: CanvasLayout</code> prop. Pure restructuring; no behaviour changed. See
+              <a class="underline decoration-slate-400" href="../progress/architecture-2026-09-20-canvas-layout-signals.md">architecture-2026-09-20-canvas-layout-signals.md</a>.
+            </p>
+          </div>
+
           <div class="grid sm:grid-cols-2 gap-x-8 gap-y-2">
             <div>
               <div class="label text-slate-500 mb-2">Wins</div>
@@ -666,7 +759,7 @@ flowchart TB
                 <li>Locality: one definition of the layout</li>
                 <li>Leverage: any module can read it</li>
                 <li>Unblocks candidate 1's seam</li>
-                <li>Root stops re-rendering per keystroke</li>
+                <li class="text-slate-400 line-through">Root stops re-rendering per keystroke</li>
               </ul>
             </div>
             <div>

@@ -37,3 +37,5 @@ on a date and stops being touched.
 | [0001](./0001-keep-collapsedfield-dual-mode.md) | Keep `CollapsedField`'s dual controlled/uncontrolled mode, guarded, rather than deleting the uncontrolled half | 2026-09-18 |
 | [0002](./0002-no-shared-no-op-guard.md) | Decline a shared no-op guard behind `state/document.ts`'s three history guards | 2026-09-18 |
 | [0003](./0003-no-component-test-environment.md) | No DOM test environment; `src/components/` is covered by the Playwright driver, and testable logic moves to `src/lib/` instead | 2026-09-18 |
+| [0004](./0004-every-point-in-a-step-resolves-to-a-slot.md) | Every point inside a step card resolves to a drop slot - no dead zones, no null-within-a-step | 2026-09-20 |
+| [0005](./0005-viewport-guard-on-token-drops-only.md) | The live viewport guard applies to token drops only; a step reorder stays horizontally indifferent | 2026-09-20 |

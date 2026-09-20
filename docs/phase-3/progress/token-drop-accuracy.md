@@ -58,6 +58,19 @@ implementation started.
 
 ### The drop resolver is a bounding-rect scan now
 
+> ⚠️ **Superseded 2026-09-20 (later the same day) by
+> [the layout hit-testing work](./architecture-2026-09-20-layout-hit-testing.md).**
+> This section describes what shipped here, and the *behaviour* it describes
+> still holds - every point in a step belongs to exactly one slot, and a chip
+> accepts an insertion on either side. The mechanism below does not: drop
+> resolution no longer measures the DOM at all, and works in canvas design
+> units against the rendered `CanvasLayout` rather than in client
+> coordinates against live rects. The client-coordinate reasoning in the
+> second paragraph is exactly what that change reversed, and the
+> "measured copy was subtly not the computed one" bug it left behind - a
+> chip with a token-time label measuring taller than an untimed sibling -
+> is what forced the rework. Read that file before relying on anything here.
+
 [lib/pointer-drag.ts](../../../src/lib/pointer-drag.ts) still finds the
 *step* with `elementFromPoint`, but the slot within it is now
 `resolveDropSlot`: clamp the pointer to the nearest row of chips, then

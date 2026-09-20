@@ -1,6 +1,7 @@
 import type { RefObject } from "preact";
-import { useRef } from "preact/hooks";
+import { useEffect, useRef } from "preact/hooks";
 import { document, addStep } from "../../state/document";
+import { liveCanvas } from "../../state/canvas";
 import { PADDING, ADD_STEP_ROW_HEIGHT, type CanvasLayout } from "../../lib/canvas-layout";
 import { documentTotalTime } from "../../lib/duration";
 import { SvgButton } from "./SvgButton";
@@ -24,12 +25,18 @@ interface InstructionCanvasProps {
   readOnly?: boolean;
   /**
    * Already-computed geometry - every chip position, connector path, and
-   * canvas sizing this component draws. `App` owns calling
-   * `computeCanvasLayout` (see its own doc comment) and decides what
-   * `isDesktop` value feeds it: the live editable instance gets the real
-   * `matchMedia` result, while the read-only Preview and hidden export
-   * instances both get a fixed desktop layout (2026-09-17 remediation) -
-   * this component itself no longer knows or cares which.
+   * canvas sizing this component draws. `state/canvas.ts` owns calling
+   * `computeCanvasLayout` and owns the `isDesktop` signal that feeds it:
+   * the live editable instance is passed `liveLayout.value` (the real
+   * viewport), while the read-only Preview and hidden export instances are
+   * both passed `exportLayout.value`, pinned to desktop (2026-09-17
+   * remediation) - this component itself no longer knows or cares which.
+   *
+   * Still a plain `CanvasLayout` value rather than the signal itself: a
+   * caller that wants to render a layout this module didn't derive (a test,
+   * or a future thumbnail at some other width) can still pass one, and the
+   * component keeps working on values instead of taking a dependency on
+   * where they came from.
    */
   layout: CanvasLayout;
   /**
@@ -67,12 +74,18 @@ interface InstructionCanvasProps {
  * select a step.
  *
  * Task 9 (Drag-and-Drop): a token chip is also a drag source - dragging it
- * over a step (`data-step-id`) or a specific chip (`data-token-index`)
- * moves it there via `moveToken`. A quick tap with no real movement still
+ * over a step moves it there via `moveToken`. Where a drop lands is worked
+ * out against the same `CanvasLayout` this component renders, not against
+ * the markup it produced (`resolveDropTarget` in lib/canvas-layout.ts, via
+ * `resolveLiveDropTarget` in state/canvas.ts - 2026-09-20 candidate 1); the
+ * `data-step-id`/`data-token-index` attributes that used to be the drag
+ * contract are gone or, for the ones the Playwright driver locates steps
+ * by, no longer load-bearing on it. A quick tap with no real movement still
  * runs the plain select logic above (see `beginPointerDrag`'s `wasDrag`).
  * While dragging, the step being hovered shows a live insertion marker at
  * the exact slot the token would land in (`dropTarget`'s index), not just a
- * highlight on the step as a whole.
+ * highlight on the step as a whole - and the drop commits that same slot,
+ * rather than resolving the release point a second time.
  * Task 10 (Touch Support) is largely "this already works on touch" since
  * Pointer Events unify the input types - `touch-action: none` on the chips
  * (global.css) stops the browser from scrolling the page mid-drag instead.
@@ -103,7 +116,7 @@ interface InstructionCanvasProps {
  * canvas itself: each step's title renders next to its select badge, a
  * left-edge control column below the badge holds a drag-to-reorder handle
  * (pointer-only, same `beginPointerDrag`/`dragGhost` pattern as a token
- * drag, drop slot resolved via `resolveStepDropIndex`) plus click-only move
+ * drag, drop index resolved via `resolveLiveStepDropIndex`) plus click-only move
  * up/down buttons (the keyboard-operable path, each disabled at its end of
  * the list), and a remove (×) button sits in the card's top-right corner -
  * both the reorder controls and remove are hidden for the sole remaining
@@ -115,6 +128,28 @@ export function InstructionCanvas({ readOnly = false, layout, svgRef: externalSv
   const steps = document.value.steps;
   const ownSvgRef = useRef<SVGSVGElement>(null);
   const svgRef = externalSvgRef ?? ownSvgRef;
+  const viewportRef = useRef<HTMLDivElement>(null);
+
+  // Publishes *this* pair of nodes - the <svg> a drag converts coordinates
+  // against, and the card that clips it - as the live canvas, but only for
+  // the editable instance: the Preview and hidden export canvases render
+  // the same markup and would otherwise be just as droppable, which is
+  // exactly the "every mounted canvas publishes the drag protocol" problem
+  // the old data-attribute contract had (only the export canvas's zero
+  // sizing kept it out of reach). Here it is a stated rule instead of a
+  // consequence of CSS. Cleared on unmount - Preview mode swaps this
+  // instance out entirely - and only when the element still registered is
+  // this one, so a remount cannot clear its successor's registration.
+  useEffect(() => {
+    if (readOnly) return;
+    const svg = svgRef.current;
+    const viewport = viewportRef.current;
+    if (!svg || !viewport) return;
+    liveCanvas.value = { svg, viewport };
+    return () => {
+      if (liveCanvas.value?.svg === svg) liveCanvas.value = null;
+    };
+  }, [readOnly, svgRef]);
 
   const { layouts, totalHeight, canvasWidth, addStepRowY } = layout;
   // computeCanvasLayout stays read-only-agnostic (document + isDesktop is its
@@ -132,7 +167,10 @@ export function InstructionCanvas({ readOnly = false, layout, svgRef: externalSv
   const totalTime = documentTotalTime(steps);
 
   return (
-    <div class={`instruction-canvas${readOnly ? " instruction-canvas--readonly" : ""}`}>
+    <div
+      ref={viewportRef}
+      class={`instruction-canvas${readOnly ? " instruction-canvas--readonly" : ""}`}
+    >
       <h2 class="instruction-canvas__heading">
         {totalTime && (
           <>
@@ -163,7 +201,6 @@ export function InstructionCanvas({ readOnly = false, layout, svgRef: externalSv
             stepCount={steps.length}
             canvasWidth={canvasWidth}
             readOnly={readOnly}
-            svgRef={svgRef}
           />
         ))}
         {!readOnly && (

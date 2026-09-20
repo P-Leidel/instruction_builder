@@ -1,7 +1,7 @@
-import type { RefObject } from "preact";
 import { selectStep, removeStep, moveStepUp, moveStepDown, reorderSteps, selectedStepId, selectedTokenId } from "../../state/document";
 import { dragGhost, dropTarget } from "../../state/drag";
-import { beginPointerDrag, resolveStepDropIndex } from "../../lib/pointer-drag";
+import { resolveLiveStepDropIndex } from "../../state/canvas";
+import { beginPointerDrag } from "../../lib/pointer-drag";
 import {
   PADDING,
   CHIP_HEIGHT,
@@ -37,8 +37,6 @@ interface StepCardProps {
   stepCount: number;
   canvasWidth: number;
   readOnly: boolean;
-  /** The canvas's own <svg> ref, needed only to resolve a reorder drag's drop index (resolveStepDropIndex). */
-  svgRef: RefObject<SVGSVGElement>;
 }
 
 /**
@@ -49,7 +47,7 @@ interface StepCardProps {
  * two-stage select model and the overall step-management behaviour this is
  * part of.
  */
-export function StepCard({ layout, index, stepCount, canvasWidth, readOnly, svgRef }: StepCardProps) {
+export function StepCard({ layout, index, stepCount, canvasWidth, readOnly }: StepCardProps) {
   const { step, cardY, displayedTime, height, chipsPerRow, issues, shouldFlagIncomplete, chipPositions, connectors, tokensOffsetX } =
     layout;
 
@@ -153,10 +151,15 @@ export function StepCard({ layout, index, stepCount, canvasWidth, readOnly, svgR
                 onMove: (x, y) => {
                   dragGhost.value = { label: step.title || "Untitled step", x, y };
                 },
-                onDrop: (_x, y, wasDrag) => {
+                onDrop: (x, y, wasDrag) => {
                   dragGhost.value = null;
-                  if (!wasDrag || !svgRef.current) return;
-                  reorderSteps(index, resolveStepDropIndex(y, svgRef.current));
+                  if (!wasDrag) return;
+                  // Still resolved here, on drop, and nowhere else - a step
+                  // reorder has no live insertion marker to agree with (see
+                  // docs/known-issues.md), unlike a token drag.
+                  const dropIndex = resolveLiveStepDropIndex(x, y);
+                  if (dropIndex === null) return;
+                  reorderSteps(index, dropIndex);
                 },
                 // No dropTarget to clear - a step-reorder drag never sets one
                 // (it has no insertion marker of its own yet; see
@@ -218,12 +221,13 @@ export function StepCard({ layout, index, stepCount, canvasWidth, readOnly, svgR
         </g>
         {hoveredSlot !== null &&
           (() => {
-            const marker = insertionMarkerPosition(
-              Math.min(hoveredSlot.index, step.tokens.length),
-              chipPositions,
-              chipsPerRow,
-              hoveredSlot.row,
-            );
+            // No clamp on hoveredSlot.index any more. It used to be
+            // Math.min(index, step.tokens.length), defending against a drop
+            // index resolved from rendered DOM that had drifted from the
+            // layout being drawn. Both now come from the same CanvasLayout
+            // value, so TokenDropTarget.index's documented [0, tokens.length]
+            // range holds by construction rather than by inspection.
+            const marker = insertionMarkerPosition(hoveredSlot, chipPositions, chipsPerRow);
             return (
               <rect
                 class="instruction-canvas__insertion-marker"

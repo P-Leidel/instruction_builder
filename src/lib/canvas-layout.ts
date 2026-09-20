@@ -299,10 +299,13 @@ function buildConnectors(tokenCount: number, chipsPerRow: number, rowStartYs: nu
 
 /**
  * Where to draw the live drag insertion marker for a step currently being
- * dragged over. `dropIndex` (already clamped to [0, chipPositions.length])
- * is usually just the target chip's own position - except at a row
- * boundary, where one index means two different places on screen and
- * `hoveredRow` is what says which of them the pointer is actually at.
+ * dragged over. The slot's `index` (already clamped to
+ * [0, chipPositions.length]) is usually just the target chip's own position
+ * - except at a row boundary, where one index means two different places on
+ * screen and its `row` is what says which of them the pointer is actually
+ * at. It takes the whole `ChipSlot` rather than those two fields
+ * separately: only the pair is meaningful here, and every branch below
+ * reads both.
  *
  * At `dropIndex = N * chipsPerRow` the token lands in the same slot whether
  * the user reads it as "after the last chip of row N-1" or "before the first
@@ -336,11 +339,11 @@ function buildConnectors(tokenCount: number, chipsPerRow: number, rowStartYs: nu
  * InstructionCanvas already has in scope (see InstructionCanvas.tsx).
  */
 export function insertionMarkerPosition(
-  dropIndex: number,
+  slot: ChipSlot,
   chipPositions: ChipPosition[],
   chipsPerRow: number,
-  hoveredRow: number,
 ): ChipPosition {
+  const { index: dropIndex, row: hoveredRow } = slot;
   if (chipPositions.length === 0) {
     // Matches computeRowStartYs' first row exactly (HEADER_HEIGHT + the
     // unconditional CHIP_TIME_HEADER_HEIGHT band) - otherwise the marker
@@ -367,8 +370,9 @@ export function insertionMarkerPosition(
  * lead-out/lead-in stubs - see `buildConnectors`) rather than a fixed width,
  * so a document with only short steps doesn't carry a canvas full of empty
  * horizontal space. `isDesktop` switches between the wrapped multi-row
- * desktop layout and mobile's single-row-per-step layout (see
- * `useIsDesktop` in InstructionCanvas.tsx).
+ * desktop layout and mobile's single-row-per-step layout (see the
+ * `isDesktop` signal in state/canvas.ts, which is where both of the app's
+ * layouts are derived).
  *
  * This is the module's real interface: every chip position, connector path,
  * and centering offset InstructionCanvas draws comes from the returned
@@ -446,4 +450,224 @@ export function computeCanvasLayout(steps: InstructionStep[], isDesktop: boolean
   }
 
   return { layouts, totalHeight, canvasWidth, addStepRowY };
+}
+
+/* ------------------------------------------------------------------ *
+ * Drop resolution
+ *
+ * Where a pointer is, expressed as a place in the document. This used to
+ * live in lib/pointer-drag.ts and read the rendered DOM - `elementFromPoint`
+ * for the step, then one `getBoundingClientRect()` per chip for the slot.
+ * It lives here now because this module already knows every one of those
+ * numbers exactly: re-deriving them from markup meant the same geometry
+ * existed twice, and the measured copy was subtly not the computed one (a
+ * chip's `<g>` also contains its token-time label, so a timed chip measured
+ * CHIP_TIME_HEADER_HEIGHT taller than an untimed sibling and pulled its
+ * whole row's span up with it - see the 2026-09-20 candidate 1 write-up).
+ *
+ * Everything below is pure, over design units. The DOM read that turns a
+ * pointer event into a CanvasPoint is `clientToCanvasPoint` in
+ * lib/pointer-drag.ts, and `state/canvas.ts` is what puts the two together
+ * for the live editable canvas - with one further read, `isInsideViewport`,
+ * rejecting points the canvas is clipped away from before either runs.
+ * ------------------------------------------------------------------ */
+
+/**
+ * A point in the canvas's own design units - the same coordinate space
+ * every `cardY`/`cx`/`cy` above is in, and what `clientToCanvasPoint`
+ * (lib/pointer-drag.ts) converts a pointer event's client coordinates into.
+ */
+export interface CanvasPoint {
+  x: number;
+  y: number;
+}
+
+export interface TokenDropTarget {
+  stepId: string;
+  /** Drop-before insertion index within the target step's tokens, always within [0, tokens.length]. */
+  index: number;
+}
+
+/**
+ * A resolved drop position within *one step's* existing chips: where the
+ * token lands (`index`) plus which row of chips the pointer read as being
+ * in (`row`). The row is redundant for the move itself - `moveToken`/
+ * `addTokenToStep` only ever take a `TokenDropTarget` - but not for drawing
+ * the live insertion marker, because a row boundary is exactly where the
+ * index alone stops being enough: on a 6-per-row layout, index 6 is both
+ * "after the last chip of row 0" and "before the first chip of row 1". Those
+ * are the same insertion, and a marker has to pick one place to draw. See
+ * `insertionMarkerPosition` above, which takes one of these.
+ *
+ * Deliberately *not* named for the glossary's "drop slot": CONTEXT.md
+ * reserves that term for a drop target plus the row - a step id included -
+ * and this is that minus the step. Naming both after one glossary term would
+ * leave the term meaning two types, the narrower of which cannot say which
+ * step it belongs to.
+ */
+export interface ChipSlot {
+  index: number;
+  row: number;
+}
+
+/**
+ * A `ChipSlot` plus the step it belongs to - the glossary's drop slot, and
+ * what a live drag hover resolves to.
+ */
+export type TokenDropSlot = TokenDropTarget & ChipSlot;
+
+/**
+ * One chip's extent in canvas design units, tagged with the token index it
+ * stands for. Built from a StepLayout's own `chipPositions` (see
+ * `chipRects`), never measured - which is what makes every rect exactly
+ * CHIP_WIDTH by CHIP_HEIGHT regardless of what a chip happens to render
+ * inside itself.
+ */
+interface ChipRect {
+  index: number;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * Groups chips into rendered rows. Chips that wrapped onto the same row
+ * share a top exactly (every row is one uniform stride below the last - see
+ * `computeRowStartYs`), so this compares each chip's vertical *center*
+ * against the row's span rather than its top against a tolerance: two real
+ * rows can never merge, since they're a full chip height plus a gap apart.
+ *
+ * Kept as a scan rather than `Math.floor(index / chipsPerRow)` because the
+ * comparison it feeds (`nearestRow`) needs each row's actual y span, not
+ * just which row an index belongs to.
+ */
+function groupIntoRows(rects: ChipRect[]): ChipRect[][] {
+  const sorted = [...rects].sort((a, b) => a.top - b.top || a.left - b.left);
+  const rows: ChipRect[][] = [];
+  for (const rect of sorted) {
+    const row = rows[rows.length - 1];
+    const centerY = (rect.top + rect.bottom) / 2;
+    if (row && centerY > row[0].top && centerY < row[0].bottom) {
+      row.push(rect);
+    } else {
+      rows.push([rect]);
+    }
+  }
+  return rows;
+}
+
+/**
+ * The row `y` is nearest to, by distance to that row's own vertical span (0
+ * while inside it). Every point in the step resolves to some row - there is
+ * deliberately no "outside the chips entirely" case, so hovering a step's
+ * header band or the padding below its last row still previews a real slot
+ * rather than nothing. The consequence, accepted when this replaced the
+ * original hit-test: the far left of the header band clamps to row 0 and so
+ * reads as *insert at front*, not append. The live insertion marker shows
+ * that before release, which is why one uniform rule beat carving out a
+ * special case for the bands around the chips - recorded, with the
+ * alternative that was weighed, in
+ * docs/adr/0004-every-point-in-a-step-resolves-to-a-slot.md.
+ */
+function nearestRow(y: number, rows: ChipRect[][]): number {
+  let nearest = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (let row = 0; row < rows.length; row++) {
+    const { top, bottom } = rows[row][0];
+    const distance = y < top ? top - y : y > bottom ? y - bottom : 0;
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = row;
+    }
+  }
+  return nearest;
+}
+
+/**
+ * Where a drop at `point` lands among one step's chips: clamp to the
+ * nearest row, then compare x against each chip's horizontal midpoint -
+ * left half inserts before that chip, right half after it.
+ *
+ * A midpoint scan rather than "whichever chip is under the pointer": the
+ * CHIP_GAP between two chips belongs to neither chip, so a hit-test found
+ * nothing there and could only fall back to "append to the end of the
+ * step". Dropping a token into the visible gap *between* two chips, the
+ * most natural way to express "put it here", silently sent it to the end
+ * instead. A midpoint scan has no such dead zone: every point in the step
+ * belongs to exactly one slot, and the gap resolves to the boundary it
+ * straddles.
+ */
+function resolveDropSlot(point: CanvasPoint, rects: ChipRect[]): ChipSlot {
+  if (rects.length === 0) return { index: 0, row: 0 };
+  const rows = groupIntoRows(rects);
+  const row = nearestRow(point.y, rows);
+  const chips = rows[row];
+  for (const chip of chips) {
+    if (point.x < (chip.left + chip.right) / 2) return { index: chip.index, row };
+  }
+  // Past the midpoint of the row's last chip: insert after it. On a full
+  // row that index is also the next row's first slot - which is exactly
+  // what `row` is carried along to disambiguate.
+  return { index: chips[chips.length - 1].index + 1, row };
+}
+
+/**
+ * One step's chips as canvas-unit rects. The chain mirrors exactly what
+ * StepCard renders: the card group is translated by (PADDING, cardY), the
+ * token group inside it by (tokensOffsetX, 0), and each chip by its own
+ * (cx, cy). Every rect is exactly one chip's size, so a chip that happens
+ * to carry a duration label, a warning badge, or a quantity pill has the
+ * same hit box as one that carries none.
+ */
+function chipRects(layout: StepLayout): ChipRect[] {
+  const originX = PADDING + layout.tokensOffsetX;
+  return layout.chipPositions.map((position, index) => ({
+    index,
+    left: originX + position.cx,
+    right: originX + position.cx + CHIP_WIDTH,
+    top: layout.cardY + position.cy,
+    bottom: layout.cardY + position.cy + CHIP_HEIGHT,
+  }));
+}
+
+/**
+ * Which step - and which slot within it - a point in canvas units falls in,
+ * or null when it falls outside every step card. The whole resolution a
+ * token drag needs, from one layout value: both the drag's live insertion
+ * marker and the move it eventually commits come from this one call, so the
+ * preview and the drop cannot disagree about geometry.
+ *
+ * A point outside every card resolves to nothing rather than to the nearest
+ * step: a mis-aimed drag should do nothing, not move a token somewhere the
+ * user never pointed at. The x bounds are the step card's own - it spans
+ * PADDING to canvasWidth - PADDING, the same rect StepCard draws - which is
+ * what keeps a pointer beside the canvas (over a side panel, or the page
+ * margin) from resolving into whichever step happens to share its y.
+ */
+export function resolveDropTarget(point: CanvasPoint, layout: CanvasLayout): TokenDropSlot | null {
+  if (point.x < PADDING || point.x >= layout.canvasWidth - PADDING) return null;
+  const step = layout.layouts.find((l) => point.y >= l.cardY && point.y < l.cardY + l.height);
+  if (!step) return null;
+  return { stepId: step.step.id, ...resolveDropSlot(point, chipRects(step)) };
+}
+
+/**
+ * The index a step dragged by its reorder handle should land at - a flat
+ * vertical list, so one midpoint comparison per step, falling through to
+ * `layouts.length` for a drop below the last card. Only the point's y
+ * matters; it takes the whole point anyway so both drag resolutions read
+ * the same currency (see `resolveDropTarget` above).
+ *
+ * Unlike a token drop, this has no "outside every step" case: a step
+ * reorder always lands somewhere in the list, exactly as the rect scan it
+ * replaces did. `reorderSteps` (state/document.ts) is what no-ops when the
+ * index it gets is the step's own.
+ */
+export function resolveStepDropIndex(point: CanvasPoint, layout: CanvasLayout): number {
+  for (let index = 0; index < layout.layouts.length; index++) {
+    const { cardY, height } = layout.layouts[index];
+    if (point.y < cardY + height / 2) return index;
+  }
+  return layout.layouts.length;
 }

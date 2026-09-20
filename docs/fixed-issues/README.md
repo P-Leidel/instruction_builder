@@ -43,3 +43,4 @@ One file per bug, newest last (matching the order they were found):
 24. [The confirm dialogs behaved like modals without ever declaring it](./confirm-dialogs-were-modal-in-behavior-only.md)
 25. [The hidden export canvas was a keyboard tab stop](./hidden-export-canvas-was-a-keyboard-tab-stop.md)
 26. [Dragging a token marked the text instead](./drag-marked-text-instead-of-dragging.md)
+27. [Moving a token to a step that no longer exists destroyed the token](./move-token-unknown-destination-destroyed-token.md)

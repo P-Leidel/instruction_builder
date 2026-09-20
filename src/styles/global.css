@@ -176,7 +176,15 @@ button {
    affects page layout/scroll. `clamp(480px, 100%, 960px)` on
    .instruction-canvas__svg still gives it a real internal width even inside
    a 0x0 container, so it renders normally (just clipped from view) rather
-   than collapsing to nothing. */
+   than collapsing to nothing.
+
+   This sizing used to carry a second, unwritten job: while drops were
+   resolved by hit-testing the rendered DOM, every mounted canvas published
+   the drag protocol, and only being 0x0 kept this one from catching drops
+   meant for the editable canvas. It no longer does - the editable instance
+   registers itself as the drag target explicitly (state/canvas.ts's
+   liveCanvas, 2026-09-20 candidate 1), so what is written here is now
+   the whole reason this rule exists. */
 .app__export-canvas {
   position: absolute;
   width: 0;
@@ -484,6 +492,14 @@ button {
 .drag-ghost {
   position: fixed;
   transform: translate(-50%, -50%);
+  /* The ghost is centered on the pointer, so it sits between the pointer and
+     whatever is underneath it. That used to make this line load-bearing on
+     where a drop landed: the drop was resolved by asking the DOM what was
+     under the pointer, and without this the answer would have been the ghost
+     itself, every time. Since drops resolve against the layout instead
+     (2026-09-20 candidate 1) this is back to being what it reads as - a
+     decoration should not take hover, cursor or clicks from the thing it is
+     decorating. */
   pointer-events: none;
   /* A cursor decoration, not content - it exists only while a drag is in
      flight, so its label should no more be selectable than the chip or the

@@ -294,6 +294,40 @@ describe("moveToken", () => {
     expect(session.document.value).toBe(before);
   });
 
+  it("is a no-op when the destination step doesn't exist, rather than destroying the token", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, stepId, token);
+    const before = session.document.value;
+    const historyLength = session.past.value.length;
+
+    // The destination is resolved from a drop target, so an id the document
+    // no longer holds is reachable if the document changes mid-drag. Without
+    // a destination guard the map below removes the token from its source
+    // step and never re-inserts it anywhere - the token is gone, and the
+    // destruction is recorded as a legitimate undo entry.
+    sessionActions.moveToken(session, stepId, token.id, "no-such-step", 0);
+
+    expect(session.document.value).toBe(before);
+    expect(session.document.value.steps[0].tokens.map((t) => t.id)).toEqual([token.id]);
+    expect(session.past.value).toHaveLength(historyLength);
+  });
+
+  it("is a no-op when the source step doesn't exist", () => {
+    const session = createDocumentSession();
+    const stepId = session.document.value.steps[0].id;
+    const token = createToken("action", "knife");
+    sessionActions.addTokenToStep(session, stepId, token);
+    const before = session.document.value;
+    const historyLength = session.past.value.length;
+
+    sessionActions.moveToken(session, "no-such-step", token.id, stepId, 0);
+
+    expect(session.document.value).toBe(before);
+    expect(session.past.value).toHaveLength(historyLength);
+  });
+
   it("is a no-op when dropped back exactly where it started (2026-09-17 audit remediation, finding 2/B5)", () => {
     const session = createDocumentSession();
     const stepId = session.document.value.steps[0].id;
@@ -328,6 +362,22 @@ describe("moveToken", () => {
     // but it no longer contains the moved token, so token selection clears.
     expect(session.selectedStepId.value).toBe(step1.id);
     expect(session.selectedTokenId.value).toBeNull();
+  });
+});
+
+describe("addTokenToStep", () => {
+  it("is a no-op for a step id the document doesn't hold", () => {
+    const session = createDocumentSession();
+    const before = session.document.value;
+    const historyLength = session.past.value.length;
+
+    // Reachable the same way moveToken's unknown destination is: the step id
+    // comes from a drop target resolved during the drag, not from a read of
+    // the document at commit time.
+    sessionActions.addTokenToStep(session, "no-such-step", createToken("action", "knife"), 0);
+
+    expect(session.document.value).toBe(before);
+    expect(session.past.value).toHaveLength(historyLength);
   });
 });
 

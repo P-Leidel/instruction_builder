@@ -1,11 +1,8 @@
 import { useState } from "preact/hooks";
 import { selectStep, selectToken, moveToken, removeTokenFromStep } from "../../state/document";
-import { dragGhost, setDropTarget } from "../../state/drag";
-import {
-  beginPointerDrag,
-  resolveTokenDropTarget,
-  resolveTokenPointerOutcome,
-} from "../../lib/pointer-drag";
+import { clearDrag, dragGhost, dropTarget, setDropTarget } from "../../state/drag";
+import { resolveLiveDropTarget } from "../../state/canvas";
+import { beginPointerDrag, resolveTokenPointerOutcome } from "../../lib/pointer-drag";
 import { iconMarkup, ICON_PRESENTATION_PROPS } from "../../data/icon-library";
 import { CHIP_WIDTH, CHIP_HEIGHT, CHIP_TIME_HEADER_HEIGHT, ICON_DRAW_SIZE } from "../../lib/canvas-layout";
 import type { ChipPosition } from "../../lib/canvas-layout";
@@ -72,7 +69,15 @@ function QuantityBadge({ attachment }: { attachment: TokenAttachment }) {
 
 interface TokenChipProps {
   token: InstructionToken;
-  /** This token's position within its step, and its flat index among step.tokens (used for the drop-target data attribute). */
+  /**
+   * This token's position within its step, and its flat index among
+   * step.tokens - the index says where this chip already sits, which is what
+   * makes a drag that ends on its own slot fall back to the tap
+   * (`resolveTokenPointerOutcome`). It is no longer rendered as a
+   * `data-token-index` attribute: nothing reads the DOM to find a chip any
+   * more, since `resolveDropTarget` builds every chip's extent from the
+   * layout instead (2026-09-20 candidate 1).
+   */
   position: ChipPosition;
   tokenIndex: number;
   stepId: string;
@@ -113,8 +118,7 @@ export function TokenChip({
 
   function endDrag() {
     setIsDragging(false);
-    dragGhost.value = null;
-    setDropTarget(null);
+    clearDrag();
   }
 
   return (
@@ -122,7 +126,6 @@ export function TokenChip({
       class={`instruction-canvas__token${isDragging ? " instruction-canvas__token--dragging" : ""}`}
       transform={`translate(${position.cx}, ${position.cy})`}
       data-step-id={stepId}
-      data-token-index={tokenIndex}
       onPointerDown={
         readOnly
           ? undefined
@@ -131,14 +134,21 @@ export function TokenChip({
                 onMove: (x, y) => {
                   setIsDragging(true);
                   dragGhost.value = { label, x, y };
-                  setDropTarget(resolveTokenDropTarget(x, y));
+                  setDropTarget(resolveLiveDropTarget(x, y));
                 },
-                onDrop: (x, y, wasDrag) => {
+                onDrop: (_x, _y, wasDrag) => {
+                  // The slot the insertion marker was previewing at the
+                  // moment of release, read before endDrag clears it -
+                  // not a second, independent resolution of the drop
+                  // coordinates. beginPointerDrag runs a final onMove at
+                  // exactly this point first, so what the user last saw and
+                  // what lands here are the same resolution by construction.
+                  const previewed = dropTarget.value;
                   endDrag();
                   const outcome = resolveTokenPointerOutcome(
                     wasDrag,
                     isStepSelected,
-                    wasDrag ? resolveTokenDropTarget(x, y) : null,
+                    wasDrag ? previewed : null,
                     { stepId, index: tokenIndex },
                   );
                   switch (outcome.kind) {

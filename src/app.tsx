@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useRef } from "preact/hooks";
 import { effect } from "@preact/signals";
 import { StepDetails } from "./components/StepDetails/StepDetails";
 import { TokenDetails } from "./components/TokenDetails/TokenDetails";
 import { InstructionCanvas } from "./components/InstructionCanvas/InstructionCanvas";
-import { DESKTOP_QUERY, computeCanvasLayout, type CanvasLayout } from "./lib/canvas-layout";
+import { type CanvasLayout } from "./lib/canvas-layout";
 import { TokenPicker } from "./components/TokenPicker/TokenPicker";
 import { DragGhost } from "./components/DragGhost/DragGhost";
 import { ImportConfirmDialog } from "./components/ImportConfirmDialog/ImportConfirmDialog";
 import { NewDocumentConfirmDialog } from "./components/NewDocumentConfirmDialog/NewDocumentConfirmDialog";
 import { previewMode, toast, pendingImport, confirmingNewDocument, copyTokenWithToast } from "./state/ui";
 import { persistenceStatus } from "./state/persistence";
+import { liveLayout, exportLayout } from "./state/canvas";
 import {
   document,
   undo,
@@ -33,32 +34,6 @@ import {
 import { MOD_KEY_LABEL } from "./lib/platform";
 
 const DOCUMENT_TITLE_MAX_LENGTH = 50;
-
-/**
- * Tracks the `min-width: 800px` breakpoint so the live editable canvas can
- * switch between desktop's wrapped multi-row chips and mobile's single row
- * per step. Kept as a plain hook (not a signal) since it's a local rendering
- * concern, not shared app state. Moved here from `InstructionCanvas.tsx`
- * (2026-09-17 export-viewport-independence remediation): `App` is now the
- * one place that decides `isDesktop` for the live canvas and computes
- * `computeCanvasLayout` for all three `InstructionCanvas` instances, so the
- * component itself never reads the viewport - only this, single, editable
- * instance still needs to.
- */
-function useIsDesktop(): boolean {
-  const [isDesktop, setIsDesktop] = useState(
-    () => typeof window !== "undefined" && window.matchMedia(DESKTOP_QUERY).matches,
-  );
-
-  useEffect(() => {
-    const mql = window.matchMedia(DESKTOP_QUERY);
-    const onChange = () => setIsDesktop(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
-
-  return isDesktop;
-}
 
 /**
  * Turns a `lib/document-actions.ts` result into the one toast this app
@@ -336,18 +311,6 @@ export function App() {
   const exportSvgRef = useRef<SVGSVGElement>(null);
   const getExportSvgElement = () => exportSvgRef.current;
 
-  const isDesktop = useIsDesktop();
-  const steps = document.value.steps;
-  // The live editable canvas gets the real viewport; Preview and the hidden
-  // export canvas both get a fixed desktop layout instead (2026-09-17
-  // remediation) - a shared/printed document shouldn't render structurally
-  // differently depending on which device happened to trigger the export,
-  // and Preview's whole job is to stand in for what export actually
-  // produces (see InstructionCanvas.tsx's `readOnly` doc comment). Sharing
-  // one `exportLayout` between both read-only instances also means it's
-  // computed once, not twice, for what's provably the same input.
-  const liveLayout = useMemo(() => computeCanvasLayout(steps, isDesktop), [steps, isDesktop]);
-  const exportLayout = useMemo(() => computeCanvasLayout(steps, true), [steps]);
   // Everything the app renders *outside* an open confirm dialog carries
   // this: the toolbar, the main editor grid, and the two banners between
   // them. That is the whole page bar the dialog itself, `DragGhost` (which
@@ -418,7 +381,7 @@ export function App() {
           <button
             type="button"
             class="app__file-button"
-            onClick={() => handleExportPdf(getExportSvgElement(), exportLayout)}
+            onClick={() => handleExportPdf(getExportSvgElement(), exportLayout.value)}
           >
             Export PDF
           </button>
@@ -467,14 +430,14 @@ export function App() {
       )}
       <main class={`app__main${previewMode.value ? " app__main--preview" : ""}`} inert={backgroundInert}>
         {previewMode.value ? (
-          <InstructionCanvas readOnly layout={exportLayout} />
+          <InstructionCanvas readOnly layout={exportLayout.value} />
         ) : (
           <>
             <div class="app__col-left">
               <StepDetails />
               <TokenDetails />
             </div>
-            <InstructionCanvas layout={liveLayout} />
+            <InstructionCanvas layout={liveLayout.value} />
             <div class="app__col-right">
               <TokenPicker />
             </div>
@@ -497,7 +460,7 @@ export function App() {
         export's style-baking reads exactly what it read before.
       */}
       <div class="app__export-canvas" aria-hidden="true" inert>
-        <InstructionCanvas readOnly layout={exportLayout} svgRef={exportSvgRef} />
+        <InstructionCanvas readOnly layout={exportLayout.value} svgRef={exportSvgRef} />
       </div>
     </div>
   );

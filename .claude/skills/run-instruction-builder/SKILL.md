@@ -44,7 +44,12 @@ document session (`state/document.ts`'s `sessionActions`, via
 `createDocumentSession()` - undo/redo, coalescing, selection-repair,
 every mutator), and pure logic in `lib/` (`canvas-layout.ts`,
 `duration.ts`, `document-file.ts`'s `slugify`/`parseImportedDocument`,
-`pointer-drag.ts`'s `createClickAfterDragGuard`). It deliberately does
+`pointer-drag.ts`'s `beginPointerDrag` (including its frame coalescing
+and the final move it flushes at the release point),
+`createClickAfterDragGuard` and `resolveTokenPointerOutcome`, plus - since
+the 2026-09-20 candidate 1 change moved it out of the DOM - the whole of
+drop resolution, `canvas-layout.ts`'s `resolveDropTarget` and
+`resolveStepDropIndex`). It deliberately does
 NOT cover the export pipeline's DOM-touching parts
 (`svg-export.ts`/`png-export.ts`/`pdf-export.ts`), `state/
 persistence.ts`, or any component - those need a real browser to mean
@@ -311,6 +316,23 @@ the only one that needs the steps under "Run (agent path)".
    `IMPORT_REJECTS_INVALID_FILE=...`,
    `IMPORT_CANCEL_LEAVES_DOCUMENT_UNCHANGED=...`,
    `VERSION_MISMATCH_HANDLED_SAFELY=...`,
+   `DROP_LANDS_CORRECTLY_WHEN_SCROLLED=...`,
+   `DROP_LANDS_CORRECTLY_AT_MOBILE_WIDTH=...` (with whether the canvas
+   actually overflowed its own scroll container at that width, since the
+   check is worthless if it didn't),
+   `DROP_LANDS_CORRECTLY_WHEN_ZOOMED=...` - three cases covering the
+   `getScreenCTM()` conversion from client pixels to canvas design units.
+   Unit tests cover the geometry and cannot cover the conversion at all (no
+   DOM test environment, ADR 0003), so if these three go red the coordinate
+   transform is what to look at, not the layout math.
+   `MOBILE_MARGIN_DROP_IS_IGNORED=...` is the matching negative case (with
+   the canvas x the probe point converts to, and the canvas width, so the
+   line shows the point really was one the geometry would otherwise have
+   accepted). At mobile width the `<svg>` is wider than the card that clips
+   it, and a matrix knows nothing about clipping, so a point over the page
+   background beside the card still converts to a valid canvas point inside
+   a step. `isInsideViewport` rejects it. If this one goes red while the
+   three above stay green, the guard is what broke, not the transform.
    `STEP_REORDERED_VIA_KEYBOARD=...`,
    `STEP_MOVE_BUTTONS_DISABLED_AT_BOUNDARIES=...`,
    `TOKEN_SELECTED_VIA_KEYBOARD=...`,
@@ -444,7 +466,11 @@ taken - watch the terminal output for the actual URL).
   a separate StepList panel.** A step's outer `<g>` carries both
   `data-step-id` and `data-step-index` (the latter unique to a step group -
   token `<g>`s only carry `data-step-id` - so `[data-step-index='n']` always
-  resolves to the step, not one of its tokens); its drag handle
+  resolves to the step, not one of its tokens). Since 2026-09-20 these are
+  *this driver's* hooks and nothing else's: drag stopped resolving drops
+  against the DOM, so `data-token-index` is gone entirely and the two
+  remaining attributes are no longer load-bearing on any app behaviour.
+  Locate chips by `.instruction-canvas__token` instead. Its drag handle
   (`.instruction-canvas__step-drag-handle`), remove button
   (`.instruction-canvas__step-remove`), and move up/down buttons
   (`.instruction-canvas__step-move--up`/`--down`) are real descendants of
@@ -498,14 +524,14 @@ taken - watch the terminal output for the actual URL).
   Files/nodejs:$PATH"` first, or `node`/`npm`/`npx` won't resolve.
 - **Testing drag-and-drop with `page.mouse.move/down/up` needs a real
   drop point, not a boundary tie.** The step-reorder drop index
-  (`resolveStepDropIndex`, `lib/pointer-drag.ts`) is
+  (`resolveStepDropIndex`, `lib/canvas-layout.ts`) is
   computed by comparing the drop `clientY` against each step's
   vertical midpoint; dropping exactly on a step's center is a genuine
   tie (the app then treats it as "same position," a no-op) rather than
   a bug - drop near a step's top/bottom edge instead, the way a real
   drag gesture would. **Since the 2026-09-20 drop-accuracy fix the same
   is true horizontally for token chips**, which is a change from the
-  behavior a pre-2026-09-20 driver assumed: `resolveDropSlot` compares
+  behavior a pre-2026-09-20 driver assumed: drop resolution compares
   the drop `clientX` against each chip's own horizontal midpoint, so a
   chip has two drop sides (left half inserts before it, right half
   after it) and its center is the boundary between them. A drop at

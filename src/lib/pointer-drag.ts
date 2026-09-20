@@ -1,3 +1,5 @@
+import type { CanvasPoint, TokenDropTarget } from "./canvas-layout";
+
 /**
  * Phase 2 task 9 (Drag-and-Drop) / task 10 (Touch Support): a small,
  * framework-agnostic Pointer Events drag tracker, shared by TokenPicker and
@@ -7,6 +9,14 @@
  * Drag-and-Drop API) unify mouse/touch/pen input into one code path per the
  * plan's task 9 note - task 10 is largely "verify this works on touch,"
  * not a separate implementation.
+ *
+ * This is the browser-facing half of dragging, and since the 2026-09-20
+ * candidate 1 change it is the *only* half: working out where a drop lands
+ * is pure geometry over a CanvasLayout and lives in lib/canvas-layout.ts
+ * (`resolveDropTarget`/`resolveStepDropIndex`). The one thing that still has
+ * to ask the DOM a question is `clientToCanvasPoint` at the bottom of this
+ * file - a pointer event speaks client pixels, the layout speaks design
+ * units, and only the rendered `<svg>` knows the matrix between them.
  */
 
 /**
@@ -37,6 +47,12 @@ export interface DragHandlers {
    * `threshold` - callers use that to fall back to their normal click/tap
    * behavior instead of a drop. A `pointercancel` does *not* come through
    * here; see `onCancel`.
+   *
+   * A token drag's caller does *not* re-resolve these coordinates: `onMove`
+   * has just run one final time at exactly this point (see `onPointerUp`),
+   * so the drop the caller commits is the slot its own preview last stored.
+   * The coordinates are still passed because the step-reorder drag, which
+   * keeps no preview of its own, resolves its index here and nowhere else.
    */
   onDrop: (clientX: number, clientY: number, wasDrag: boolean) => void;
   /**
@@ -68,7 +84,7 @@ export function beginPointerDrag(event: PointerEvent, handlers: DragHandlers): v
   let moved = false;
   // A trackpad/high-polling-rate mouse can fire several pointermove events
   // per animation frame; each one otherwise triggered a synchronous
-  // layout read (resolveTokenDropTarget's hit-test and rect scan) and a signal write
+  // layout read (the old DOM hit-test and per-chip rect scan) and a signal write
   // that re-renders the whole canvas (task 24 perf pass - see
   // docs/phase-2/progress/task-24-performance.md). Coalescing onMove to at
   // most once per frame, driven by the *last* pointer position seen before
@@ -99,6 +115,24 @@ export function beginPointerDrag(event: PointerEvent, handlers: DragHandlers): v
   }
 
   function onPointerUp(e: PointerEvent) {
+    // One last onMove, synchronously, at the exact point of release - so the
+    // preview a caller has stored (the insertion marker's slot) is the one
+    // for these coordinates, and committing it in onDrop commits what the
+    // user was actually shown. Without this, the rAF coalescing above leaves
+    // two real gaps, both reproduced by probe before this was written:
+    // a drag released before its first frame ever painted called onDrop with
+    // no onMove at all (nothing previewed, yet a drop to commit), and a drag
+    // that travelled on after its last painted frame committed a point the
+    // preview never saw. Cheap because onMove is a pure resolve plus a
+    // change-guarded signal write (state/drag.ts), and it runs once per drop.
+    if (moved) {
+      latestX = e.clientX;
+      latestY = e.clientY;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      flush();
+    }
     cleanup();
     handlers.onDrop(e.clientX, e.clientY, moved);
   }
@@ -128,68 +162,6 @@ export function beginPointerDrag(event: PointerEvent, handlers: DragHandlers): v
   target.addEventListener("pointercancel", onPointerCancel as EventListener);
 }
 
-/**
- * Finds the index a step dropped at clientY should land at, among
- * `[data-step-index]` groups within `container` - shared by
- * InstructionCanvas's step-reorder drag handle. Bounding-rect-based, for the
- * same reason `resolveDropSlot` below now is: a hit-test can only report the
- * one element actually under the pointer, so it has nothing to say about
- * empty canvas space below the last step, while a rect scan naturally falls
- * through to `items.length` there. The difference between the two is only
- * that steps are a flat vertical list (one midpoint comparison per step),
- * where chips wrap into rows and need the row resolved first.
- */
-export function resolveStepDropIndex(clientY: number, container: Element): number {
-  const items = Array.from(container.querySelectorAll<Element>("[data-step-index]"));
-  for (const item of items) {
-    const rect = item.getBoundingClientRect();
-    if (clientY < rect.top + rect.height / 2) {
-      return Number(item.getAttribute("data-step-index"));
-    }
-  }
-  return items.length;
-}
-
-export interface TokenDropTarget {
-  stepId: string;
-  /** Drop-before insertion index within the target step's tokens, always within [0, tokens.length]. */
-  index: number;
-}
-
-/**
- * A resolved drop position within one step's existing chips: *where* the
- * token lands (`index`) plus *which row of chips the pointer read as being
- * in* (`row`). The row is redundant for the move itself - `moveToken`/
- * `addTokenToStep` only ever take a `TokenDropTarget` - but not for drawing
- * the live insertion marker, because a row boundary is exactly where the
- * index alone stops being enough: on a 6-per-row layout, index 6 is both
- * "after the last chip of row 0" and "before the first chip of row 1". Those
- * are the same insertion, and a marker has to pick one place to draw. See
- * `insertionMarkerPosition` in lib/canvas-layout.ts.
- */
-export interface DropSlot {
-  index: number;
-  row: number;
-}
-
-/** A `DropSlot` plus the step it belongs to - what a live drag hover resolves to. */
-export type TokenDropSlot = TokenDropTarget & { row: number };
-
-/**
- * One chip's live position on screen, in client coordinates, tagged with the
- * token index it stands for. Client rects (rather than the SVG-user-unit
- * `ChipPosition`s in lib/canvas-layout.ts) because a pointer event's
- * coordinates are already client coordinates: comparing the two directly
- * sidesteps the canvas's viewBox scaling entirely, instead of having to undo
- * it first.
- */
-export interface ChipRect {
-  index: number;
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-}
 
 /**
  * A real drag ends with a `pointerup` that also fires the browser's
@@ -198,9 +170,8 @@ export interface ChipRect {
  * drop. Call `markDragged()` from `onDrop` when `wasDrag` is true, and check
  * `wasJustDragged()` at the top of the element's own `onClick` to swallow
  * that one synthetic click. Plain module-scope state (not a hook) to match
- * `beginPointerDrag`/`resolveTokenDropTarget` above - callers that need one
- * of these keep exactly one instance for their component's lifetime, same
- * as the `let` this replaces.
+ * `beginPointerDrag` above - callers that need one of these keep exactly one
+ * instance for their component's lifetime, same as the `let` this replaces.
  */
 export function createClickAfterDragGuard(): {
   wasJustDragged: () => boolean;
@@ -265,116 +236,70 @@ export function resolveTokenPointerOutcome(
 }
 
 /**
- * Groups chips into rendered rows. Chips that wrapped onto the same row
- * share a top exactly (every row is one uniform stride below the last - see
- * `computeRowStartYs` in lib/canvas-layout.ts), so this compares each chip's
- * vertical *center* against the row's span rather than its top against a
- * tolerance: sub-pixel differences from the canvas's viewBox scaling can
- * never split one row in two, and two real rows can never merge, since
- * they're a full chip height plus a gap apart.
+ * A pointer event's client coordinates, in the canvas's own design units -
+ * one of the two DOM reads the whole drag path still makes, and the reason
+ * it is a one-liner rather than a scan: `getScreenCTM()` on the rendered `<svg>`
+ * already composes the viewBox scale, every CSS transform on the way up,
+ * and the page's scroll position into a single matrix, so inverting it maps
+ * a screen point straight into the coordinate space `CanvasLayout` is
+ * written in. That replaces `elementFromPoint` plus one
+ * `getBoundingClientRect()` per chip with one matrix per resolution.
+ *
+ * Returns null when the element has no current transform matrix, which is
+ * what an SVG that is not rendered (detached, or inside `display: none`)
+ * reports - callers treat that the same as "the pointer is over nothing".
+ *
+ * Deliberately has no unit test: it needs a real element with a real matrix,
+ * and this project has no DOM test environment (see
+ * docs/adr/0003-no-component-test-environment.md). Coordinate conversion is
+ * the browser's job, so verifying it belongs to the Playwright driver -
+ * specifically a drag after scrolling, one at the mobile breakpoint, and one
+ * at non-default browser zoom, since those are exactly the cases a matrix
+ * has to handle that a client rect handled for free.
  */
-function groupIntoRows(rects: ChipRect[]): ChipRect[][] {
-  const sorted = [...rects].sort((a, b) => a.top - b.top || a.left - b.left);
-  const rows: ChipRect[][] = [];
-  for (const rect of sorted) {
-    const row = rows[rows.length - 1];
-    const centerY = (rect.top + rect.bottom) / 2;
-    if (row && centerY > row[0].top && centerY < row[0].bottom) {
-      row.push(rect);
-    } else {
-      rows.push([rect]);
-    }
-  }
-  return rows;
+export function clientToCanvasPoint(
+  svg: SVGSVGElement,
+  clientX: number,
+  clientY: number,
+): CanvasPoint | null {
+  const matrix = svg.getScreenCTM();
+  if (!matrix) return null;
+  const { x, y } = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse());
+  return { x, y };
 }
 
-/**
- * The row `clientY` is nearest to, by distance to that row's own vertical
- * span (0 while inside it). Every point in the step resolves to some row -
- * there is deliberately no "outside the chips entirely" case, so hovering a
- * step's header band or the padding below its last row still previews a real
- * slot rather than nothing. The consequence, accepted when this replaced the
- * old hit-test: the far left of the header band clamps to row 0 and so reads
- * as *insert at front*, not append. The live insertion marker shows that
- * before release, which is why one uniform rule beat carving out a special
- * case for the bands around the chips.
- */
-function nearestRow(clientY: number, rows: ChipRect[][]): number {
-  let nearest = 0;
-  let nearestDistance = Number.POSITIVE_INFINITY;
-  for (let row = 0; row < rows.length; row++) {
-    const { top, bottom } = rows[row][0];
-    const distance = clientY < top ? top - clientY : clientY > bottom ? clientY - bottom : 0;
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearest = row;
-    }
-  }
-  return nearest;
-}
 
 /**
- * Where a drop at (`clientX`, `clientY`) lands among one step's chips: clamp
- * to the nearest row, then compare x against each chip's horizontal midpoint
- * - left half inserts before that chip, right half after it.
+ * Whether a client point is inside `viewport`'s *visible* area - its client
+ * box, which is the padding box minus any scrollbar gutters.
  *
- * This is the whole reason the chip lookup is a bounding-rect scan rather
- * than `elementFromPoint` (which is still how the *step* is found, above).
- * Hit-testing only ever reports the one element actually under the pointer,
- * so the CHIP_GAP between two chips - which has no element of its own -
- * missed every chip and fell through to the step background, where the old
- * code could only treat it as "append to the end of the step". Dropping a
- * token into the visible gap *between* two chips, the most natural way to
- * express "put it here", silently sent it to the end instead. A midpoint
- * scan has no such dead zone: every point in the step belongs to exactly one
- * slot, and the gap resolves to the boundary it straddles.
+ * Needed because `clientToCanvasPoint` above is pure matrix arithmetic and
+ * knows nothing about clipping. At the mobile breakpoint the canvas `<svg>`
+ * is held at its 480px floor inside a narrower card, so the card scrolls and
+ * a wide strip of the `<svg>` is clipped out of sight. The CTM still maps a
+ * client point over that strip - which is page background, not canvas - onto
+ * a perfectly valid canvas point inside a step. Hit-testing the element under
+ * the pointer used to reject those points for free; resolving against the
+ * layout has to reject them on purpose.
  *
- * Pure, over an array of rects, so all of that is testable without a DOM -
- * `resolveTokenDropTarget` below is the thin part that reads the rects.
+ * `getBoundingClientRect()` plus `clientLeft`/`clientTop` rather than the
+ * rect alone: the rect is the *border* box, and the border is not a place a
+ * drop can land. Scroll position needs no handling here - a scroll moves the
+ * content inside this box, never the box itself, which is exactly why the
+ * same check holds while the card is scrolled.
  */
-export function resolveDropSlot(clientX: number, clientY: number, rects: ChipRect[]): DropSlot {
-  if (rects.length === 0) return { index: 0, row: 0 };
-  const rows = groupIntoRows(rects);
-  const row = nearestRow(clientY, rows);
-  const chips = rows[row];
-  for (const chip of chips) {
-    if (clientX < (chip.left + chip.right) / 2) return { index: chip.index, row };
-  }
-  // Past the midpoint of the row's last chip: insert after it. On a full
-  // row that index is also the next row's first slot - which is exactly
-  // what `row` is carried along to disambiguate.
-  return { index: chips[chips.length - 1].index + 1, row };
-}
-
-/**
- * Finds which step - and which slot within it - a token drag is currently
- * over. The step is hit-tested with `elementFromPoint` (which works
- * regardless of SVG transforms) against the `data-step-index` group
- * InstructionCanvas renders per step; the slot within it is then a
- * bounding-rect scan of that step's own `data-token-index` chips, via
- * `resolveDropSlot` above - see there for why the chip half can't be a
- * hit-test.
- *
- * The step is looked up by `data-step-index`, not `data-step-id`, only
- * because a chip carries its step's id too (TokenChip needs it to report
- * where the drag started): `closest("[data-step-id]")` from a point over a
- * chip would stop at the chip itself. `data-step-index` is on the step card
- * alone, so it's the unambiguous "which card is this" attribute - the same
- * one `resolveStepDropIndex` scans.
- */
-export function resolveTokenDropTarget(clientX: number, clientY: number): TokenDropSlot | null {
-  const el = window.document.elementFromPoint(clientX, clientY);
-  const stepEl = el?.closest("[data-step-index]");
-  const stepId = stepEl?.getAttribute("data-step-id");
-  if (!stepEl || stepId == null) return null;
-
-  const rects: ChipRect[] = [];
-  for (const chipEl of stepEl.querySelectorAll<Element>("[data-token-index]")) {
-    const index = Number(chipEl.getAttribute("data-token-index"));
-    if (Number.isNaN(index)) continue;
-    const { left, right, top, bottom } = chipEl.getBoundingClientRect();
-    rects.push({ index, left, right, top, bottom });
-  }
-
-  return { stepId, ...resolveDropSlot(clientX, clientY, rects) };
+export function isInsideViewport(
+  viewport: Element,
+  clientX: number,
+  clientY: number,
+): boolean {
+  const rect = viewport.getBoundingClientRect();
+  const left = rect.left + viewport.clientLeft;
+  const top = rect.top + viewport.clientTop;
+  return (
+    clientX >= left &&
+    clientX < left + viewport.clientWidth &&
+    clientY >= top &&
+    clientY < top + viewport.clientHeight
+  );
 }

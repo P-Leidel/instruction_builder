@@ -257,7 +257,7 @@ function setSteps(
 /**
  * `index`/`toIndex` in `moveTokenCore`/`reorderStepsCore` is a drop-before
  * position computed against the array *before* the dragged item is removed
- * from it (see `resolveTokenDropTarget`/`resolveDropIndex`); removing that
+ * from it (see `resolveDropTarget`/`resolveStepDropIndex`); removing that
  * item first shifts everything after it back by one, so a forward move
  * (`fromIndex < toIndexBeforeRemoval`) must adjust the target down by one to
  * land where the user actually dropped it. Shared by both call sites below
@@ -473,13 +473,32 @@ function removeStepCore(session: DocumentSession, stepId: string): void {
   );
 }
 
-/** Adds a token to a specific step - the drag-and-drop drop target (task 9). */
+/**
+ * Adds a token to a specific step - the drag-and-drop drop target (task 9),
+ * and, through `addTokenToSelectedStepCore` below, the tap-to-insert and
+ * paste paths as well.
+ *
+ * The guard is here for the drop-target caller. Its `stepId` is resolved
+ * during a drag rather than read off the document at commit time, exactly as
+ * `moveTokenCore`'s destination is, so it carries the same risk of naming a
+ * step the document no longer holds. The consequence is milder than
+ * `moveTokenCore`'s - the map below simply matches nothing, so no token is
+ * destroyed - but `setSteps` would still record an identical steps array as
+ * an undo entry and wipe redo, which is the behaviour `updateTokenIn` was
+ * given a guard against. Same guard, same reason.
+ *
+ * The other caller passes the selected step id, which `repairSelection`
+ * already keeps pointing at a live step, so there the guard is redundant
+ * rather than load-bearing - one `some` on a path that rebuilds the whole
+ * steps array anyway.
+ */
 function addTokenToStepCore(
   session: DocumentSession,
   stepId: string,
   token: InstructionToken,
   index?: number,
 ): void {
+  if (!session.document.value.steps.some((s) => s.id === stepId)) return;
   setSteps(
     session,
     session.document.value.steps.map((step) =>
@@ -511,6 +530,17 @@ function addTokenToSelectedStepCore(session: DocumentSession, token: Instruction
  * was selected before the move no longer being found under its old step -
  * comes from `setSteps` now, not from a `repairSelection` call here; see
  * `repairSelection`'s own comment for the bug it prevents.
+ *
+ * Both step ids are checked against the document before anything is written,
+ * the same property `updateTokenIn` states for its own traversal. The
+ * destination check is the load-bearing one: the map below removes the token
+ * from `fromStepId` in its own branch and re-inserts it in the `toStepId`
+ * branch, so a destination the document doesn't hold ran the removal with no
+ * matching insertion - the token was destroyed, and because a cross-step move
+ * skips the `tokensEqual` guard the destruction was written as a legitimate
+ * undo entry. Both ids reach here from a resolved drop target rather than
+ * from a caller that just read them off the document, so neither is
+ * guaranteed to still name a live step by the time the drop commits.
  */
 function moveTokenCore(
   session: DocumentSession,
@@ -522,6 +552,7 @@ function moveTokenCore(
   const fromStep = session.document.value.steps.find((s) => s.id === fromStepId);
   const token = fromStep?.tokens.find((t) => t.id === tokenId);
   if (!token) return;
+  if (!session.document.value.steps.some((s) => s.id === toStepId)) return;
 
   let changed = fromStepId !== toStepId;
   const steps = session.document.value.steps.map((step) => {

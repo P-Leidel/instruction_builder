@@ -395,6 +395,70 @@ export canvas had been a keyboard tab stop on every page view since task
 rather than only inside the report - along with a correction to the report
 itself, whose finding 5 overstates the PDF chunk's download cost. See
 [phase-3/progress/architecture-2026-09-18-modal-dialogs-and-mobile-layout.md](./phase-3/progress/architecture-2026-09-18-modal-dialogs-and-mobile-layout.md).
+Task 30's eleventh feedback pass, on 2026-09-20, took the report that token
+drag-and-drop "feels unresponsive" - scoped through
+`/mattpocock-skills:grilling` first, since the reports came from desktop and
+touch users alike and so could not be a touch-threshold problem. Reading the
+drag path end to end turned one vague report into three concrete defects,
+two of which compounded: the 16-unit gap between two chips had no element
+for `elementFromPoint` to find, so the most natural way to say "put it here"
+silently appended to the end of the step; a chip could only ever be inserted
+*before*, never after; and a press that wobbled past the drag threshold
+became a drag onto the token's own slot, which `moveToken` correctly no-ops,
+so the tap did nothing at all. See
+[phase-3/progress/token-drop-accuracy.md](./phase-3/progress/token-drop-accuracy.md),
+and [fixed-issues/drag-marked-text-instead-of-dragging.md](./fixed-issues/drag-marked-text-instead-of-dragging.md)
+for a follow-up report from the same round that turned out to be a separate
+one-rule bug.
+A 2026-09-20 architecture review followed, archived at
+[phase-3/audits/2026-09-20-architecture-review.html](./phase-3/audits/2026-09-20-architecture-review.html),
+and four of its candidates shipped that day. Two were seam work on
+`state/document.ts`: every selection repair now happens in one place rather
+than in three mutators that had drifted apart
+([selection-repair funnel](./phase-3/progress/architecture-2026-09-20-selection-repair-funnel.md)),
+and every write to a single token inside a single step goes through one
+traversal, which made two properties unconditional that had previously held
+in some copies and not others
+([token-write seam](./phase-3/progress/architecture-2026-09-20-token-write-seam.md)).
+The other two were the canvas: `computeCanvasLayout`'s two callers became
+module-level `computed()` signals, so any module can read the live layout
+without holding a prop or a ref
+([canvas layout signals](./phase-3/progress/architecture-2026-09-20-canvas-layout-signals.md)),
+which is what then let drop resolution stop reading the DOM entirely and
+resolve against that same layout instead
+([layout hit-testing](./phase-3/progress/architecture-2026-09-20-layout-hit-testing.md)).
+That last one also fixed a real bug the drop-accuracy pass had left behind -
+a timed chip measured taller than an untimed sibling and dragged its whole
+row's hit box with it - and closed a hole the DOM hit-test had been covering
+by accident, since a coordinate transform, unlike `elementFromPoint`, maps
+happily onto canvas that is scrolled or clipped out of sight.
+Reviewing that drop path turned up one more defect, fixed the same day and
+logged at
+[fixed-issues/move-token-unknown-destination-destroyed-token.md](./fixed-issues/move-token-unknown-destination-destroyed-token.md):
+`moveToken` checked that the step a token came *from* existed but never
+checked the step it was going *to*, so a destination the document no longer
+held removed the token and re-inserted it nowhere - destroying it, and
+recording the destruction as an ordinary undo entry.
+A two-axis code review closed the day out, running standards and spec as
+separate passes over the whole arc. It found no behavioural defect in any
+of it: every finding was a doc or a comment that had drifted from the code
+it described, which is the failure mode this file exists to catch. Four are
+worth naming because they compound quietly - six of the day's new docs had
+shipped with no status banner at all, this phase's progress index asserted
+a `tokenId` field on `ChipPosition` that was not merely absent but had been
+explicitly *declined* in the spec that raised it, a comment in
+`state/document.ts` still pointed at two functions the same change had
+deleted, and `canvas-layout.ts` exported a `DropSlot` type under a name
+[CONTEXT.md](../CONTEXT.md) had already given to something else (now
+`ChipSlot`, so the glossary term names exactly one type again). Two
+decisions that had been carrying their full reasoning in code comments were
+promoted to ADRs in the same pass:
+[0004](./adr/0004-every-point-in-a-step-resolves-to-a-slot.md), that every
+point inside a step card resolves to a drop slot rather than some bands
+resolving to nothing, and
+[0005](./adr/0005-viewport-guard-on-token-drops-only.md), that the live
+viewport guard applies to token drops only while a step reorder stays
+horizontally indifferent.
 
 This file is the single source of truth for "what phase are we in" -
 update it whenever a task's status changes, rather than letting that
@@ -472,7 +536,7 @@ as "untitled-instructions.\<ext\>" because no UI lets the user set
 | 27 | Add Document Title UI | ✅ |
 | 28 | UI Polish Pass | ✅ |
 | 29 | Publish MVP | ✅ (live at <https://instructionbuilder-seven.vercel.app>) |
-| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md), [eighth](./phase-3/progress/task-30-user-feedback-fixes-8.md), [ninth](./phase-3/progress/task-30-user-feedback-fixes-9.md), and [tenth](./phase-3/progress/task-30-user-feedback-fixes-10.md) feedback passes shipped, plus a [2026-09-18 health review and the field-placement seam it recommended](./phase-3/progress/architecture-2026-09-18-field-placement-and-tablet-viewports.md) and [that review's second remediation batch](./phase-3/progress/architecture-2026-09-18-modal-dialogs-and-mobile-layout.md); testers work through [manual-testing-checklist.md](./manual-testing-checklist.md)) |
+| 30 | Test Real Users | In progress ([first](./phase-3/progress/task-30-user-feedback-fixes.md), [second](./phase-3/progress/task-30-user-feedback-fixes-2.md), [third](./phase-3/progress/task-30-user-feedback-fixes-3.md), [fourth](./phase-3/progress/task-30-user-feedback-fixes-4.md), [fifth](./phase-3/progress/task-30-user-feedback-fixes-5.md), [sixth](./phase-3/progress/task-30-user-feedback-fixes-6.md), [seventh](./phase-3/progress/task-30-user-feedback-fixes-7.md), [eighth](./phase-3/progress/task-30-user-feedback-fixes-8.md), [ninth](./phase-3/progress/task-30-user-feedback-fixes-9.md), and [tenth](./phase-3/progress/task-30-user-feedback-fixes-10.md) feedback passes shipped, plus a [2026-09-18 health review and the field-placement seam it recommended](./phase-3/progress/architecture-2026-09-18-field-placement-and-tablet-viewports.md) [that review's second remediation batch](./phase-3/progress/architecture-2026-09-18-modal-dialogs-and-mobile-layout.md), an [eleventh pass on token drop accuracy](./phase-3/progress/token-drop-accuracy.md), and the [2026-09-20 architecture review](./phase-3/audits/2026-09-20-architecture-review.html) with four of its candidates shipped ([selection repair](./phase-3/progress/architecture-2026-09-20-selection-repair-funnel.md), [token writes](./phase-3/progress/architecture-2026-09-20-token-write-seam.md), [canvas layout signals](./phase-3/progress/architecture-2026-09-20-canvas-layout-signals.md), [layout hit-testing](./phase-3/progress/architecture-2026-09-20-layout-hit-testing.md)), a [two-axis code review](./adr/README.md) of the whole day that promoted two decisions to ADRs ([0004](./adr/0004-every-point-in-a-step-resolves-to-a-slot.md), [0005](./adr/0005-viewport-guard-on-token-drops-only.md)); testers work through [manual-testing-checklist.md](./manual-testing-checklist.md)) |
 | 31 | Refine UX | Not started |
 
 See [phase-3/progress/README.md](./phase-3/progress/README.md) for detail

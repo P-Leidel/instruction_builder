@@ -66,6 +66,28 @@ instead of stacking vertically.
   layout (like this radial idea) would still need its own rendering path,
   just not its own geometry math. Revisit both if a second layout or a
   hit-test bug ever makes the DOM round-trip actually cost something.
+- **Update 2026-09-20 (first half done):** the drag hit-test no longer
+  queries the DOM. `resolveDropTarget(point, layout)` in
+  `lib/canvas-layout.ts` resolves a drop purely against the same
+  `CanvasLayout` the canvas was rendered from, and the drag path is down to
+  two DOM reads per resolution, both on elements already in hand: one
+  `getScreenCTM()` to convert the pointer's client coordinates into design
+  units, and one rect read to reject points the canvas is clipped away from
+  (a matrix maps happily onto canvas the card is clipping out of sight).
+  What a second layout inherits is narrower than "working drag for free",
+  though, and the distinction matters for exactly this item:
+  `resolveDropTarget` finds a step by testing the point against each card's
+  vertical band and bounds x to the canvas padding, so the vertical-stack
+  geometry is written into the resolver itself. A radial layout would still
+  need its own. What it does inherit is the *seam* - one pure
+  `(point, layout)` call resolved against the same layout value the canvas
+  rendered, with the DOM round-trip and the `data-*` attribute contract
+  gone from the drag path for good - which is the part the "after" picture
+  assumed and the code did not deliver until now. See
+  [phase-3/progress/architecture-2026-09-20-layout-hit-testing.md](./phase-3/progress/architecture-2026-09-20-layout-hit-testing.md).
+  The SVG-export half is unchanged: it still serializes a rendered hidden
+  canvas, so a genuinely different layout would still need its own
+  rendering path.
 
 ## 3. Per-connection line style, or labeling a line as an action
 
@@ -89,6 +111,7 @@ or attach a text label to one specific line.
 ## Assessment as of this writing
 
 None of the three require a change before implementing the connector-lines
-feature described in phase-2/progress/tasks-05-12-early-build.md - it's scoped in a way that
+feature described in phase-2/progress/tasks-05-12-early-build.md -
+it's scoped in a way that
 doesn't foreclose any of them (see "Watch for" above per item). No action
 suggested right now.
