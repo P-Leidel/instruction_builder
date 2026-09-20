@@ -1,7 +1,7 @@
 import type { TokenCategory } from "../../model/instruction";
 import { createToken } from "../../model/instruction";
 import { addTokenToSelectedStep, addTokenToStep } from "../../state/document";
-import { dragGhost, dropTarget } from "../../state/drag";
+import { dragGhost, setDropTarget } from "../../state/drag";
 import { activeTokenCategory } from "../../state/ui";
 import { beginPointerDrag, resolveTokenDropTarget, createClickAfterDragGuard } from "../../lib/pointer-drag";
 import { SAMPLE_TOKENS, CATEGORY_LABELS, type SampleToken } from "../../data/sample-tokens";
@@ -94,11 +94,15 @@ export function TokenPicker() {
               beginPointerDrag(event, {
                 onMove: (x, y) => {
                   dragGhost.value = { label: sample.label, x, y };
-                  dropTarget.value = resolveTokenDropTarget(x, y);
+                  setDropTarget(resolveTokenDropTarget(x, y));
+                },
+                onCancel: () => {
+                  dragGhost.value = null;
+                  setDropTarget(null);
                 },
                 onDrop: (x, y, wasDrag) => {
                   dragGhost.value = null;
-                  dropTarget.value = null;
+                  setDropTarget(null);
                   if (!wasDrag) return;
                   dragGuard.markDragged();
                   const target = resolveTokenDropTarget(x, y);

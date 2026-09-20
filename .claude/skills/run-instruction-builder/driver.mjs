@@ -407,9 +407,19 @@ if ((await chipRemoves.count()) > 0) {
 // Task 9 (Drag-and-Drop): drag a picker token straight onto step 2's canvas
 // area - no need to pre-select it, the drop target says where it goes.
 async function dragBoxToBox(fromBox, toBox) {
+  await dragBoxToPoint(fromBox, toBox.x + toBox.width / 2, toBox.y + toBox.height / 2);
+}
+
+// Drops at an exact point rather than a box's center - which a token drop
+// now needs, because a chip's horizontal midpoint is a real boundary:
+// the left half inserts before it, the right half after it
+// (`resolveDropSlot`, lib/pointer-drag.ts). Dropping exactly on the center
+// is a tie, the same way dropping exactly on a step's vertical midpoint is
+// for a step reorder - see SKILL.md's gotcha.
+async function dragBoxToPoint(fromBox, toX, toY) {
   await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
   await page.mouse.down();
-  await page.mouse.move(toBox.x + toBox.width / 2, toBox.y + toBox.height / 2, { steps: 10 });
+  await page.mouse.move(toX, toY, { steps: 10 });
   await page.mouse.up();
 }
 
@@ -451,16 +461,115 @@ await page.screenshot({ path: path.join(OUT, "05-after-drag-drop.png"), fullPage
 // "Chop finely"'s slot (index 2); drop-before semantics means Bake should
 // land directly before it, i.e. [Boil, Bake, "Chop finely"], not
 // [Boil, "Chop finely", Bake].
-const step2LabelsBeforeForwardDrag = await step2Tokens.locator(".instruction-canvas__chip-label").allTextContents();
+const step2Labels = () => step2Tokens.locator(".instruction-canvas__chip-label").allTextContents();
+const step2LabelsBeforeForwardDrag = await step2Labels();
 const forwardTokenDragFromBox = await step2Tokens.nth(0).boundingBox();
 const forwardTokenDragToBox = await step2Tokens.nth(2).boundingBox();
-await dragBoxToBox(forwardTokenDragFromBox, forwardTokenDragToBox);
-const step2LabelsAfterForwardDrag = await step2Tokens.locator(".instruction-canvas__chip-label").allTextContents();
+// The LEFT half of "Chop finely", not its center: since the 2026-09-20
+// drop-accuracy fix a chip has two drop sides, and its center is the
+// boundary between them, so a center drop would read as "after" here.
+await dragBoxToPoint(
+  forwardTokenDragFromBox,
+  forwardTokenDragToBox.x + 6,
+  forwardTokenDragToBox.y + forwardTokenDragToBox.height / 2,
+);
+const step2LabelsAfterForwardDrag = await step2Labels();
 const forwardTokenDragLandsAtDropPoint =
   step2LabelsAfterForwardDrag.length === 3 &&
   step2LabelsAfterForwardDrag[0] === step2LabelsBeforeForwardDrag[1] && // Boil now first
   step2LabelsAfterForwardDrag[1] === step2LabelsBeforeForwardDrag[0] && // Bake lands just before "Chop finely"
   step2LabelsAfterForwardDrag[2] === step2LabelsBeforeForwardDrag[2]; // "Chop finely" unchanged, still last
+
+// 2026-09-20 drop-accuracy fix: which *side* of a chip a token is dropped
+// on decides whether it lands before or after it - the "tokens should
+// connect on both sides" report. Same dragged token, same target chip,
+// opposite halves, opposite results. Step 2 is [Boil, Bake, "Chop finely"]
+// after the forward drag above; dropping Boil on Bake's right half must
+// put it after Bake, where the old whole-chip hit-test could only ever
+// insert before.
+const labelsBeforeRightHalfDrop = await step2Labels();
+const rightHalfTargetBox = await step2Tokens.nth(1).boundingBox();
+await dragBoxToPoint(
+  await step2Tokens.nth(0).boundingBox(),
+  rightHalfTargetBox.x + rightHalfTargetBox.width - 6,
+  rightHalfTargetBox.y + rightHalfTargetBox.height / 2,
+);
+const labelsAfterRightHalfDrop = await step2Labels();
+const tokenDropSideDecidesBeforeOrAfter =
+  labelsAfterRightHalfDrop.join() ===
+  [labelsBeforeRightHalfDrop[1], labelsBeforeRightHalfDrop[0], labelsBeforeRightHalfDrop[2]].join();
+
+// The same fix's other half: the CHIP_GAP between two chips has no element
+// of its own, so the old elementFromPoint hit-test fell straight through it
+// to the step background and appended to the end of the step - dropping a
+// token into the visible gap between two others silently sent it to the
+// end. It must now land at the boundary that gap sits on.
+const labelsBeforeGapDrop = await step2Labels();
+const gapLeftBox = await step2Tokens.nth(0).boundingBox();
+const gapRightBox = await step2Tokens.nth(1).boundingBox();
+await dragBoxToPoint(
+  await step2Tokens.nth(2).boundingBox(),
+  (gapLeftBox.x + gapLeftBox.width + gapRightBox.x) / 2,
+  gapLeftBox.y + gapLeftBox.height / 2,
+);
+const labelsAfterGapDrop = await step2Labels();
+const tokenDropInGapLandsAtThatBoundary =
+  labelsAfterGapDrop.join() ===
+  [labelsBeforeGapDrop[0], labelsBeforeGapDrop[2], labelsBeforeGapDrop[1]].join();
+
+// A press that wobbles past the drag threshold but never leaves the
+// token's own slot is not a move - it has to fall back to the tap's
+// select. Before the 2026-09-20 fix it did neither: moveToken saw no
+// change and returned early, and the drag branch never fell through to
+// select, so pressing a token did nothing at all.
+await editableCanvas.locator(".instruction-canvas__badge").nth(1).click(); // select the step, not a token
+const wobbleBox = await step2Tokens.nth(0).boundingBox();
+const labelsBeforeWobble = await step2Labels();
+await page.mouse.move(wobbleBox.x + wobbleBox.width / 2, wobbleBox.y + wobbleBox.height / 2);
+await page.mouse.down();
+await page.mouse.move(wobbleBox.x + wobbleBox.width / 2 + 10, wobbleBox.y + wobbleBox.height / 2 + 4, { steps: 5 });
+await page.mouse.up();
+const wobbleTitleInput = page.locator(".token-details__field input");
+const wobblyPressSelectsInsteadOfMoving =
+  (await wobbleTitleInput.count()) > 0 &&
+  (await wobbleTitleInput.inputValue()) === labelsBeforeWobble[0] &&
+  (await step2Labels()).join() === labelsBeforeWobble.join();
+
+// 2026-09-20 follow-up (docs/fixed-issues/drag-marked-text-instead-of-dragging.md):
+// a press-and-drag that lands anywhere in the picker panel or on the canvas
+// used to start a text selection, so users "marked the text" instead of
+// dragging a token. Both swipes below anchor on the one thing in each region
+// that is neither a drag source nor a control - the picker's own heading and
+// a step's title - because a press that lands squarely ON a drag source
+// captures the pointer and never selected anything even before the fix.
+async function swipeSelection(box, toX, toY) {
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+  await page.mouse.move(box.x + 3, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(toX, toY, { steps: 12 });
+  await page.mouse.up();
+  return await page.evaluate(() => (window.getSelection()?.toString() ?? "").trim());
+}
+const pickerHeadingBox = await picker.locator(".token-picker__heading").boundingBox();
+const pickerBox = await picker.boundingBox();
+const selectionAfterPickerSwipe = await swipeSelection(
+  pickerHeadingBox,
+  pickerBox.x + pickerBox.width - 8,
+  pickerHeadingBox.y + pickerHeadingBox.height / 2 + 120,
+);
+const stepTitleBox = await editableCanvas.locator(".instruction-canvas__step-title").first().boundingBox();
+const selectionAfterCanvasSwipe = await swipeSelection(
+  stepTitleBox,
+  stepTitleBox.x + stepTitleBox.width * 0.9,
+  stepTitleBox.y + stepTitleBox.height / 2 + 90,
+);
+const dragNeverMarksText = selectionAfterPickerSwipe === "" && selectionAfterCanvasSwipe === "";
+// Control: this must stay a *scoped* opt-out, not "nothing on the page
+// selects any more" - the canvas card's own <h2> sits outside the SVG.
+const canvasHeadingBox = await editableCanvas.locator(".instruction-canvas__heading").boundingBox();
+const pageTextStillSelectable =
+  (await swipeSelection(canvasHeadingBox, canvasHeadingBox.x + canvasHeadingBox.width - 2, canvasHeadingBox.y + canvasHeadingBox.height / 2)) !== "";
+await page.evaluate(() => window.getSelection()?.removeAllRanges());
 
 // Drag step 2's canvas drag handle above step 1's card to reorder (task 9's
 // step-management functionality moved from a standalone StepList panel onto
@@ -1508,6 +1617,11 @@ console.log("DRAG_ADDED_TOKEN_VIA_PICKER=" + dragAddedTokenViaPicker);
 console.log("INSERTION_MARKER_VISIBLE_MID_DRAG=" + insertionMarkerVisibleMidDrag);
 console.log("TOKEN_MOVED_BETWEEN_STEPS_VIA_DRAG=" + tokenMovedBetweenSteps);
 console.log("FORWARD_TOKEN_DRAG_LANDS_AT_DROP_POINT=" + forwardTokenDragLandsAtDropPoint);
+console.log("TOKEN_DROP_SIDE_DECIDES_BEFORE_OR_AFTER=" + tokenDropSideDecidesBeforeOrAfter);
+console.log("TOKEN_DROP_IN_GAP_LANDS_AT_THAT_BOUNDARY=" + tokenDropInGapLandsAtThatBoundary);
+console.log("WOBBLY_PRESS_SELECTS_INSTEAD_OF_MOVING=" + wobblyPressSelectsInsteadOfMoving);
+console.log("DRAG_NEVER_MARKS_TEXT=" + dragNeverMarksText);
+console.log("PAGE_TEXT_STILL_SELECTABLE=" + pageTextStillSelectable);
 console.log("STEPS_REORDERED_VIA_DRAG=" + stepsReordered);
 console.log("HISTORY_BUTTONS_DISABLED_INITIALLY=" + historyButtonsDisabledInitially);
 console.log("UNDO_REDO_WORKED_END_TO_END=" + undoRedoWorkedEndToEnd);

@@ -300,10 +300,21 @@ function buildConnectors(tokenCount: number, chipsPerRow: number, rowStartYs: nu
 /**
  * Where to draw the live drag insertion marker for a step currently being
  * dragged over. `dropIndex` (already clamped to [0, chipPositions.length])
- * is usually just the target chip's own position - except appending to a
- * row that's exactly full, where the naive position would start a phantom
- * new row below the step's actual (unchanged, until drop) height. Clamped
- * instead to just after the last chip in the existing last row.
+ * is usually just the target chip's own position - except at a row
+ * boundary, where one index means two different places on screen and
+ * `hoveredRow` is what says which of them the pointer is actually at.
+ *
+ * At `dropIndex = N * chipsPerRow` the token lands in the same slot whether
+ * the user reads it as "after the last chip of row N-1" or "before the first
+ * chip of row N" - identical insertions, a full row apart visually. Drawing
+ * the marker at the naive position (the chip now at `dropIndex`) puts it at
+ * the start of the *next* row while the pointer is still at the end of the
+ * current one, so the preview contradicts the pointer by a whole row. When
+ * `hoveredRow` is the row before the boundary, the marker is drawn just past
+ * that row's last chip instead. Appending to an exactly-full last row is the
+ * same case and falls out of the same branch: without it the marker would
+ * start a phantom new row below the step's actual (unchanged, until drop)
+ * height.
  *
  * Takes the hovered step's already-computed `chipPositions` (from its
  * StepLayout) rather than raw counts: every *existing* chip's position -
@@ -328,6 +339,7 @@ export function insertionMarkerPosition(
   dropIndex: number,
   chipPositions: ChipPosition[],
   chipsPerRow: number,
+  hoveredRow: number,
 ): ChipPosition {
   if (chipPositions.length === 0) {
     // Matches computeRowStartYs' first row exactly (HEADER_HEIGHT + the
@@ -336,13 +348,15 @@ export function insertionMarkerPosition(
     // chip would land CHIP_TIME_HEADER_HEIGHT lower once dropped.
     return { cx: 0, cy: HEADER_HEIGHT + CHIP_TIME_HEADER_HEIGHT, col: 0, row: 0 };
   }
+  if (dropIndex > 0 && dropIndex % chipsPerRow === 0 && hoveredRow === dropIndex / chipsPerRow - 1) {
+    // End of the row the pointer is in, not the start of the next one.
+    const lastInRow = chipPositions[dropIndex - 1];
+    return { ...lastInRow, cx: lastInRow.cx + CHIP_WIDTH };
+  }
   if (dropIndex < chipPositions.length) {
     return chipPositions[dropIndex];
   }
   const last = chipPositions[chipPositions.length - 1];
-  if (chipPositions.length % chipsPerRow === 0) {
-    return { ...last, cx: last.cx + CHIP_WIDTH };
-  }
   const col = dropIndex % chipsPerRow;
   return { cx: col * (CHIP_WIDTH + CHIP_GAP), cy: last.cy, col, row: last.row };
 }

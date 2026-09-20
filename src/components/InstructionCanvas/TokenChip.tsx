@@ -1,5 +1,6 @@
+import { useState } from "preact/hooks";
 import { selectStep, selectToken, moveToken, removeTokenFromStep } from "../../state/document";
-import { dragGhost, dropTarget } from "../../state/drag";
+import { dragGhost, setDropTarget } from "../../state/drag";
 import {
   beginPointerDrag,
   resolveTokenDropTarget,
@@ -86,7 +87,10 @@ interface TokenChipProps {
  * the drag source for both reordering within a step and moving between
  * steps (Task 9). A quick tap with no real movement runs the plain
  * select logic instead (see `beginPointerDrag`'s `wasDrag`) - selecting the
- * step if it wasn't already selected, or this token itself if it was.
+ * step if it wasn't already selected, or this token itself if it was. So
+ * does a drag that ends back on this chip's own slot, which is no move at
+ * all; `resolveTokenPointerOutcome` decides that, given where this chip
+ * already sits (`stepId`/`tokenIndex`).
  */
 export function TokenChip({
   token,
@@ -98,10 +102,24 @@ export function TokenChip({
   readOnly,
 }: TokenChipProps) {
   const label = token.label || token.iconId;
+  // Whether *this* chip is the one currently being dragged, so it can dim
+  // while its ghost is in flight. Plain local state, not anything shared:
+  // the chip that started the drag is the only one that needs to know, and
+  // keeping it local means a TokenPicker drag (which has no source chip)
+  // correctly dims nothing. Set from onMove rather than the pointerdown
+  // itself, so it marks a real drag passing `beginPointerDrag`'s threshold -
+  // a plain tap, which is also how a token gets selected, never flickers.
+  const [isDragging, setIsDragging] = useState(false);
+
+  function endDrag() {
+    setIsDragging(false);
+    dragGhost.value = null;
+    setDropTarget(null);
+  }
 
   return (
     <g
-      class="instruction-canvas__token"
+      class={`instruction-canvas__token${isDragging ? " instruction-canvas__token--dragging" : ""}`}
       transform={`translate(${position.cx}, ${position.cy})`}
       data-step-id={stepId}
       data-token-index={tokenIndex}
@@ -111,25 +129,17 @@ export function TokenChip({
           : (event) => {
               beginPointerDrag(event, {
                 onMove: (x, y) => {
+                  setIsDragging(true);
                   dragGhost.value = { label, x, y };
-                  const target = resolveTokenDropTarget(x, y);
-                  // Reassigning an equal-but-new object would still
-                  // re-render the whole canvas below (it reads
-                  // dropTarget.value directly) even though nothing about
-                  // the hovered slot actually changed - skip the write
-                  // when the target is the same one already set.
-                  const current = dropTarget.value;
-                  if (current?.stepId !== target?.stepId || current?.index !== target?.index) {
-                    dropTarget.value = target;
-                  }
+                  setDropTarget(resolveTokenDropTarget(x, y));
                 },
                 onDrop: (x, y, wasDrag) => {
-                  dragGhost.value = null;
-                  dropTarget.value = null;
+                  endDrag();
                   const outcome = resolveTokenPointerOutcome(
                     wasDrag,
                     isStepSelected,
                     wasDrag ? resolveTokenDropTarget(x, y) : null,
+                    { stepId, index: tokenIndex },
                   );
                   switch (outcome.kind) {
                     case "selectStep":
@@ -145,6 +155,9 @@ export function TokenChip({
                       break;
                   }
                 },
+                // A cancelled drag tears down the same transient state a drop
+                // does, but performs no action at all - see DragHandlers.
+                onCancel: endDrag,
               });
             }
       }

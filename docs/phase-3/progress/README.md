@@ -278,6 +278,24 @@ drag/select-outcome switch) was extracted first and verified alone, then
 the already-separate `TokenChip` - `InstructionCanvas.tsx` dropped from 602
 to 198 lines. See
 [architecture-stepcard-tokenchip-extraction.md](./architecture-stepcard-tokenchip-extraction.md).
+A further task 30 pass (2026-09-20), again scoped via
+`/mattpocock-skills:grilling` before any code, turned "token drag-and-drop
+feels unresponsive" into three concrete defects and fixed them: the
+`CHIP_GAP` between two chips had no element, so `elementFromPoint` fell
+through it and silently appended the token to the end of the step; a chip
+could only ever be inserted *before*, never after (the user's "tokens should
+connect on both sides"); and a press that wobbled past the uniform 6px
+threshold became a drag onto the token's own slot, which `moveTokenCore`
+no-ops - so a tap did nothing at all. The chip lookup is a bounding-rect
+midpoint scan now, the insertion marker carries the hovered row so it draws
+on the right side of a row boundary, an own-slot drop falls back to the tap,
+and touch gets its own 12px threshold. See
+[token-drop-accuracy.md](./token-drop-accuracy.md). A follow-up report from
+the same round - "while dragging they keep marking the text" - turned out to
+be a separate, one-rule bug: neither the canvas SVG nor the "Add to step"
+panel opted out of text selection, so a grab that missed a chip or a picker
+button swiped a highlight across their labels instead of dragging. See
+[drag-marked-text-instead-of-dragging.md](../../fixed-issues/drag-marked-text-instead-of-dragging.md).
 
 ## What shipped
 
@@ -304,11 +322,12 @@ One file per task (or per notable pass), in task-number order:
 | — | Architecture: 2026-09-17 copy-paste-and-PDF follow-up review, then `StepCard`/`TokenChip` extraction (`InstructionCanvas.tsx` 602 → 198 lines; two small new duplications left open) | [audits/2026-09-17-copy-paste-and-pdf-followup-review.html](../audits/2026-09-17-copy-paste-and-pdf-followup-review.html), [architecture-stepcard-tokenchip-extraction.md](./architecture-stepcard-tokenchip-extraction.md) |
 | — | Architecture: 2026-09-18 codebase health review, then the field-placement seam (`lib/field-placement.ts` gains a vertical flip and resize re-placement; `FieldPopover`'s Tab trap dropped as `aria-modal="false"` always said it was; `CollapsedField` stops writing local state while controlled) and two new tablet viewports in the driver | [audits/2026-09-18-architecture-review.html](../audits/2026-09-18-architecture-review.html), [architecture-2026-09-18-field-placement-and-tablet-viewports.md](./architecture-2026-09-18-field-placement-and-tablet-viewports.md) |
 | — | Architecture: 2026-09-18 review remediation, batch 2 (`docs/adr/` started with three entries; `downloadBlob` defers its object-URL revoke and attaches the anchor; the confirm dialogs get `aria-modal` + `inert` + focus return and lose their hand-rolled Tab cycle; the empty Token details panel collapses below 800px) | [architecture-2026-09-18-modal-dialogs-and-mobile-layout.md](./architecture-2026-09-18-modal-dialogs-and-mobile-layout.md) |
+| — | Token drag-and-drop drop accuracy (bounding-rect midpoint scan replaces the chip hit-test; row-aware insertion marker; own-slot drop falls back to the tap; per-pointer-type thresholds; `pointercancel` stops selecting; one guarded `dropTarget` setter; the dragged chip dims) | [token-drop-accuracy.md](./token-drop-accuracy.md) |
 | 31 | Refine UX | *not started* |
 
 ## Verification
 
-- `npm run lint`, `npm run typecheck`, `npm test` (161 tests across 13
+- `npm run lint`, `npm run typecheck`, `npm test` (179 tests across 13
   files - the
   pre-launch audit only updated 3 existing `duration.test.ts` assertions'
   expected strings for the new human-readable format; the canvas deepening
@@ -347,7 +366,14 @@ One file per task (or per notable pass), in task-number order:
   the 2026-09-18 remediation batch 2 added none - DOM sequencing, focus
   and attribute wiring, and one CSS rule, all three covered by the driver
   rather than Vitest, which is now a recorded decision rather than an
-  omission: see [adr/0003](../../adr/0003-no-component-test-environment.md)),
+  omission: see [adr/0003](../../adr/0003-no-component-test-environment.md);
+  the 2026-09-20 token drop-accuracy fix added 18, the largest single
+  addition of the phase - 15 in `pointer-drag.test.ts` for the new pure
+  `resolveDropSlot` resolver, the own-slot tap fallback and the
+  per-pointer-type thresholds, and 3 in `canvas-layout.test.ts` for the
+  row-boundary marker - because that change moved drop geometry *out* of a
+  DOM hit-test and into pure logic, which is exactly the kind of thing
+  Vitest can cover),
   and `npm run build` all pass cleanly.
 - See each task's own file above for full verification detail
   (browser-driven checks, bundle size deltas, and the decisions made along

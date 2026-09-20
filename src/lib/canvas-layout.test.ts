@@ -223,30 +223,58 @@ function plainChipPosition(index: number, chipsPerRow: number) {
 
 describe("insertionMarkerPosition", () => {
   it("returns the empty-step default when there are no existing chips, matching row 0's real position", () => {
-    expect(insertionMarkerPosition(0, [], 6)).toEqual({ cx: 0, cy: rowY(0), col: 0, row: 0 });
+    expect(insertionMarkerPosition(0, [], 6, 0)).toEqual({ cx: 0, cy: rowY(0), col: 0, row: 0 });
   });
 
   it("reads the target chip's own position straight off chipPositions in the ordinary case", () => {
     const chipPositions = Array.from({ length: 5 }, (_, i) => plainChipPosition(i, 6));
-    expect(insertionMarkerPosition(2, chipPositions, 6)).toBe(chipPositions[2]);
+    expect(insertionMarkerPosition(2, chipPositions, 6, 0)).toBe(chipPositions[2]);
   });
 
   it("appends just past the last chip of an exactly-full row, instead of starting a phantom new row", () => {
     const chipPositions = Array.from({ length: 6 }, (_, i) => plainChipPosition(i, 6));
     const last = chipPositions[5];
-    expect(insertionMarkerPosition(6, chipPositions, 6)).toEqual({ ...last, cx: last.cx + CHIP_WIDTH });
+    expect(insertionMarkerPosition(6, chipPositions, 6, 0)).toEqual({ ...last, cx: last.cx + CHIP_WIDTH });
   });
 
   it("starts a real new row when the last row isn't full", () => {
     // 7 tokens at 6/row leaves the second row with only 1 chip - dropping at
     // the end (index 7) is a genuine new row, not the exactly-full case above.
     const chipPositions = Array.from({ length: 7 }, (_, i) => plainChipPosition(i, 6));
-    expect(insertionMarkerPosition(7, chipPositions, 6)).toEqual({
+    expect(insertionMarkerPosition(7, chipPositions, 6, 1)).toEqual({
       cx: CHIP_WIDTH + CHIP_GAP,
       cy: HEADER_HEIGHT + (CHIP_HEIGHT + CHIP_GAP),
       col: 1,
       row: 1,
     });
+  });
+
+  // One drop index, two places to draw it: index 6 on a 6-per-row layout is
+  // both the end of row 0 and the start of row 1. The hovered row is the
+  // only thing that distinguishes them, so both directions are asserted
+  // against the same index.
+  it("draws at the end of the hovered row when the drop index sits on a row boundary", () => {
+    const chipPositions = Array.from({ length: 12 }, (_, i) => plainChipPosition(i, 6));
+    const lastInRow = chipPositions[5];
+    expect(insertionMarkerPosition(6, chipPositions, 6, 0)).toEqual({
+      ...lastInRow,
+      cx: lastInRow.cx + CHIP_WIDTH,
+    });
+  });
+
+  it("draws at the start of the next row for that same index when the pointer is in that row", () => {
+    const chipPositions = Array.from({ length: 12 }, (_, i) => plainChipPosition(i, 6));
+    expect(insertionMarkerPosition(6, chipPositions, 6, 1)).toBe(chipPositions[6]);
+  });
+
+  it("applies the same rule at a later row boundary", () => {
+    const chipPositions = Array.from({ length: 18 }, (_, i) => plainChipPosition(i, 6));
+    const lastInRow = chipPositions[11];
+    expect(insertionMarkerPosition(12, chipPositions, 6, 1)).toEqual({
+      ...lastInRow,
+      cx: lastInRow.cx + CHIP_WIDTH,
+    });
+    expect(insertionMarkerPosition(12, chipPositions, 6, 2)).toBe(chipPositions[12]);
   });
 });
 

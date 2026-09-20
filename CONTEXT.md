@@ -95,3 +95,32 @@ field popover's old `aria-modal="false"`-plus-Tab-trap contradict itself.
 
 _Avoid_: "popover", "modal" on its own (this app has exactly one modal
 pattern and one non-modal one - name which), "alert" (that is the toast).
+
+## Drop target / drop slot
+
+A **drop target** is where a dragged token would land: a step id plus a
+drop-before index within that step's tokens (`TokenDropTarget` in
+[src/lib/pointer-drag.ts](./src/lib/pointer-drag.ts)). It is the whole
+instruction a move needs - `moveToken` and `addTokenToStep` take exactly
+this and nothing more.
+
+A **drop slot** is a drop target plus the row of chips the pointer read as
+being in (`TokenDropSlot`, which extends it). The row is redundant for
+performing the move and essential for previewing it: on the wrapped desktop
+layout, one drop index means two different places on screen at a row
+boundary - index 6 on a 6-per-row step is both "after the last chip of row
+0" and "before the first chip of row 1" - and the live insertion marker has
+to pick one. The `dropTarget` signal
+([src/state/drag.ts](./src/state/drag.ts)) holds a drop slot for that
+reason; the narrower drop target stays what the document mutators consume.
+
+Both are resolved from live client coordinates by a bounding-rect scan over
+a step's rendered chips, not by hit-testing the element under the pointer:
+the gap between two chips has no element of its own, so a hit-test has
+nothing to report there. See `resolveDropSlot`'s own comment for why that
+matters and what it fixed.
+
+_Avoid_: "drop zone" (nothing in this app highlights a region as droppable -
+every point inside a step resolves to a specific slot), and using "drop
+target" for the *step* being hovered (that is the step, which the step card
+marks with its own `--drop-target` class).

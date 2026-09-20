@@ -485,6 +485,11 @@ button {
   position: fixed;
   transform: translate(-50%, -50%);
   pointer-events: none;
+  /* A cursor decoration, not content - it exists only while a drag is in
+     flight, so its label should no more be selectable than the chip or the
+     picker button the drag came from. */
+  -webkit-user-select: none;
+  user-select: none;
   z-index: 1000;
   background: var(--color-text);
   color: #fff;
@@ -972,6 +977,17 @@ button {
 
 .instruction-canvas__svg {
   display: block;
+  /* A press that the browser reads as the start of a text selection marks up
+     every label the pointer then travels over - which is what a token drag
+     *is*, and what users reported as "marking the text when grabbing a
+     token". There is no text worth selecting in here anyway: the canvas is a
+     diagram, and its copy path is Export (tasks 15-18), not the clipboard.
+     On the whole SVG rather than on .instruction-canvas__token alone, since
+     a grab that lands a pixel off a chip - on the step background, the step
+     title, a drag handle - starts the exact same selection. Safari/iOS still
+     needs the -webkit- prefix. */
+  -webkit-user-select: none;
+  user-select: none;
   /* Bounds the rendered icon size to a reasonable range (roughly 64-128px
      per chip, since a chip is 96 of the SVG's 720 base design units) no
      matter how narrow or wide the panel gets. */
@@ -1154,6 +1170,16 @@ button {
   cursor: default;
 }
 
+/* The chip currently being dragged, while its ghost is in flight (see
+   TokenChip's own isDragging state) - dimmed so the chip reads as "picked
+   up", leaving the insertion marker as the only fully-drawn thing tracking
+   the pointer. Same 0.4 the canvas already uses to dim a control that isn't
+   currently acting (.instruction-canvas__step-move--disabled circle), rather
+   than a second dimming value meaning the same thing. */
+.instruction-canvas__token--dragging {
+  opacity: 0.4;
+}
+
 .instruction-canvas__chip {
   fill: var(--color-surface-sunken);
   stroke: var(--color-border);
@@ -1240,6 +1266,18 @@ button {
 }
 
 /* Token picker */
+
+/* Same reason as .instruction-canvas__svg above: dragging a token out of the
+   picker onto a step used to mark up the button labels it passed over. The
+   whole panel, not just .token-picker__button, because a grab that lands in
+   the gap between two buttons selects just as readily - and the button
+   itself as well, since TokenDetails' warning presets reuse that class
+   outside this panel. */
+.token-picker,
+.token-picker__button {
+  -webkit-user-select: none;
+  user-select: none;
+}
 
 .token-picker__tabs {
   display: flex;

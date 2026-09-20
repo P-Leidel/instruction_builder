@@ -42,3 +42,4 @@ One file per bug, newest last (matching the order they were found):
 23. [PDF export's step-bounds reader also matched token groups](./pdf-pagination-step-bounds-selector-collision.md)
 24. [The confirm dialogs behaved like modals without ever declaring it](./confirm-dialogs-were-modal-in-behavior-only.md)
 25. [The hidden export canvas was a keyboard tab stop](./hidden-export-canvas-was-a-keyboard-tab-stop.md)
+26. [Dragging a token marked the text instead](./drag-marked-text-instead-of-dragging.md)

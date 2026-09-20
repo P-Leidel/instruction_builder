@@ -564,3 +564,57 @@ task, which shipped keyboard alternatives for step reordering and token
 - **Revisit when:** the next ADR is written, since that is when the gate
   gets read and applied again.
 - **First noted:** 2026-09-18.
+
+## Three token drag-and-drop improvements deferred behind a testing round
+
+Scoped with the user on 2026-09-20 while planning the token drop-accuracy
+fix (bounding-rect drop resolution, both-sides insertion, per-pointer-type
+drag threshold, own-slot-drag-falls-back-to-tap, `pointercancel` no longer
+selecting, a guarded `dropTarget` setter shared by both drag sources, and a
+dimmed in-flight chip). All three items below were deliberately held back
+from that batch: it ships in response to user reports of unresponsive
+drag-and-drop, and each of these either needs new geometry, re-opens an
+audited decision, or is too large to land without its own design pass.
+
+- **No auto-scroll while dragging.** Nothing in the app scrolls during a
+  drag. `beginPointerDrag`'s pointer capture plus `touch-action: none` on
+  `.instruction-canvas__token` ([global.css](../src/styles/global.css))
+  means a touch user cannot reach a step below the fold mid-drag at all,
+  and `.instruction-canvas`'s own `overflow-x: auto` has the same problem
+  horizontally on mobile's single-row layout. Doing it properly needs
+  edge-proximity detection, a scroll loop that keeps running while the
+  pointer is held *still* near an edge (so it cannot live in the existing
+  pointer-move-driven `requestAnimationFrame` flush), separate handling for
+  the page's vertical scroll versus the canvas's own horizontal scroll, and
+  a drop hit-test that keeps updating as content moves under a stationary
+  pointer.
+- **Step-reorder drag shows no insertion marker.** `StepCard`'s drag handle
+  sets only `dragGhost`, never `dropTarget`
+  ([StepCard.tsx](../src/components/InstructionCanvas/StepCard.tsx)), so
+  reordering steps previews nothing while reordering tokens previews its
+  exact landing slot. Closing the gap needs a horizontal between-cards
+  marker, which has no equivalent in `canvas-layout.ts` yet - the existing
+  `insertionMarkerPosition` is chip geometry, not card geometry.
+- **A cross-step token drag deselects the token it moved.**
+  `repairSelection` ([document.ts](../src/state/document.ts)) keeps the old
+  `selectedStepId`, fails to find the moved token there, and nulls
+  `selectedTokenId` - so Token details empties the instant a drag succeeds.
+  Having the selection follow the token is a few lines, since
+  `moveTokenCore` already knows `toStepId` and the token id, but the
+  current behaviour is not accidental: it is what the 2026-09-17 audit
+  remediation (finding 2/B5) put there to fix a stale-selection bug, so
+  changing it means re-opening that decision rather than patching around
+  it.
+
+- **Why they're not fixed:** bundling them would have delayed the
+  drop-accuracy fix that addresses the actual user reports, and two of the
+  three are behaviour changes whose value is a judgement call better made
+  with feedback on the shipped fix than guessed at beforehand.
+- **Revisit when:** the drop-accuracy fix has been through its verification
+  round - unit tests over the pure rect-scan resolver, `run-instruction-builder`
+  driver checks for the row-boundary marker, and the user's own hands-on
+  pass - and the three are then picked up together as one round. As of
+  2026-09-20 the fix has shipped (see
+  [token-drop-accuracy.md](./phase-3/progress/token-drop-accuracy.md)) and
+  the first two are done; only the user's own hands-on pass is outstanding.
+- **First noted:** 2026-09-20.

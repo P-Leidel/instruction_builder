@@ -44,6 +44,11 @@ const KNOWN_NON_VISUAL_PROPS = new Set([
   "outline",
   "outline-offset",
   "touch-action",
+  // Alongside cursor/touch-action above: an interaction property, and a
+  // downloaded SVG has no interaction to opt out of. On the root <svg>
+  // (see docs/fixed-issues/drag-marked-text-instead-of-dragging.md).
+  "user-select",
+  "-webkit-user-select",
   // From `.instruction-canvas__heading`'s rule - the panel's plain HTML
   // <h2>, a sibling of the <svg>, not a descendant of it, so never part of
   // what gets exported at all. Margin has no rendering effect on SVG shape

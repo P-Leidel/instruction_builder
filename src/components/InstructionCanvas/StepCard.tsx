@@ -54,8 +54,11 @@ export function StepCard({ layout, index, stepCount, canvasWidth, readOnly, svgR
     layout;
 
   const isSelected = !readOnly && step.id === selectedStepId.value;
-  const isDropTarget = !readOnly && dropTarget.value?.stepId === step.id;
-  const dropIndex = isDropTarget ? Math.min(dropTarget.value!.index, step.tokens.length) : null;
+  // The live drag slot, but only while the pointer is over *this* step - the
+  // row travels with it, since the drop index alone can't say which side of
+  // a row boundary the marker belongs on (see insertionMarkerPosition).
+  const hovered = dropTarget.value;
+  const hoveredSlot = !readOnly && hovered?.stepId === step.id ? hovered : null;
   const stepNumber = index + 1;
   // shouldFlagIncomplete (canvas-layout.ts, via model/validate.ts's
   // shouldFlagIncompleteStep): a step with zero tokens is always technically
@@ -75,7 +78,7 @@ export function StepCard({ layout, index, stepCount, canvasWidth, readOnly, svgR
   return (
     <g transform={`translate(${PADDING}, ${cardY})`} data-step-id={step.id} data-step-index={index}>
       <rect
-        class={`instruction-canvas__step-bg${isSelected ? " instruction-canvas__step-bg--selected" : ""}${isDropTarget ? " instruction-canvas__step-bg--drop-target" : ""}`}
+        class={`instruction-canvas__step-bg${isSelected ? " instruction-canvas__step-bg--selected" : ""}${hoveredSlot ? " instruction-canvas__step-bg--drop-target" : ""}`}
         x={0}
         y={0}
         width={canvasWidth - PADDING * 2}
@@ -155,6 +158,12 @@ export function StepCard({ layout, index, stepCount, canvasWidth, readOnly, svgR
                   if (!wasDrag || !svgRef.current) return;
                   reorderSteps(index, resolveStepDropIndex(y, svgRef.current));
                 },
+                // No dropTarget to clear - a step-reorder drag never sets one
+                // (it has no insertion marker of its own yet; see
+                // docs/known-issues.md) - so this only drops the ghost.
+                onCancel: () => {
+                  dragGhost.value = null;
+                },
               });
             }}
           >
@@ -207,9 +216,14 @@ export function StepCard({ layout, index, stepCount, canvasWidth, readOnly, svgR
             />
           ))}
         </g>
-        {dropIndex !== null &&
+        {hoveredSlot !== null &&
           (() => {
-            const marker = insertionMarkerPosition(dropIndex, chipPositions, chipsPerRow);
+            const marker = insertionMarkerPosition(
+              Math.min(hoveredSlot.index, step.tokens.length),
+              chipPositions,
+              chipsPerRow,
+              hoveredSlot.row,
+            );
             return (
               <rect
                 class="instruction-canvas__insertion-marker"

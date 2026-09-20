@@ -270,6 +270,11 @@ the only one that needs the steps under "Run (agent path)".
    `INSERTION_MARKER_VISIBLE_MID_DRAG=...`,
    `TOKEN_MOVED_BETWEEN_STEPS_VIA_DRAG=...`,
    `FORWARD_TOKEN_DRAG_LANDS_AT_DROP_POINT=...`,
+   `TOKEN_DROP_SIDE_DECIDES_BEFORE_OR_AFTER=...`,
+   `TOKEN_DROP_IN_GAP_LANDS_AT_THAT_BOUNDARY=...`,
+   `WOBBLY_PRESS_SELECTS_INSTEAD_OF_MOVING=...`,
+   `DRAG_NEVER_MARKS_TEXT=...`,
+   `PAGE_TEXT_STILL_SELECTABLE=...`,
    `STEPS_REORDERED_VIA_DRAG=...`,
    `FORWARD_STEP_DRAG_LANDS_AT_DROP_POINT=...`,
    `HISTORY_BUTTONS_DISABLED_INITIALLY=...`,
@@ -498,7 +503,41 @@ taken - watch the terminal output for the actual URL).
   vertical midpoint; dropping exactly on a step's center is a genuine
   tie (the app then treats it as "same position," a no-op) rather than
   a bug - drop near a step's top/bottom edge instead, the way a real
-  drag gesture would.
+  drag gesture would. **Since the 2026-09-20 drop-accuracy fix the same
+  is true horizontally for token chips**, which is a change from the
+  behavior a pre-2026-09-20 driver assumed: `resolveDropSlot` compares
+  the drop `clientX` against each chip's own horizontal midpoint, so a
+  chip has two drop sides (left half inserts before it, right half
+  after it) and its center is the boundary between them. A drop at
+  `box.x + box.width / 2` - what a plain "drag to this element's box"
+  helper does - therefore lands on the *after* side, not the "insert
+  before this chip" the old whole-chip hit-test always produced. Aim a
+  few pixels into the half you mean (`dragBoxToPoint` in `driver.mjs`),
+  and note that dropping into the CHIP_GAP between two chips is now
+  meaningful too: it resolves to the boundary it straddles instead of
+  falling through to the step background and appending to the end.
+- **A token drag that ends where it started is a tap, not a no-op.**
+  `resolveTokenPointerOutcome` treats a drop on the dragged token's own
+  slot (either side of it) as the select it was meant to be, because
+  `moveTokenCore` would otherwise return early having changed nothing
+  and no selection would happen either - so a press that wobbles past
+  the threshold used to do nothing at all. `WOBBLY_PRESS_SELECTS_INSTEAD_OF_MOVING`
+  guards this. A driver check that presses a chip and expects "nothing
+  happened" is therefore wrong now: expect Token details to open for it.
+- **Nothing inside the canvas SVG or the "Add to step" panel is
+  selectable text any more** (2026-09-20 -
+  `docs/fixed-issues/drag-marked-text-instead-of-dragging.md`). Both
+  carry `user-select: none`, because a press-and-drag that missed a
+  chip or landed between two picker buttons used to mark up text
+  instead of dragging. So `window.getSelection()` is expected to be
+  empty after any drag gesture in those two regions
+  (`DRAG_NEVER_MARKS_TEXT`), and a check that wants to assert on
+  selected text needs to anchor outside them - the canvas card's own
+  `<h2>` sits outside the SVG and still selects
+  (`PAGE_TEXT_STILL_SELECTABLE`). Note that a press landing squarely
+  on a drag source never marked anything even before the fix:
+  `setPointerCapture` retargets the compatibility mouse events, so
+  only a press that *misses* one reproduces the bug.
 - **A correctly-rendered SVG element can still be visually invisible.**
   The token connector lines initially had valid `d` coordinates and a
   correctly-applied `stroke` (confirmed via `getComputedStyle` and
